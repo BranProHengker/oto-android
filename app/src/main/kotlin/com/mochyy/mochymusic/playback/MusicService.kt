@@ -836,7 +836,7 @@ class MusicService :
         player.repeatMode = dataStore.get(RepeatModeKey, REPEAT_MODE_OFF)
 
         if (dataStore.get(RememberShuffleAndRepeatKey, true)) {
-            val savedState = dataStore.get(ShuffleStateKey, null)
+            val savedState = dataStore[ShuffleStateKey]
             val initialMode = if (savedState != null) {
                 runCatching { ShuffleMode.valueOf(savedState) }.getOrDefault(ShuffleMode.OFF)
             } else {

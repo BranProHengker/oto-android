@@ -106,21 +106,6 @@ constructor(
         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
     }
 
-    override fun onSetShuffleModeEnabled(
-        session: MediaSession,
-        controller: MediaSession.ControllerInfo,
-        shuffleModeEnabled: Boolean,
-    ): ListenableFuture<SessionResult> {
-        if (::service.isInitialized) {
-            if (shuffleModeEnabled && service.shuffleMode == ShuffleMode.OFF) {
-                service.setShuffleMode(ShuffleMode.ON)
-            } else if (!shuffleModeEnabled && service.shuffleMode != ShuffleMode.OFF) {
-                service.setShuffleMode(ShuffleMode.OFF)
-            }
-        }
-        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
-    }
-
     @Deprecated("Deprecated in MediaLibrarySession.Callback")
     override fun onPlaybackResumption(
         mediaSession: MediaSession,

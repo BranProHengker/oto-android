@@ -146,7 +146,7 @@ object SmartShuffle {
         }
         val artistStr = item.mediaMetadata.artist?.toString() ?: item.mediaMetadata.subtitle?.toString()
         if (!artistStr.isNullOrBlank()) {
-            artistStr.split(',', '&', "feat.", "ft.", "/").forEach {
+            artistStr.split(",", "&", "feat.", "ft.", "/").forEach {
                 val a = it.trim().lowercase()
                 if (a.isNotEmpty()) artists += a
             }

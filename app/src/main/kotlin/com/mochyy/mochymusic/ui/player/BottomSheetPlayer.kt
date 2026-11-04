@@ -1591,6 +1591,7 @@ private fun PlayerSheet(
             isActive = ::menuActionActive,
             onAction = onMenuAction,
             repeatMode = transportState.repeatMode,
+            shuffleMode = transportState.shuffleMode,
             // a lambda, so the chevron moving with the sheet doesn't recompose the whole player
             getChevronRect = { if (showLyrics || showQueue) lyricsChevronRect ?: chevronButtonRect else chevronButtonRect },
             screenWidth = screenWidth,
@@ -1837,6 +1838,7 @@ private fun ExpandMenuOverlay(
     isActive: (com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction) -> Boolean,
     onAction: (com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction) -> Unit,
     repeatMode: Int,
+    shuffleMode: ShuffleMode = ShuffleMode.OFF,
     getChevronRect: () -> androidx.compose.ui.geometry.Rect?,
     screenWidth: androidx.compose.ui.unit.Dp,
     screenHeight: androidx.compose.ui.unit.Dp,
@@ -2021,7 +2023,7 @@ private fun ExpandMenuOverlay(
                             val containerColor = if (isToggled) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.16f)
 
                             val actionIcon = if (action == com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE &&
-                                transportState.shuffleMode == ShuffleMode.SMART
+                                shuffleMode == ShuffleMode.SMART
                             ) R.drawable.shuffle_smart else item.second
 
                             if (!fromLeft) label()
