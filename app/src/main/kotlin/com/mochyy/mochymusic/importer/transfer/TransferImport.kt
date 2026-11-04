@@ -86,11 +86,11 @@ class TransferImporter @Inject constructor(
         }
         val manifest = TransferManifest.fromJson(json) ?: throw NotAnExport()
         if (manifest.formatVersion > TransferArchive.FormatVersion || manifest.databaseVersion > MusicDatabaseVersion) {
-            throw TransferException("This export comes from a newer Mochy. Update Mochy first, then import it again.")
+            throw TransferException("This export comes from a newer Oto. Update Oto first, then import it again.")
         }
         // without a path room would fall back to an empty library, so refuse before touching anything
         if (!hasMigrationPath(manifest.databaseVersion, MusicDatabaseVersion)) {
-            throw TransferException("This export is too old for Mochy to read. Update your old app, export again and import that.")
+            throw TransferException("This export is too old for Oto to read. Update your old app, export again and import that.")
         }
         return manifest
     }

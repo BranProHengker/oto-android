@@ -50,19 +50,6 @@ jobs:
           fi
           cat gradle.properties
 
-      - name: Generate Keystore
-        run: |
-          mkdir -p ~/.android
-          keytool -genkey -v \
-            -keystore ~/.android/debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Oto Android,O=Oto,C=US"
-
       - name: Build Release APKs
         env:
           DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}

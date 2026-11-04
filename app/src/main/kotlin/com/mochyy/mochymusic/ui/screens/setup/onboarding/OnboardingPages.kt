@@ -123,7 +123,7 @@ internal fun ImportModePage(
             OnbChoiceCard(
                 icon = painterResource(R.drawable.backup),
                 title = "Import from backup",
-                description = "if you by any chance have a Mochy backup",
+                description = "if you have an Oto or Mochy backup CSV file",
                 onClick = onBackup,
             )
             if (backupError != null) {

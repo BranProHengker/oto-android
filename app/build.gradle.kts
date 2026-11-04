@@ -27,8 +27,8 @@ extensions.configure<ApplicationExtension> {
         applicationId = "co.oto.music"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -132,29 +132,15 @@ extensions.configure<ApplicationExtension> {
         }
     }
 
-    // Release signing only works when the CI secrets are present. Locally they are not, which
-    // used to make `assembleRelease` unbuildable and left debug as the only variant anyone ever
-    // ran — and a debug Compose build is several times slower per frame than release, so all
-    // local performance impressions were being formed against the wrong binary.
-    val hasReleaseSigning = System.getenv("STORE_PASSWORD") != null &&
-        System.getenv("KEY_ALIAS") != null &&
-        System.getenv("KEY_PASSWORD") != null &&
-        file("keystore/release.keystore").exists()
+    val releaseKeystoreFile = file("keystore/release.keystore")
+    val hasReleaseSigning = releaseKeystoreFile.exists()
 
     signingConfigs {
-        create("persistentDebug") {
-            storeFile = file("persistent-debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-        if (hasReleaseSigning) {
-            create("release") {
-                storeFile = file("keystore/release.keystore")
-                storePassword = System.getenv("STORE_PASSWORD")
-                keyAlias = System.getenv("KEY_ALIAS")
-                keyPassword = System.getenv("KEY_PASSWORD")
-            }
+        create("release") {
+            storeFile = releaseKeystoreFile
+            storePassword = System.getenv("STORE_PASSWORD") ?: "otoandroidrelease"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "otoandroid"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "otoandroidrelease"
         }
         getByName("debug") {
             keyAlias = "androiddebugkey"

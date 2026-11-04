@@ -479,14 +479,14 @@
     <string name="wrapped_total_artists_subtitle">unique artists</string>
     <string name="wrapped_total_songs_title">You listened to</string>
     <string name="wrapped_total_songs_subtitle">unique songs</string>
-    <string name="wrapped_intro_title">mochy</string>
+    <string name="wrapped_intro_title">Oto</string>
     <string name="wrapped_intro_subtitle">it\'s time to see what you\'ve been listening to</string>
     <string name="wrapped_intro_button">let\'s go!</string>
-    <string name="wrapped_end_thanks">Thanks for listening with mochy!</string>
+    <string name="wrapped_end_thanks">Thanks for listening with Oto!</string>
     <string name="wrapped_end_create_playlist">Create Your Wrapped Playlist</string>
     <string name="wrapped_end_creating_playlist">Creating...</string>
     <string name="wrapped_end_playlist_saved">Playlist Saved</string>
-    <string name="wrapped_logo_content_description">mochy Logo</string>
+    <string name="wrapped_logo_content_description">Oto Logo</string>
     <string name="wrapped_year">2025</string>
     <string name="wrapped_ready_title">YOUR WRAPPED IS READY!</string>
     <string name="wrapped_ready_subtitle">Time to see what you loved this year.</string>
@@ -751,7 +751,7 @@
     <string name="crash_share_logs">Share Logs</string>
     <string name="copy_logs">Copy Logs</string>
     <string name="crash_share_title">Share crash report</string>
-    <string name="crash_report_subject">mochy Crash Report</string>
+    <string name="crash_report_subject">Oto Crash Report</string>
     <string name="crash_close">Close</string>
     <string name="crash_no_log">No crash log available</string>
 
@@ -803,7 +803,7 @@
     <string name="delete_from_history">Delete from history</string>
     <string name="re_listen">Re-listen</string>
     <string name="hold_to_recognize">Hold search icon to recognize music</string>
-    <string name="play_on_app">Play on mochy</string>
+    <string name="play_on_app">Play on Oto</string>
     <string name="recognized_track">Recognized Track</string>
 
     <!-- CSV Import Strings -->

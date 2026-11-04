@@ -124,13 +124,13 @@ fun ImportSyncScreen(
             style = SettingsGroupStyle.Grouped,
             items = listOf(
                 SettingsItem(
-                    title = { Text("Export to Mochy CSV") },
-                    highlightKey = "Export to Mochy CSV",
+                    title = { Text("Export to Oto CSV") },
+                    highlightKey = "Export to Oto CSV",
                     descriptionText = "Liked songs and playlists",
-                    detail = "Liked songs and playlists, import it back from Import → Mochy backup",
+                    detail = "Liked songs and playlists, import it back from Import → Oto backup",
                     icon = painterResource(R.drawable.backup),
                     iconShape = CircleShape,
-                    onClick = { exportLauncher.launch("mochy-library-${LocalDate.now()}.csv") },
+                    onClick = { exportLauncher.launch("oto-library-${LocalDate.now()}.csv") },
                 ),
             ),
         )
