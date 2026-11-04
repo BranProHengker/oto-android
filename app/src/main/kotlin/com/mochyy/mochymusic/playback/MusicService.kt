@@ -666,11 +666,8 @@ class MusicService :
     val automixItems = MutableStateFlow<List<MediaItem>>(emptyList())
 
     val shuffleModeState = MutableStateFlow(ShuffleMode.OFF)
-    var shuffleMode: ShuffleMode
+    val shuffleMode: ShuffleMode
         get() = shuffleModeState.value
-        set(value) {
-            shuffleModeState.value = value
-        }
 
     var sourceList: List<MediaItem> = emptyList()
     var manualCount: Int = 0
@@ -842,7 +839,6 @@ class MusicService :
             } else {
                 if (dataStore.get(ShuffleModeKey, false)) ShuffleMode.ON else ShuffleMode.OFF
             }
-            shuffleMode = initialMode
             shuffleModeState.value = initialMode
             player.shuffleModeEnabled = (initialMode != ShuffleMode.OFF)
         }
@@ -1922,7 +1918,6 @@ class MusicService :
         initialQueueLoading = true
         val persistShuffleAcrossQueues = dataStore.get(PersistentShuffleAcrossQueuesKey, false)
         if (!persistShuffleAcrossQueues) {
-            shuffleMode = ShuffleMode.OFF
             shuffleModeState.value = ShuffleMode.OFF
             player.shuffleModeEnabled = false
         }
@@ -2931,7 +2926,6 @@ class MusicService :
 
     fun setShuffleMode(newMode: ShuffleMode) {
         if (shuffleMode == newMode) return
-        shuffleMode = newMode
         shuffleModeState.value = newMode
 
         applyCurrentShuffleToUpcoming(keepHistory = true)
