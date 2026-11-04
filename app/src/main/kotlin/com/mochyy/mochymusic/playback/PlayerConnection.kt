@@ -279,6 +279,7 @@ class PlayerConnection(
             com.mochyy.mochymusic.ui.player.models.ProgressState(),
         )
 
+    val shuffleMode: StateFlow<ShuffleMode> get() = service.shuffleModeState
     val shuffleModeEnabled = MutableStateFlow(false)
     val repeatMode = MutableStateFlow(REPEAT_MODE_OFF)
 
@@ -453,25 +454,34 @@ class PlayerConnection(
         }
     }
 
+    fun toggleShuffle() {
+        service.toggleShuffle()
+    }
+
+    fun setShuffleMode(mode: ShuffleMode) {
+        service.setShuffleMode(mode)
+    }
+
     /** Moves a song to play straight after [afterUid]. */
     fun moveQueueItem(uid: Int, afterUid: Int) {
         val from = mediaIndexOf(uid)
         val after = mediaIndexOf(afterUid)
         if (from == C.INDEX_UNSET || after == C.INDEX_UNSET || from == after) return
         try {
-            if (!player.shuffleModeEnabled) {
-                // moveMediaItem takes the final index, counted once the song is out of the way.
-                val to = if (from < after) after else after + 1
-                if (to != from) player.moveMediaItem(from, to)
-            } else {
-                // Shuffled, the play order is the shuffle order, not the item order: reorder that.
-                val order = playOrder()
-                order.remove(from)
-                order.add(order.indexOf(after) + 1, from)
-                player.setShuffleOrder(DefaultShuffleOrder(order.toIntArray(), System.currentTimeMillis()))
+            val to = if (from < after) after else after + 1
+            if (to != from) {
+                player.moveMediaItem(from, to)
+                ensureIdentityShuffleOrder()
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error in moveQueueItem")
+        }
+    }
+
+    private fun ensureIdentityShuffleOrder() {
+        val count = player.mediaItemCount
+        if (count > 0) {
+            player.setShuffleOrder(androidx.media3.exoplayer.source.ShuffleOrder.UnshuffledShuffleOrder(count))
         }
     }
 

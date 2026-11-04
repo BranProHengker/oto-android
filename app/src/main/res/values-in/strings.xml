@@ -140,7 +140,9 @@
     <string name="action_like">Suka</string>
     <string name="action_remove_like">Hapus suka</string>
     <string name="action_shuffle_on">Acak diaktifkan</string>
+    <string name="action_shuffle_smart">Acak pintar diaktifkan</string>
     <string name="action_shuffle_off">Acak tidak diaktifkan</string>
+    <string name="shuffle_smart">Acak Pintar</string>
     <string name="repeat_mode_off">Mode ulangi tidak diaktifkan</string>
     <string name="repeat_mode_one">Ulangi lagu saat ini</string>
     <string name="repeat_mode_all">Ulangi antrean</string>

@@ -99,9 +99,10 @@ internal fun LyricsSourceFooter(
     }
 }
 
-/** The name to show for a saved provider, including the two that aren't online sources. */
+/** The name to show for a saved provider, including the non-online sources. */
 private fun sourceName(provider: String): String = when (provider) {
     EmbeddedLyrics.Provider -> "Song file"
+    com.mochyy.mochymusic.lyrics.SidecarLyrics.Provider -> "Local .lrc"
     LyricsMenuViewModel.USER_EDITED -> "Your edit"
     else -> LyricsProviderRegistry.getDisplayName(provider)
 }

@@ -69,6 +69,7 @@ constructor(
     var toggleLike: () -> Unit = {}
     var toggleStartRadio: () -> Unit = {}
     var toggleLibrary: () -> Unit = {}
+    var toggleShuffle: () -> Unit = {}
 
     override fun onConnect(
         session: MediaSession,
@@ -98,10 +99,24 @@ constructor(
             MediaSessionConstants.ACTION_TOGGLE_LIKE -> toggleLike()
             MediaSessionConstants.ACTION_TOGGLE_START_RADIO -> toggleStartRadio()
             MediaSessionConstants.ACTION_TOGGLE_LIBRARY -> toggleLibrary()
-            MediaSessionConstants.ACTION_TOGGLE_SHUFFLE -> session.player.shuffleModeEnabled =
-                !session.player.shuffleModeEnabled
+            MediaSessionConstants.ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
 
             MediaSessionConstants.ACTION_TOGGLE_REPEAT_MODE -> session.player.toggleRepeatMode()
+        }
+        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+    }
+
+    override fun onSetShuffleModeEnabled(
+        session: MediaSession,
+        controller: MediaSession.ControllerInfo,
+        shuffleModeEnabled: Boolean,
+    ): ListenableFuture<SessionResult> {
+        if (::service.isInitialized) {
+            if (shuffleModeEnabled && service.shuffleMode == ShuffleMode.OFF) {
+                service.setShuffleMode(ShuffleMode.ON)
+            } else if (!shuffleModeEnabled && service.shuffleMode != ShuffleMode.OFF) {
+                service.setShuffleMode(ShuffleMode.OFF)
+            }
         }
         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
     }

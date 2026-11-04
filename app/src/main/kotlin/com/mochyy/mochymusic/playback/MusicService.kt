@@ -67,6 +67,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
+import androidx.media3.exoplayer.source.ShuffleOrder.UnshuffledShuffleOrder
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.extractor.mp4.FragmentedMp4Extractor
@@ -141,6 +142,7 @@ import com.mochyy.mochymusic.constants.ScrobbleMinSongDurationKey
 import com.mochyy.mochymusic.constants.ShowLyricsKey
 import com.mochyy.mochymusic.constants.ShuffleModeKey
 import com.mochyy.mochymusic.constants.ShufflePlaylistFirstKey
+import com.mochyy.mochymusic.constants.ShuffleStateKey
 import com.mochyy.mochymusic.constants.PreventDuplicateTracksInQueueKey
 import com.mochyy.mochymusic.constants.SimilarContent
 import com.mochyy.mochymusic.constants.SkipSilenceInstantKey
@@ -663,6 +665,16 @@ class MusicService :
 
     val automixItems = MutableStateFlow<List<MediaItem>>(emptyList())
 
+    val shuffleModeState = MutableStateFlow(ShuffleMode.OFF)
+    var shuffleMode: ShuffleMode
+        get() = shuffleModeState.value
+        set(value) {
+            shuffleModeState.value = value
+        }
+
+    var sourceList: List<MediaItem> = emptyList()
+    var manualCount: Int = 0
+
     private var originalQueueSize: Int = 0
 
     private var consecutivePlaybackErr = 0
@@ -807,6 +819,7 @@ class MusicService :
             toggleLike = ::toggleLike
             toggleStartRadio = ::toggleStartRadio
             toggleLibrary = ::toggleLibrary
+            toggleShuffle = ::toggleShuffle
         }
         mediaSession =
             MediaLibrarySession
@@ -823,7 +836,15 @@ class MusicService :
         player.repeatMode = dataStore.get(RepeatModeKey, REPEAT_MODE_OFF)
 
         if (dataStore.get(RememberShuffleAndRepeatKey, true)) {
-            player.shuffleModeEnabled = dataStore.get(ShuffleModeKey, false)
+            val savedState = dataStore.get(ShuffleStateKey, null)
+            val initialMode = if (savedState != null) {
+                runCatching { ShuffleMode.valueOf(savedState) }.getOrDefault(ShuffleMode.OFF)
+            } else {
+                if (dataStore.get(ShuffleModeKey, false)) ShuffleMode.ON else ShuffleMode.OFF
+            }
+            shuffleMode = initialMode
+            shuffleModeState.value = initialMode
+            player.shuffleModeEnabled = (initialMode != ShuffleMode.OFF)
         }
 
         val sessionToken = SessionToken(this, ComponentName(this, MusicService::class.java))
@@ -1804,8 +1825,20 @@ class MusicService :
                     .build(),
                 CommandButton
                     .Builder()
-                    .setDisplayName(getString(if (player.shuffleModeEnabled) R.string.action_shuffle_off else R.string.action_shuffle_on))
-                    .setIconResId(if (player.shuffleModeEnabled) R.drawable.shuffle_on else R.drawable.shuffle)
+                    .setDisplayName(
+                        when (shuffleMode) {
+                            ShuffleMode.OFF -> getString(R.string.action_shuffle_on)
+                            ShuffleMode.ON -> getString(R.string.action_shuffle_smart)
+                            ShuffleMode.SMART -> getString(R.string.action_shuffle_off)
+                        }
+                    )
+                    .setIconResId(
+                        when (shuffleMode) {
+                            ShuffleMode.OFF -> R.drawable.shuffle
+                            ShuffleMode.ON -> R.drawable.shuffle_on
+                            ShuffleMode.SMART -> R.drawable.shuffle_smart
+                        }
+                    )
                     .setSessionCommand(CommandToggleShuffle)
                     .build(),
                 CommandButton.Builder()
@@ -1888,8 +1921,9 @@ class MusicService :
         val generation = queueGeneration
         initialQueueLoading = true
         val persistShuffleAcrossQueues = dataStore.get(PersistentShuffleAcrossQueuesKey, false)
-        val previousShuffleEnabled = player.shuffleModeEnabled
         if (!persistShuffleAcrossQueues) {
+            shuffleMode = ShuffleMode.OFF
+            shuffleModeState.value = ShuffleMode.OFF
             player.shuffleModeEnabled = false
         }
 
@@ -1937,6 +1971,12 @@ class MusicService :
         if (initialStatus.items.isEmpty()) return
 
         originalQueueSize = initialStatus.items.size
+        sourceList = if (queue is com.mochyy.mochymusic.playback.queues.ListQueue && queue.sourceItems != null) {
+            queue.sourceItems
+        } else {
+            initialStatus.items
+        }
+        manualCount = 0
         if (preloadId != null) {
             val items = initialStatus.items
             val preloadIndex = items.indexOfFirst { it.mediaId == preloadId }
@@ -1964,9 +2004,10 @@ class MusicService :
             player.playWhenReady = playWhenReady
         }
 
-        if (player.shuffleModeEnabled) {
-            val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
-            applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
+        if (shuffleMode != ShuffleMode.OFF) {
+            applyCurrentShuffleToUpcoming(keepHistory = false)
+        } else {
+            ensureIdentityShuffleOrder()
         }
     }
 
@@ -2117,10 +2158,14 @@ class MusicService :
                 // the user picked still play before the similar ones.
                 val insertAt = if (fromInfinite) player.mediaItemCount else upcomingAutoplayStart()
                 player.addMediaItems(insertAt, newItems)
+                if (!fromInfinite) {
+                    sourceList = sourceList + newItems
+                }
                 runwayRetries = 0
-                if (player.shuffleModeEnabled) {
-                    // A new page of the queue is shuffled in itself; Autoplay keeps the radio's order.
-                    placeAddedInShuffleOrder(insertAt until insertAt + newItems.size, shuffleThem = !fromInfinite)
+                if (shuffleMode != ShuffleMode.OFF && !fromInfinite) {
+                    applyCurrentShuffleToUpcoming(keepHistory = true)
+                } else {
+                    ensureIdentityShuffleOrder()
                 }
                 if (endedWithNothingNext && player.playWhenReady) {
                     val nextIndex = player.nextMediaItemIndex
@@ -2312,9 +2357,12 @@ class MusicService :
                 }
 
                 player.addMediaItems(currentIndex + 1, radioItems)
-                if (player.shuffleModeEnabled) {
-                    val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
-                    applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
+                sourceList = (0..currentIndex).map { player.getMediaItemAt(it) } + radioItems
+                manualCount = 0
+                if (shuffleMode != ShuffleMode.OFF) {
+                    applyCurrentShuffleToUpcoming(keepHistory = true)
+                } else {
+                    ensureIdentityShuffleOrder()
                 }
             }
 
@@ -2343,9 +2391,12 @@ class MusicService :
                                 player.removeMediaItems(currentIndex + 1, itemCount)
                             }
                             player.addMediaItems(currentIndex + 1, radioItems)
-                            if (player.shuffleModeEnabled) {
-                                val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
-                                applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
+                            sourceList = (0..currentIndex).map { player.getMediaItemAt(it) } + radioItems
+                            manualCount = 0
+                            if (shuffleMode != ShuffleMode.OFF) {
+                                applyCurrentShuffleToUpcoming(keepHistory = true)
+                            } else {
+                                ensureIdentityShuffleOrder()
                             }
                             // The old queue's pages no longer follow these songs; let infinite queue extend them.
                             currentQueue = EmptyQueue
@@ -2463,6 +2514,9 @@ class MusicService :
             if (castConnectionHandler?.isCasting?.value != true) {
                 player.play()
             }
+            sourceList = items
+            manualCount = 0
+            ensureIdentityShuffleOrder()
             return
         }
 
@@ -2483,62 +2537,10 @@ class MusicService :
         }
 
         val insertIndex = player.currentMediaItemIndex + 1
-        val shuffleEnabled = player.shuffleModeEnabled
-
         player.addMediaItems(insertIndex, items)
         player.prepare()
-
-        if (shuffleEnabled) {
-
-            val timeline = player.currentTimeline
-            if (!timeline.isEmpty) {
-                val size = timeline.windowCount
-                val currentIndex = player.currentMediaItemIndex
-
-                val newIndices = (insertIndex until (insertIndex + items.size)).toSet()
-
-                val orderAfter = mutableListOf<Int>()
-                var idx = currentIndex
-                while (true) {
-                    idx = timeline.getNextWindowIndex(idx, Player.REPEAT_MODE_OFF, true)
-                    if (idx == C.INDEX_UNSET) break
-                    if (idx != currentIndex) orderAfter.add(idx)
-                }
-
-                val prevList = mutableListOf<Int>()
-                var pIdx = currentIndex
-                while (true) {
-                    pIdx = timeline.getPreviousWindowIndex(pIdx, Player.REPEAT_MODE_OFF, true)
-                    if (pIdx == C.INDEX_UNSET) break
-                    if (pIdx != currentIndex) prevList.add(pIdx)
-                }
-                prevList.reverse()
-
-                // History stays in front of the current song. It used to be moved after the new
-                // block, so everything already played came round again.
-                val history = prevList.filter { it != currentIndex && it !in newIndices }
-                val upcoming = orderAfter.filter { it != currentIndex && it !in newIndices }
-
-                val nextBlock = (insertIndex until (insertIndex + items.size)).toList()
-                val finalOrder = IntArray(size)
-                var pos = 0
-                history.forEach { if (pos < size) finalOrder[pos++] = it }
-                if (pos < size) finalOrder[pos++] = currentIndex
-                nextBlock.forEach { if (it in 0 until size && pos < size) finalOrder[pos++] = it }
-                upcoming.forEach { if (pos < size) finalOrder[pos++] = it }
-
-                if (pos < size) {
-                    for (i in 0 until size) {
-                        if (!finalOrder.contains(i)) {
-                            finalOrder[pos++] = i
-                            if (pos == size) break
-                        }
-                    }
-                }
-
-                player.setShuffleOrder(DefaultShuffleOrder(finalOrder, System.currentTimeMillis()))
-            }
-        }
+        manualCount += items.size
+        ensureIdentityShuffleOrder()
     }
 
     fun addToQueue(items: List<MediaItem>) {
@@ -2562,40 +2564,11 @@ class MusicService :
         // The end of what the user queued, which is in front of any Autoplay songs.
         val insertAt = upcomingAutoplayStart()
         player.addMediaItems(insertAt, items)
-        if (player.shuffleModeEnabled) {
-            placeAddedInShuffleOrder(insertAt until insertAt + items.size, shuffleThem = false)
-        }
+        sourceList = sourceList + items
+        ensureIdentityShuffleOrder()
         player.prepare()
     }
 
-    /**
-     * Fits songs just added while shuffled into the shuffle order without reshuffling the rest.
-     * Reshuffling everything on each addition (as before) rearranged the whole upcoming queue
-     * every time a page loaded or a song was queued, and threw History back into it. Now history
-     * and what's lined up keep their order; the new songs go after the user's songs and before
-     * Autoplay - or at the very end, if they are Autoplay.
-     */
-    private fun placeAddedInShuffleOrder(added: IntRange, shuffleThem: Boolean) {
-        val timeline = player.currentTimeline
-        if (timeline.isEmpty || added.isEmpty()) return
-        val order = ArrayList<Int>(timeline.windowCount)
-        var index = timeline.getFirstWindowIndex(true)
-        while (index != C.INDEX_UNSET && order.size < timeline.windowCount) {
-            if (index !in added) order += index
-            index = timeline.getNextWindowIndex(index, REPEAT_MODE_OFF, true)
-        }
-        val block = added.toMutableList()
-        if (shuffleThem) block.shuffle()
-        val insertAt = if (player.getMediaItemAt(block.first()).isAutoplay) {
-            order.size
-        } else {
-            val currentPos = order.indexOf(player.currentMediaItemIndex)
-            (currentPos + 1 until order.size).firstOrNull { player.getMediaItemAt(order[it]).isAutoplay } ?: order.size
-        }
-        order.addAll(insertAt, block)
-        if (order.size != timeline.windowCount) return
-        player.setShuffleOrder(DefaultShuffleOrder(order.toIntArray(), System.currentTimeMillis()))
-    }
 
     fun toggleLibrary() {
         scope.launch {
@@ -2791,7 +2764,12 @@ class MusicService :
                 player.seekTo(previousMediaItemIndex, 0)
             }
         }
+        if (previousMediaItemIndex != C.INDEX_UNSET && player.currentMediaItemIndex > previousMediaItemIndex) {
+            val advanced = player.currentMediaItemIndex - previousMediaItemIndex
+            manualCount = (manualCount - advanced).coerceAtLeast(0)
+        }
         previousMediaItemIndex = player.currentMediaItemIndex
+        ensureIdentityShuffleOrder()
 
         mediaItem?.mediaId?.let { announceStreamSource(it) }
         mediaItem?.mediaId?.let { announceMusicVideoAudio(it) }
@@ -2947,29 +2925,40 @@ class MusicService :
 
     }
 
-    override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-        updateNotification()
-        if (shuffleModeEnabled) {
+    fun toggleShuffle() {
+        setShuffleMode(shuffleMode.next())
+    }
 
-            if (player.mediaItemCount == 0) return
+    fun setShuffleMode(newMode: ShuffleMode) {
+        if (shuffleMode == newMode) return
+        shuffleMode = newMode
+        shuffleModeState.value = newMode
 
-            val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
-            val currentIndex = player.currentMediaItemIndex
-            val totalCount = player.mediaItemCount
+        applyCurrentShuffleToUpcoming(keepHistory = true)
 
-            applyShuffleOrder(currentIndex, totalCount, shufflePlaylistFirst, keepHistory = true)
-        }
+        ensureIdentityShuffleOrder()
+        player.shuffleModeEnabled = (newMode != ShuffleMode.OFF)
 
         if (dataStore.get(RememberShuffleAndRepeatKey, true)) {
             scope.launch {
                 dataStore.edit { settings ->
-                    settings[ShuffleModeKey] = shuffleModeEnabled
+                    settings[ShuffleStateKey] = newMode.name
+                    settings[ShuffleModeKey] = (newMode != ShuffleMode.OFF)
                 }
             }
         }
 
+        updateNotification()
         if (dataStore.get(PersistentQueueKey, true)) {
             saveQueueToDisk()
+        }
+    }
+
+    override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+        if (shuffleModeEnabled && shuffleMode == ShuffleMode.OFF) {
+            setShuffleMode(ShuffleMode.ON)
+        } else if (!shuffleModeEnabled && shuffleMode != ShuffleMode.OFF) {
+            setShuffleMode(ShuffleMode.OFF)
         }
     }
 
@@ -2986,79 +2975,42 @@ class MusicService :
         }
     }
 
-    private fun applyShuffleOrder(
-        currentIndex: Int,
-        totalCount: Int,
-        shufflePlaylistFirst: Boolean,
-        /**
-         * Songs before the current one already played: keep them, in order, as history rather than
-         * shuffling them back in. True when shuffle is switched on mid-queue; false when a queue
-         * starts shuffled partway in, where those songs haven't played yet.
-         */
-        keepHistory: Boolean = false,
-    ) {
-        if (totalCount == 0) return
+    fun applyCurrentShuffleToUpcoming(keepHistory: Boolean = true) {
+        val currentIndex = player.currentMediaItemIndex
+        val totalCount = player.mediaItemCount
+        if (totalCount <= 0 || currentIndex < 0 || currentIndex >= totalCount) return
 
-        if (shufflePlaylistFirst && originalQueueSize > 0 && originalQueueSize < totalCount) {
+        val currentTrack = player.getMediaItemAt(currentIndex)
+        val upcomingCount = totalCount - (currentIndex + 1)
+        if (upcomingCount <= 0) return
 
-            val originalIndices = (0 until originalQueueSize).filter { it != currentIndex }.toMutableList()
-            val addedIndices = (originalQueueSize until totalCount).filter { it != currentIndex }.toMutableList()
+        val allUpcoming = (currentIndex + 1 until totalCount).map { player.getMediaItemAt(it) }
 
-            originalIndices.shuffle()
-            addedIndices.shuffle()
+        val safeManualCount = manualCount.coerceIn(0, allUpcoming.size)
+        val manualItems = allUpcoming.take(safeManualCount)
+        val nonManual = allUpcoming.drop(safeManualCount)
 
-            val shuffledIndices = IntArray(totalCount)
-            var pos = 0
-            shuffledIndices[pos++] = currentIndex
+        val autoplayStart = nonManual.indexOfFirst { it.isAutoplay }
+        val candidates = if (autoplayStart >= 0) nonManual.subList(0, autoplayStart) else nonManual
+        val autoplayItems = if (autoplayStart >= 0) nonManual.subList(autoplayStart, nonManual.size) else emptyList()
 
-            if (currentIndex < originalQueueSize) {
-                originalIndices.forEach { shuffledIndices[pos++] = it }
-                addedIndices.forEach { shuffledIndices[pos++] = it }
-            } else {
-                (0 until originalQueueSize).shuffled().forEach { shuffledIndices[pos++] = it }
-                addedIndices.forEach { shuffledIndices[pos++] = it }
-            }
-            player.setShuffleOrder(DefaultShuffleOrder(shapeShuffleOrder(shuffledIndices, currentIndex, keepHistory), System.currentTimeMillis()))
-        } else {
-            val shuffledIndices = IntArray(totalCount) { it }
-            shuffledIndices.shuffle()
-
-            val currentItemIndexInShuffled = shuffledIndices.indexOf(currentIndex)
-            if (currentItemIndexInShuffled != -1) {
-                val temp = shuffledIndices[0]
-                shuffledIndices[0] = shuffledIndices[currentItemIndexInShuffled]
-                shuffledIndices[currentItemIndexInShuffled] = temp
-            }
-            player.setShuffleOrder(DefaultShuffleOrder(shapeShuffleOrder(shuffledIndices, currentIndex, keepHistory), System.currentTimeMillis()))
+        val processedCandidates = when (shuffleMode) {
+            ShuffleMode.OFF -> SmartShuffle.restore(candidates, sourceList, currentTrack)
+            ShuffleMode.ON -> SmartShuffle.scramble(candidates, sourceList, currentTrack)
+            ShuffleMode.SMART -> SmartShuffle.smartScramble(candidates, sourceList, currentTrack)
         }
+
+        val newUpcoming = manualItems + processedCandidates + autoplayItems
+        player.removeMediaItems(currentIndex + 1, totalCount)
+        player.addMediaItems(currentIndex + 1, newUpcoming)
+        ensureIdentityShuffleOrder()
     }
 
-    /** Autoplay to the back; with [keepHistory], the songs before [currentIndex] to the front, in order. */
-    private fun shapeShuffleOrder(order: IntArray, currentIndex: Int, keepHistory: Boolean): IntArray {
-        val shaped = autoplayLast(order)
-        if (!keepHistory || currentIndex <= 0) return shaped
-        val result = IntArray(shaped.size)
-        var pos = 0
-        for (i in 0 until currentIndex) result[pos++] = i
-        for (i in shaped) if (i >= currentIndex) result[pos++] = i
-        return result
-    }
-
-    /**
-     * Shuffle mixes what the user queued, not Autoplay: those songs stay after everything else, in
-     * the order the radio gave them. The song playing keeps its place at the front.
-     */
-    private fun autoplayLast(order: IntArray): IntArray {
-        if (order.isEmpty()) return order
-        val autoplay = (0 until player.mediaItemCount)
-            .filter { it != order[0] && player.getMediaItemAt(it).isAutoplay }
-        if (autoplay.isEmpty()) return order
-        val isAutoplay = autoplay.toHashSet()
-        val result = IntArray(order.size)
-        var pos = 0
-        for (index in order) if (index !in isAutoplay) result[pos++] = index
-        for (index in autoplay) result[pos++] = index
-        return result
+    fun ensureIdentityShuffleOrder() {
+        val count = player.mediaItemCount
+        if (count > 0) {
+            player.setShuffleOrder(UnshuffledShuffleOrder(count))
+        }
     }
 
     override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
@@ -4379,16 +4331,10 @@ class MusicService :
      * "next song" showed after every song.
      */
     private fun copyPlayOrder(from: Player, to: ExoPlayer) {
-        val timeline = from.currentTimeline
-        if (timeline.isEmpty || timeline.windowCount != to.mediaItemCount) return
-        val order = ArrayList<Int>(timeline.windowCount)
-        var index = timeline.getFirstWindowIndex(true)
-        while (index != C.INDEX_UNSET && order.size < timeline.windowCount) {
-            order += index
-            index = timeline.getNextWindowIndex(index, REPEAT_MODE_OFF, true)
+        val count = to.mediaItemCount
+        if (count > 0) {
+            to.setShuffleOrder(UnshuffledShuffleOrder(count))
         }
-        if (order.size != timeline.windowCount) return
-        to.setShuffleOrder(DefaultShuffleOrder(order.toIntArray(), System.currentTimeMillis()))
     }
 
     private fun performCrossfadeSwap() {

@@ -536,8 +536,16 @@ fun BoxScope.StyleMenu(
         val transport = connection?.uiState?.transportState?.collectAsState()?.value
         // the styles have no shuffle or repeat buttons of their own, so each is a row of the list here, staying open when tapped so the change shows
         val shuffleAndRepeat = if (connection != null && transport != null) listOf(
-            MenuItem("Shuffle", R.drawable.shuffle, active = transport.shuffleModeEnabled) {
-                connection.player.shuffleModeEnabled = !connection.player.shuffleModeEnabled
+            MenuItem(
+                label = when (transport.shuffleMode) {
+                    com.mochyy.mochymusic.playback.ShuffleMode.OFF -> "Shuffle"
+                    com.mochyy.mochymusic.playback.ShuffleMode.ON -> "Shuffle"
+                    com.mochyy.mochymusic.playback.ShuffleMode.SMART -> "Smart Shuffle"
+                },
+                icon = if (transport.shuffleMode == com.mochyy.mochymusic.playback.ShuffleMode.SMART) R.drawable.shuffle_smart else R.drawable.shuffle,
+                active = transport.shuffleMode != com.mochyy.mochymusic.playback.ShuffleMode.OFF,
+            ) {
+                connection.toggleShuffle()
             },
             MenuItem(
                 label = if (transport.repeatMode == Player.REPEAT_MODE_ONE) "Repeat one" else "Repeat",

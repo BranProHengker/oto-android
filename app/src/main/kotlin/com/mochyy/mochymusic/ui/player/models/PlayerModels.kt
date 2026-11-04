@@ -3,10 +3,12 @@ package com.mochyy.mochymusic.ui.player.models
 import android.net.Uri
 import androidx.compose.runtime.Immutable
 import androidx.media3.common.Player
+import com.mochyy.mochymusic.playback.ShuffleMode
 
 @Immutable
 data class TransportState(
     val isPlaying: Boolean = false,
+    val shuffleMode: ShuffleMode = ShuffleMode.OFF,
     val shuffleModeEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val canSkipNext: Boolean = true,

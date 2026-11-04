@@ -86,21 +86,67 @@ constructor(
             bestCache.get(mediaMetadata.id)?.let { return it }
         }
 
-        // An imported file's own lyrics, from its tags: they're the file's, and they're there
-        // offline. Read before anything goes online, so offline mode still has them.
-        // Off the caller's thread: the player asks from the main one, and this reads the file.
-        mediaMetadata.localUri?.let { uri ->
-            withContext(Dispatchers.IO) { readEmbeddedLyrics(context, android.net.Uri.parse(uri)) }?.let { lyrics ->
-                return LyricsWithProvider(lyrics, EmbeddedLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
+        val isOffline = com.mochyy.mochymusic.utils.OfflineMode.isOn
+
+        // When user enables Offline Mode: prioritize local sidecar .lrc file in the same folder first,
+        // then embedded audio tags, then LYRICS_NOT_FOUND if neither exists.
+        if (isOffline) {
+            mediaMetadata.localUri?.let { uriStr ->
+                val uri = android.net.Uri.parse(uriStr)
+                // 1. Prioritize sidecar .lrc file in the same folder
+                withContext(Dispatchers.IO) { SidecarLyrics.find(context, uri) }?.let { lyrics ->
+                    return LyricsWithProvider(lyrics, SidecarLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
+                }
+                // 2. Fallback to embedded audio tags
+                withContext(Dispatchers.IO) { readEmbeddedLyrics(context, uri) }?.let { lyrics ->
+                    return LyricsWithProvider(lyrics, EmbeddedLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
+                }
+            }
+            return LyricsWithProvider(LYRICS_NOT_FOUND, NoConnectionProvider)
+        }
+
+        // When offline mode is NOT enabled: query online providers first.
+        val isNetworkAvailable = try {
+            networkConnectivity.isCurrentlyConnected()
+        } catch (e: Exception) {
+            true
+        }
+
+        var best: ProviderCandidate? = null
+        if (isNetworkAvailable) {
+            val providers = resolveLyricsProviders()
+            // YouTube's auto captions only count when nothing else has lyrics (see [eligible]), so
+            // they're only asked for then: asked every time, they cost every song YouTube requests
+            // whose answer was nearly always thrown away.
+            val (lastResort, regular) = providers.withIndex()
+                .partition { it.value.name == YouTubeCaptionsLyricsProvider.name }
+            var candidates = fetchIndexed(mediaMetadata, regular)
+            // picking parses every candidate's lyrics, so it runs off the main thread the player calls from
+            best = withContext(Dispatchers.Default) { pickBest(mediaMetadata, candidates, providers.size) }
+            if (best == null && lastResort.isNotEmpty()) {
+                candidates = candidates + fetchIndexed(mediaMetadata, lastResort)
+                best = withContext(Dispatchers.Default) { pickBest(mediaMetadata, candidates, providers.size) }
             }
         }
 
-        // offline mode counts as no network: lyrics already saved for the song still show
-        val isNetworkAvailable = !com.mochyy.mochymusic.utils.OfflineMode.isOn && try {
-            networkConnectivity.isCurrentlyConnected()
-        } catch (e: Exception) {
+        // If online provider returned lyrics, use it:
+        if (best != null && best.lyrics != LYRICS_NOT_FOUND) {
+            val result = LyricsWithProvider(best.lyrics, best.providerName)
+            bestCache.put(mediaMetadata.id, result)
+            return result
+        }
 
-            true
+        // Fallback when online providers did not find lyrics (or network is unavailable):
+        // 1. Check sidecar .lrc file in the same folder as fallback
+        mediaMetadata.localUri?.let { uriStr ->
+            val uri = android.net.Uri.parse(uriStr)
+            withContext(Dispatchers.IO) { SidecarLyrics.find(context, uri) }?.let { lyrics ->
+                return LyricsWithProvider(lyrics, SidecarLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
+            }
+            // 2. Fallback to embedded audio tags
+            withContext(Dispatchers.IO) { readEmbeddedLyrics(context, uri) }?.let { lyrics ->
+                return LyricsWithProvider(lyrics, EmbeddedLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
+            }
         }
 
         if (!isNetworkAvailable) {
@@ -108,23 +154,7 @@ constructor(
             return LyricsWithProvider(LYRICS_NOT_FOUND, NoConnectionProvider)
         }
 
-        val providers = resolveLyricsProviders()
-        // YouTube's auto captions only count when nothing else has lyrics (see [eligible]), so
-        // they're only asked for then: asked every time, they cost every song YouTube requests
-        // whose answer was nearly always thrown away.
-        val (lastResort, regular) = providers.withIndex()
-            .partition { it.value.name == YouTubeCaptionsLyricsProvider.name }
-        var candidates = fetchIndexed(mediaMetadata, regular)
-        // picking parses every candidate's lyrics, so it runs off the main thread the player calls from
-        var best = withContext(Dispatchers.Default) { pickBest(mediaMetadata, candidates, providers.size) }
-        if (best == null && lastResort.isNotEmpty()) {
-            candidates = candidates + fetchIndexed(mediaMetadata, lastResort)
-            best = withContext(Dispatchers.Default) { pickBest(mediaMetadata, candidates, providers.size) }
-        }
-        if (best == null) return LyricsWithProvider(LYRICS_NOT_FOUND, "Unknown")
-        val result = LyricsWithProvider(best.lyrics, best.providerName)
-        bestCache.put(mediaMetadata.id, result)
-        return result
+        return LyricsWithProvider(LYRICS_NOT_FOUND, "Unknown")
     }
 
     /**

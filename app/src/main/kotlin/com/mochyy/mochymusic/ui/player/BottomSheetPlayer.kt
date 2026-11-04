@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.media3.common.Player
+import com.mochyy.mochymusic.playback.ShuffleMode
 import com.mochyy.mochymusic.constants.PlayerHorizontalPadding
 import com.mochyy.mochymusic.extensions.toggleRepeatMode
 import com.mochyy.mochymusic.ui.component.BlurEffectCache
@@ -809,7 +810,7 @@ private fun PlayerSheet(
             com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SLEEP_TIMER -> playerConnection.service.sleepTimer.isActive
             com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SEE_VIDEO -> seeVideo
             com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.REPEAT -> transportState.repeatMode != Player.REPEAT_MODE_OFF
-            com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE -> transportState.shuffleModeEnabled
+            com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE -> transportState.shuffleMode != ShuffleMode.OFF
             else -> menuExtras.isActive(action)
         }
         val onMenuAction: (com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction) -> Unit = { action ->
@@ -825,7 +826,7 @@ private fun PlayerSheet(
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SEE_VIDEO -> seeVideo = !seeVideo
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.REPEAT -> playerConnection.player.toggleRepeatMode()
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE ->
-                    playerConnection.player.shuffleModeEnabled = !playerConnection.player.shuffleModeEnabled
+                    playerConnection.toggleShuffle()
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.LYRICS -> transition.open(PlayerPage.LYRICS)
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.QUEUE -> transition.open(PlayerPage.QUEUE)
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SPEED -> showPlaybackSpeed = true
@@ -1431,12 +1432,13 @@ private fun PlayerSheet(
                                     )
                                 }
                                 if (queuePageMounted) {
-                                    val shuffleOn = transportState.shuffleModeEnabled
+                                    val shuffleMode = transportState.shuffleMode
+                                    val isShuffleActive = shuffleMode != ShuffleMode.OFF
                                     PressScaleActionButton(
-                                        icon = R.drawable.shuffle,
-                                        tint = if (shuffleOn) Color.White else Color.White.copy(alpha = 0.85f),
-                                        containerColor = if (shuffleOn) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.15f),
-                                        onClick = { playerConnection.player.shuffleModeEnabled = !shuffleOn },
+                                        icon = if (shuffleMode == ShuffleMode.SMART) R.drawable.shuffle_smart else R.drawable.shuffle,
+                                        tint = if (isShuffleActive) Color.White else Color.White.copy(alpha = 0.6f),
+                                        containerColor = if (isShuffleActive) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.15f),
+                                        onClick = { playerConnection.toggleShuffle() },
                                         hasShadow = false,
                                         modifier = Modifier.graphicsLayer {
                                             openOutFromChevron(queuePageProgress, PageButtonStep.toPx())
@@ -2018,9 +2020,13 @@ private fun ExpandMenuOverlay(
                             val iconTint = if (isToggled) Color.White else Color.White.copy(alpha = 0.85f)
                             val containerColor = if (isToggled) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.16f)
 
+                            val actionIcon = if (action == com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE &&
+                                transportState.shuffleMode == ShuffleMode.SMART
+                            ) R.drawable.shuffle_smart else item.second
+
                             if (!fromLeft) label()
                             PressScaleActionButton(
-                                icon = item.second,
+                                icon = actionIcon,
                                 tint = iconTint,
                                 containerColor = containerColor,
                                 hasShadow = false,
