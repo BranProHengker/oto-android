@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the splash icon for Oto -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="235dp"
+    android:height="235dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M96,112C69.49,112 48,133.49 48,160C48,186.51 69.49,208 96,208C122.51,208 144,186.51 144,160L144,68C144,63.58 147.58,60 152,60C178,60 204,74 216,100C218,104.5 215,110 210,110C205.5,110 202.5,106.5 198,100C188,84 168,76 156,76L156,160C156,186.51 134.51,208 108,208C77.07,208 52,182.93 52,152C52,121.07 77.07,96 108,96C118,96 128,99 136,104L136,124C126,116.5 112,112 96,112ZM96,132C80.54,132 68,144.54 68,160C68,175.46 80.54,188 96,188C111.46,188 124,175.46 124,160C124,144.54 111.46,132 96,132Z" />
+</vector>
