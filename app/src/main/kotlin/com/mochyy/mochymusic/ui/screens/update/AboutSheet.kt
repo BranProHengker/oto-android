@@ -143,7 +143,7 @@ private val MoreCredits = listOf(
 private val Licenses = listOf(
     LicenseEntry(
         tag = "GPL-3.0",
-        title = "Mochy Music · GNU General Public License v3.0",
+        title = "Oto · GNU General Public License v3.0",
         subtitle = "Free and open source software, source code on GitHub",
         url = "$GithubRepoUrl/blob/main/LICENSE",
     ),

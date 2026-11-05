@@ -263,7 +263,7 @@ private fun CustomizeSection(
         )
     }
     Spacer(gap)
-    DiscordTextCard("Activity name", settings.name, { text -> edit { copy(name = text) } }, hint = "Mochy")
+    DiscordTextCard("Activity name", settings.name, { text -> edit { copy(name = text) } }, hint = "Oto")
 
     DiscordSectionTitle("Strings customisation")
     DiscordNoticeCard("Empty a box to hide that line")

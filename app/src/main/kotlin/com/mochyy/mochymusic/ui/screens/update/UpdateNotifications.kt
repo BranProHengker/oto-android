@@ -87,7 +87,7 @@ private fun postNotification(context: Context, release: GithubRelease): Boolean 
     val summary = changelogSummaryLine(release.body).ifBlank { "Tap to see what's new." }
     val notification = NotificationCompat.Builder(context, ChannelId)
         .setSmallIcon(R.drawable.oto_notification)
-        .setContentTitle("Mochy ${release.version} is out")
+        .setContentTitle("Oto ${release.version} is out")
         .setContentText(summary)
         .setStyle(NotificationCompat.BigTextStyle().bigText(summary))
         .setContentIntent(pending)

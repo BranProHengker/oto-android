@@ -48,7 +48,7 @@ class TransferImporter @Inject constructor(
         // the zip's contents land next to the data, so they need about as much room as the zip itself
         val needed = manifest.bytes + SpareBytes
         if (context.dataDir.usableSpace < needed) {
-            throw TransferException("Not enough free space. Mochy needs about ${needed / 1_000_000} MB free to import this.")
+            throw TransferException("Not enough free space. Oto needs about ${needed / 1_000_000} MB free to import this.")
         }
 
         val staging = TransferRestore.stagingDir(context).apply { deleteRecursively(); mkdirs() }
@@ -241,7 +241,7 @@ class TransferImporter @Inject constructor(
     private fun Result<TransferManifest>.friendly(): Result<TransferManifest> = recoverCatching { error ->
         throw when (error) {
             is TransferException -> error
-            is NotAnExport -> TransferException("That isn't a Mochy export. Pick the .zip you exported from your old app.")
+            is NotAnExport -> TransferException("That isn't an Oto export. Pick the .zip you exported from your old app.")
             else -> TransferException("Couldn't import that file. Make sure there's free space and try again.", error)
         }
     }

@@ -67,8 +67,8 @@ fun StorageScreen(navController: NavController, viewModel: StorageViewModel = hi
 
         Spacer(Modifier.height(22.dp))
         Text(
-            usage?.let { "Mochy uses ${percentOf(it.mochy, it.deviceTotal)} of your storage (${formatSize(it.mochy)}), which is split into" }
-                ?: "Working out how much room Mochy takes…",
+            usage?.let { "Oto uses ${percentOf(it.mochy, it.deviceTotal)} of your storage (${formatSize(it.mochy)}), which is split into" }
+                ?: "Working out how much room Oto takes…",
             style = storageText(17f, FontWeight.SemiBold),
             modifier = Modifier.padding(horizontal = 2.dp),
         )
@@ -164,7 +164,7 @@ private fun OverallCard(usage: StorageUsage?) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             LegendSwatch(MochyGreen)
             Spacer(Modifier.width(8.dp))
-            Text("Mochy", style = storageText(16f, FontWeight.SemiBold))
+            Text("Oto", style = storageText(16f, FontWeight.SemiBold))
             Spacer(Modifier.width(16.dp))
             LegendSwatch(OthersGrey)
             Spacer(Modifier.width(8.dp))
@@ -179,7 +179,7 @@ private fun OverallCard(usage: StorageUsage?) {
 @Composable
 private fun BreakdownCard(usage: StorageUsage?) {
     StorageCardColumn {
-        Text("Mochy app data usage", style = storageText(17f))
+        Text("Oto app data usage", style = storageText(17f))
         Spacer(Modifier.height(14.dp))
         UsageBar(
             parts = listOf(
@@ -249,7 +249,7 @@ private fun CacheLimitCard(limit: Int, onLimitChange: (Int) -> Unit, appliesLate
             exit = shrinkVertically() + fadeOut(),
         ) {
             Text(
-                "The new limit starts next time you open Mochy.",
+                "The new limit starts next time you open Oto.",
                 style = storageText(12f, FontWeight.Medium, StorageMuted, -0.1f),
                 modifier = Modifier.padding(top = 8.dp),
             )

@@ -409,7 +409,7 @@
     <string name="karaoke">Karaoke</string>
     <string name="apple_music_style">Apple Music</string>
     <string name="apple_music_style_letter">Apple Music V2 (Letter by Letter)</string>
-    <string name="mochy_1">mochy (Fluid)</string>
+    <string name="mochy_1">Oto (Fluid)</string>
     <string name="apple_music_lyrics_blur">Apple Music Lyrics Blur</string>
     <string name="apple_music_lyrics_blur_desc">Apply blur to inactive lyrics lines for a premium focus effect</string>
     <string name="lyrics_v2_fluid">Lyrics V2 (Fluid)</string>
@@ -840,14 +840,14 @@
     <string name="get_started">Get Started</string>
     <string name="perm_required">Required</string>
     <string name="perm_permissions">Permissions</string>
-    <string name="perm_intro_text">These permissions are required for mochy to function correctly. Please grant them to proceed.</string>
+    <string name="perm_intro_text">These permissions are required for Oto to function correctly. Please grant them to proceed.</string>
     <string name="perm_notif_title">Notifications</string>
     <string name="perm_notif_desc">Know immediately when your music is playing and control it from the notification bar.</string>
     <string name="perm_install_title">App Installation</string>
     <string name="perm_install_desc">Required to download and install app updates seamlessly.</string>
     <string name="feat_discover">Discover</string>
     <string name="feat_features">Features</string>
-    <string name="feat_intro">Explore everything mochy has to offer for your music journey.</string>
+    <string name="feat_intro">Explore everything Oto has to offer for your music journey.</string>
     <string name="feat_lyrics_title">Smart Lyrics</string>
     <string name="feat_lyrics_desc">Enjoy synchronized, word-by-word lyrics for millions of songs.</string>
     <string name="feat_download_title">Offline Playback</string>
@@ -865,7 +865,7 @@
     <string name="welcome_update_status">Updated</string>
     <string name="welcome_update_intro">Ensuring you have the latest features and security improvements.</string>
     <string name="welcome_checking_updates">Checking for updates…</string>
-    <string name="welcome_up_to_date">mochy is up to date!</string>
+    <string name="welcome_up_to_date">Oto is up to date!</string>
     <string name="welcome_update_available">New version is available: %s</string>
     <string name="welcome_everything_ready">Everything is now up to date</string>
     <string name="commits_title">Commits</string>
