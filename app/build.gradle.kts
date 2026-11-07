@@ -27,8 +27,8 @@ extensions.configure<ApplicationExtension> {
         applicationId = "co.oto.music"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -391,6 +391,8 @@ dependencies {
     implementation(libs.media3.dash)
     implementation(libs.media3.ui)
     implementation(libs.media3.okhttp)
+    // ffmpeg decodes alac (and flac, opus...) on phones that have no decoder of their own for it
+    implementation(libs.media3.ffmpeg)
     // song share videos: decode the background, mix in the song, encode the mp4
     implementation(libs.media3.transformer)
     implementation(libs.media3.effect)

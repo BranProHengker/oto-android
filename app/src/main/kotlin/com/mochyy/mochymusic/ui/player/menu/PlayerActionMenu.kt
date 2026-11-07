@@ -75,6 +75,7 @@ import com.mochyy.mochymusic.ui.menu.AddToPlaylistDialog
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.utils.rememberPreference
 import kotlinx.coroutines.flow.flowOf
+import com.mochyy.mochymusic.ui.component.RemoteFocus
 
 /**
  * @param fromLyrics true when the menu was opened from the lyrics page. The lyrics tools are only
@@ -93,6 +94,8 @@ fun PlayerActionMenu(
     onFullVideo: (() -> Unit)? = null,
     // opens the equalizer page; no row without it
     onEqualizer: (() -> Unit)? = null,
+    // opens a page of the app for a module's row (its own page, a search)
+    onOpenRoute: ((String) -> Unit)? = null,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val trackInfo by playerConnection.uiState.trackInfo.collectAsState()
@@ -121,6 +124,7 @@ fun PlayerActionMenu(
     var showLyricsProvider by remember { mutableStateOf(false) }
     var showLyricsTranslation by remember { mutableStateOf(false) }
     var showLyricsOffset by remember { mutableStateOf(false) }
+    var showSkinCustomise by remember { mutableStateOf(false) }
 
     // Only touched by the lyrics section. hiltViewModel() itself is cheap, but the flows are
     // collected lazily so a menu opened from the player does no lyrics work at all.
@@ -385,6 +389,8 @@ fun PlayerActionMenu(
                         onEditPlayer()
                     },
                 )
+
+                ModuleMenuRows(currentMetadata, onDismiss, onOpenRoute, onCustomise = { showSkinCustomise = true })
             }
     }
 
@@ -418,6 +424,9 @@ fun PlayerActionMenu(
     if (showLyricsProvider) {
         LyricsProviderSheet(onDismiss = { showLyricsProvider = false })
     }
+    if (showSkinCustomise) {
+        SkinCustomiseSheet(onDismiss = { showSkinCustomise = false })
+    }
     if (showLyricsOffset) {
         LyricsOffsetSheet(onDismiss = { showLyricsOffset = false })
     }
@@ -449,7 +458,7 @@ internal fun MenuRow(
             .clickable(
                 enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null,
+                indication = RemoteFocus,
                 onClick = onClick,
             )
             .padding(horizontal = 14.dp, vertical = 14.dp)

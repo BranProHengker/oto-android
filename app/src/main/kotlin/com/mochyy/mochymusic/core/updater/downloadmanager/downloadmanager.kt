@@ -44,13 +44,13 @@ class CustomDownloadManager {
 
                 val downloadDir = File(
                     context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                    "oto_updates"
+                    "mochy_updates"
                 )
                 if (!downloadDir.exists()) {
                     downloadDir.mkdirs()
                 }
 
-                val outputFile = File(downloadDir, "oto.apk")
+                val outputFile = File(downloadDir, "mochy.apk")
                 val outputStream = FileOutputStream(outputFile)
 
                 val buffer = ByteArray(8192)

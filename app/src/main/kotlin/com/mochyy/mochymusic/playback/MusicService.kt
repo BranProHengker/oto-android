@@ -27,6 +27,7 @@ import androidx.core.net.toUri
 import androidx.datastore.preferences.core.edit
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
@@ -51,6 +52,7 @@ import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.decoder.ffmpeg.FfmpegFallbackRenderer
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -67,7 +69,6 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
-import androidx.media3.exoplayer.source.ShuffleOrder.UnshuffledShuffleOrder
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.extractor.mp4.FragmentedMp4Extractor
@@ -142,7 +143,6 @@ import com.mochyy.mochymusic.constants.ScrobbleMinSongDurationKey
 import com.mochyy.mochymusic.constants.ShowLyricsKey
 import com.mochyy.mochymusic.constants.ShuffleModeKey
 import com.mochyy.mochymusic.constants.ShufflePlaylistFirstKey
-import com.mochyy.mochymusic.constants.ShuffleStateKey
 import com.mochyy.mochymusic.constants.PreventDuplicateTracksInQueueKey
 import com.mochyy.mochymusic.constants.SimilarContent
 import com.mochyy.mochymusic.constants.SkipSilenceInstantKey
@@ -1236,11 +1236,12 @@ class MusicService :
             }
         }
 
+        // the timed saves only write what changed: a queue edit (they're the only thing that saves one), or the place in the song
         scope.launch {
             while (isActive) {
                 delay(30.seconds)
                 if (dataStore.get(PersistentQueueKey, true)) {
-                    saveQueueToDisk()
+                    saveQueueToDisk(onlyChanges = true)
                 }
             }
         }
@@ -1249,7 +1250,7 @@ class MusicService :
             while (isActive) {
                 delay(10.seconds)
                 if (dataStore.get(PersistentQueueKey, true) && player.isPlaying) {
-                    saveQueueToDisk()
+                    saveQueueToDisk(onlyChanges = true)
                 }
             }
         }
@@ -1917,6 +1918,7 @@ class MusicService :
         val generation = queueGeneration
         initialQueueLoading = true
         val persistShuffleAcrossQueues = dataStore.get(PersistentShuffleAcrossQueuesKey, false)
+        val previousShuffleEnabled = player.shuffleModeEnabled
         if (!persistShuffleAcrossQueues) {
             shuffleModeState.value = ShuffleMode.OFF
             player.shuffleModeEnabled = false
@@ -1999,10 +2001,9 @@ class MusicService :
             player.playWhenReady = playWhenReady
         }
 
-        if (shuffleMode != ShuffleMode.OFF) {
-            applyCurrentShuffleToUpcoming(keepHistory = false)
-        } else {
-            ensureIdentityShuffleOrder()
+        if (player.shuffleModeEnabled) {
+            val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+            applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
         }
     }
 
@@ -2159,8 +2160,9 @@ class MusicService :
                 runwayRetries = 0
                 if (shuffleMode != ShuffleMode.OFF && !fromInfinite) {
                     applyCurrentShuffleToUpcoming(keepHistory = true)
-                } else {
-                    ensureIdentityShuffleOrder()
+                } else if (player.shuffleModeEnabled) {
+                    // A new page of the queue is shuffled in itself; Autoplay keeps the radio's order.
+                    placeAddedInShuffleOrder(insertAt until insertAt + newItems.size, shuffleThem = !fromInfinite)
                 }
                 if (endedWithNothingNext && player.playWhenReady) {
                     val nextIndex = player.nextMediaItemIndex
@@ -2352,12 +2354,9 @@ class MusicService :
                 }
 
                 player.addMediaItems(currentIndex + 1, radioItems)
-                sourceList = (0..currentIndex).map { player.getMediaItemAt(it) } + radioItems
-                manualCount = 0
-                if (shuffleMode != ShuffleMode.OFF) {
-                    applyCurrentShuffleToUpcoming(keepHistory = true)
-                } else {
-                    ensureIdentityShuffleOrder()
+                if (player.shuffleModeEnabled) {
+                    val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+                    applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
                 }
             }
 
@@ -2390,8 +2389,9 @@ class MusicService :
                             manualCount = 0
                             if (shuffleMode != ShuffleMode.OFF) {
                                 applyCurrentShuffleToUpcoming(keepHistory = true)
-                            } else {
-                                ensureIdentityShuffleOrder()
+                            } else if (player.shuffleModeEnabled) {
+                                val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+                                applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
                             }
                             // The old queue's pages no longer follow these songs; let infinite queue extend them.
                             currentQueue = EmptyQueue
@@ -2509,9 +2509,6 @@ class MusicService :
             if (castConnectionHandler?.isCasting?.value != true) {
                 player.play()
             }
-            sourceList = items
-            manualCount = 0
-            ensureIdentityShuffleOrder()
             return
         }
 
@@ -2532,10 +2529,65 @@ class MusicService :
         }
 
         val insertIndex = player.currentMediaItemIndex + 1
+        val shuffleEnabled = player.shuffleModeEnabled
+
         player.addMediaItems(insertIndex, items)
         player.prepare()
         manualCount += items.size
-        ensureIdentityShuffleOrder()
+
+        if (shuffleMode != ShuffleMode.OFF) {
+            ensureIdentityShuffleOrder()
+        } else if (shuffleEnabled) {
+
+            val timeline = player.currentTimeline
+            if (!timeline.isEmpty) {
+                val size = timeline.windowCount
+                val currentIndex = player.currentMediaItemIndex
+
+                val newIndices = (insertIndex until (insertIndex + items.size)).toSet()
+
+                val orderAfter = mutableListOf<Int>()
+                var idx = currentIndex
+                while (true) {
+                    idx = timeline.getNextWindowIndex(idx, Player.REPEAT_MODE_OFF, true)
+                    if (idx == C.INDEX_UNSET) break
+                    if (idx != currentIndex) orderAfter.add(idx)
+                }
+
+                val prevList = mutableListOf<Int>()
+                var pIdx = currentIndex
+                while (true) {
+                    pIdx = timeline.getPreviousWindowIndex(pIdx, Player.REPEAT_MODE_OFF, true)
+                    if (pIdx == C.INDEX_UNSET) break
+                    if (pIdx != currentIndex) prevList.add(pIdx)
+                }
+                prevList.reverse()
+
+                // History stays in front of the current song. It used to be moved after the new
+                // block, so everything already played came round again.
+                val history = prevList.filter { it != currentIndex && it !in newIndices }
+                val upcoming = orderAfter.filter { it != currentIndex && it !in newIndices }
+
+                val nextBlock = (insertIndex until (insertIndex + items.size)).toList()
+                val finalOrder = IntArray(size)
+                var pos = 0
+                history.forEach { if (pos < size) finalOrder[pos++] = it }
+                if (pos < size) finalOrder[pos++] = currentIndex
+                nextBlock.forEach { if (it in 0 until size && pos < size) finalOrder[pos++] = it }
+                upcoming.forEach { if (pos < size) finalOrder[pos++] = it }
+
+                if (pos < size) {
+                    for (i in 0 until size) {
+                        if (!finalOrder.contains(i)) {
+                            finalOrder[pos++] = i
+                            if (pos == size) break
+                        }
+                    }
+                }
+
+                player.setShuffleOrder(DefaultShuffleOrder(finalOrder, System.currentTimeMillis()))
+            }
+        }
     }
 
     fun addToQueue(items: List<MediaItem>) {
@@ -2560,10 +2612,42 @@ class MusicService :
         val insertAt = upcomingAutoplayStart()
         player.addMediaItems(insertAt, items)
         sourceList = sourceList + items
-        ensureIdentityShuffleOrder()
+        if (shuffleMode != ShuffleMode.OFF) {
+            ensureIdentityShuffleOrder()
+        } else if (player.shuffleModeEnabled) {
+            placeAddedInShuffleOrder(insertAt until insertAt + items.size, shuffleThem = false)
+        }
         player.prepare()
     }
 
+    /**
+     * Fits songs just added while shuffled into the shuffle order without reshuffling the rest.
+     * Reshuffling everything on each addition (as before) rearranged the whole upcoming queue
+     * every time a page loaded or a song was queued, and threw History back into it. Now history
+     * and what's lined up keep their order; the new songs go after the user's songs and before
+     * Autoplay - or at the very end, if they are Autoplay.
+     */
+    private fun placeAddedInShuffleOrder(added: IntRange, shuffleThem: Boolean) {
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty || added.isEmpty()) return
+        val order = ArrayList<Int>(timeline.windowCount)
+        var index = timeline.getFirstWindowIndex(true)
+        while (index != C.INDEX_UNSET && order.size < timeline.windowCount) {
+            if (index !in added) order += index
+            index = timeline.getNextWindowIndex(index, REPEAT_MODE_OFF, true)
+        }
+        val block = added.toMutableList()
+        if (shuffleThem) block.shuffle()
+        val insertAt = if (player.getMediaItemAt(block.first()).isAutoplay) {
+            order.size
+        } else {
+            val currentPos = order.indexOf(player.currentMediaItemIndex)
+            (currentPos + 1 until order.size).firstOrNull { player.getMediaItemAt(order[it]).isAutoplay } ?: order.size
+        }
+        order.addAll(insertAt, block)
+        if (order.size != timeline.windowCount) return
+        player.setShuffleOrder(DefaultShuffleOrder(order.toIntArray(), System.currentTimeMillis()))
+    }
 
     fun toggleLibrary() {
         scope.launch {
@@ -2764,7 +2848,9 @@ class MusicService :
             manualCount = (manualCount - advanced).coerceAtLeast(0)
         }
         previousMediaItemIndex = player.currentMediaItemIndex
-        ensureIdentityShuffleOrder()
+        if (shuffleMode != ShuffleMode.OFF) {
+            ensureIdentityShuffleOrder()
+        }
 
         mediaItem?.mediaId?.let { announceStreamSource(it) }
         mediaItem?.mediaId?.let { announceMusicVideoAudio(it) }
@@ -2956,19 +3042,6 @@ class MusicService :
         }
     }
 
-    override fun onRepeatModeChanged(repeatMode: Int) {
-        updateNotification()
-        scope.launch {
-            dataStore.edit { settings ->
-                settings[RepeatModeKey] = repeatMode
-            }
-        }
-
-        if (dataStore.get(PersistentQueueKey, true)) {
-            saveQueueToDisk()
-        }
-    }
-
     fun applyCurrentShuffleToUpcoming(keepHistory: Boolean = true) {
         val currentIndex = player.currentMediaItemIndex
         val totalCount = player.mediaItemCount
@@ -3003,8 +3076,96 @@ class MusicService :
     fun ensureIdentityShuffleOrder() {
         val count = player.mediaItemCount
         if (count > 0) {
-            player.setShuffleOrder(UnshuffledShuffleOrder(count))
+            player.setShuffleOrder(androidx.media3.exoplayer.source.ShuffleOrder.UnshuffledShuffleOrder(count))
         }
+    }
+
+    override fun onRepeatModeChanged(repeatMode: Int) {
+        updateNotification()
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[RepeatModeKey] = repeatMode
+            }
+        }
+
+        if (dataStore.get(PersistentQueueKey, true)) {
+            saveQueueToDisk()
+        }
+    }
+
+    private fun applyShuffleOrder(
+        currentIndex: Int,
+        totalCount: Int,
+        shufflePlaylistFirst: Boolean,
+        /**
+         * Songs before the current one already played: keep them, in order, as history rather than
+         * shuffling them back in. True when shuffle is switched on mid-queue; false when a queue
+         * starts shuffled partway in, where those songs haven't played yet.
+         */
+        keepHistory: Boolean = false,
+    ) {
+        if (totalCount == 0) return
+
+        if (shufflePlaylistFirst && originalQueueSize > 0 && originalQueueSize < totalCount) {
+
+            val originalIndices = (0 until originalQueueSize).filter { it != currentIndex }.toMutableList()
+            val addedIndices = (originalQueueSize until totalCount).filter { it != currentIndex }.toMutableList()
+
+            originalIndices.shuffle()
+            addedIndices.shuffle()
+
+            val shuffledIndices = IntArray(totalCount)
+            var pos = 0
+            shuffledIndices[pos++] = currentIndex
+
+            if (currentIndex < originalQueueSize) {
+                originalIndices.forEach { shuffledIndices[pos++] = it }
+                addedIndices.forEach { shuffledIndices[pos++] = it }
+            } else {
+                (0 until originalQueueSize).shuffled().forEach { shuffledIndices[pos++] = it }
+                addedIndices.forEach { shuffledIndices[pos++] = it }
+            }
+            player.setShuffleOrder(DefaultShuffleOrder(shapeShuffleOrder(shuffledIndices, currentIndex, keepHistory), System.currentTimeMillis()))
+        } else {
+            val shuffledIndices = IntArray(totalCount) { it }
+            shuffledIndices.shuffle()
+
+            val currentItemIndexInShuffled = shuffledIndices.indexOf(currentIndex)
+            if (currentItemIndexInShuffled != -1) {
+                val temp = shuffledIndices[0]
+                shuffledIndices[0] = shuffledIndices[currentItemIndexInShuffled]
+                shuffledIndices[currentItemIndexInShuffled] = temp
+            }
+            player.setShuffleOrder(DefaultShuffleOrder(shapeShuffleOrder(shuffledIndices, currentIndex, keepHistory), System.currentTimeMillis()))
+        }
+    }
+
+    /** Autoplay to the back; with [keepHistory], the songs before [currentIndex] to the front, in order. */
+    private fun shapeShuffleOrder(order: IntArray, currentIndex: Int, keepHistory: Boolean): IntArray {
+        val shaped = autoplayLast(order)
+        if (!keepHistory || currentIndex <= 0) return shaped
+        val result = IntArray(shaped.size)
+        var pos = 0
+        for (i in 0 until currentIndex) result[pos++] = i
+        for (i in shaped) if (i >= currentIndex) result[pos++] = i
+        return result
+    }
+
+    /**
+     * Shuffle mixes what the user queued, not Autoplay: those songs stay after everything else, in
+     * the order the radio gave them. The song playing keeps its place at the front.
+     */
+    private fun autoplayLast(order: IntArray): IntArray {
+        if (order.isEmpty()) return order
+        val autoplay = (0 until player.mediaItemCount)
+            .filter { it != order[0] && player.getMediaItemAt(it).isAutoplay }
+        if (autoplay.isEmpty()) return order
+        val isAutoplay = autoplay.toHashSet()
+        val result = IntArray(order.size)
+        var pos = 0
+        for (index in order) if (index !in isAutoplay) result[pos++] = index
+        for (index in autoplay) result[pos++] = index
+        return result
     }
 
     override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
@@ -3953,6 +4114,15 @@ class MusicService :
                     override fun getDurationToProgressUs(positionUs: Long, elapsedRealtimeUs: Long, isOnBufferAvailableListenerRegistered: Boolean): Long =
                         minOf(super.getDurationToProgressUs(positionUs, elapsedRealtimeUs, isOnBufferAvailableListenerRegistered), PositionWakeUs)
                 })
+                // after the phone's own, so it only takes what the phone can't decode: alac on most phones, flac on old ones, 192 kHz masters
+                out.add(object : FfmpegFallbackRenderer(eventHandler, eventListener, audioSink) {
+                    override fun onSourceFormat(format: Format) {
+                        songs?.sourceFormat = format
+                    }
+
+                    override fun getDurationToProgressUs(positionUs: Long, elapsedRealtimeUs: Long): Long =
+                        minOf(super.getDurationToProgressUs(positionUs, elapsedRealtimeUs), PositionWakeUs)
+                })
             }
         }.apply {
             // a phone's first-choice decoder failing to start (a vendor FLAC decoder on a 24-bit
@@ -3986,28 +4156,50 @@ class MusicService :
         }
     }
 
-    private fun saveQueueToDisk() {
+    // what the last save wrote, so a timed save can tell nothing changed (it used to write all three files every 30 s, paused or not)
+    private var savedQueueKey: Int? = null
+    private var savedPosition = -1L
+
+    // a cheap fingerprint of everything in the queue and automix files: the songs, where in them we are, and how they play
+    private fun queueKey(): Int {
+        var key = java.util.Objects.hash(queueTitle, player.currentMediaItemIndex, player.shuffleModeEnabled, player.repeatMode, player.playWhenReady, playerVolume.value)
+        for (i in 0 until player.mediaItemCount) key = 31 * key + player.getMediaItemAt(i).mediaId.hashCode()
+        automixItems.value.forEach { key = 31 * key + it.mediaId.hashCode() }
+        return key
+    }
+
+    private fun saveQueueToDisk(onlyChanges: Boolean = false) {
         if (player.mediaItemCount == 0) {
             Timber.tag(TAG).d("Skipping queue save - no media items")
             return
         }
+        val key = queueKey()
+        val position = player.currentPosition
+        val queueChanged = key != savedQueueKey
+        if (onlyChanges && !queueChanged && kotlin.math.abs(position - savedPosition) < PositionSaveStepMs) return
+        // a timed save with only the place moved writes the small player state, not the whole queue again
+        val writeQueue = !onlyChanges || queueChanged
+        savedQueueKey = key
+        savedPosition = position
 
         try {
 
-            val persistQueue = currentQueue.toPersistQueue(
+            // the whole queue is only gathered when it's going to be written
+            val persistQueue = if (writeQueue) currentQueue.toPersistQueue(
                 title = queueTitle,
                 items = player.mediaItems.mapNotNull { it.metadata },
                 mediaItemIndex = player.currentMediaItemIndex,
                 position = player.currentPosition
-            )
+            ) else null
 
-            val persistAutomix =
+            val persistAutomix = if (writeQueue) {
                 PersistQueue(
                     title = "automix",
                     items = automixItems.value.mapNotNull { it.metadata },
                     mediaItemIndex = 0,
                     position = 0,
                 )
+            } else null
 
             val persistPlayerState = PersistPlayerState(
                 playWhenReady = player.playWhenReady,
@@ -4023,7 +4215,7 @@ class MusicService :
             )
 
             scope.launch(Dispatchers.IO) {
-                runCatching {
+                if (persistQueue != null) runCatching {
                     filesDir.resolve(PERSISTENT_QUEUE_FILE).outputStream().use { fos ->
                         ObjectOutputStream(fos).use { oos ->
                             oos.writeObject(persistQueue)
@@ -4035,7 +4227,7 @@ class MusicService :
                     reportException(it)
                 }
 
-                runCatching {
+                if (persistAutomix != null) runCatching {
                     filesDir.resolve(PERSISTENT_AUTOMIX_FILE).outputStream().use { fos ->
                         ObjectOutputStream(fos).use { oos ->
                             oos.writeObject(persistAutomix)
@@ -4132,7 +4324,9 @@ class MusicService :
         return super.onStartCommand(intent, flags, startId)
     }
 
-    private fun updateWidgetUI(isPlaying: Boolean) {
+    private val powerManager by lazy { getSystemService(android.os.PowerManager::class.java) }
+
+    private fun updateWidgetUI(isPlaying: Boolean, progressOnly: Boolean = false) {
         scope.launch {
             try {
                 val songData = currentSong.value
@@ -4148,7 +4342,8 @@ class MusicService :
                     isPlaying = isPlaying,
                     isLiked = isLiked,
                     duration = if (player.duration != C.TIME_UNSET) player.duration else 0,
-                    currentPosition = player.currentPosition
+                    currentPosition = player.currentPosition,
+                    progressOnly = progressOnly,
                 )
             } catch (e: Exception) {
 
@@ -4162,8 +4357,9 @@ class MusicService :
         widgetUpdateJob?.cancel()
         widgetUpdateJob = scope.launch {
             while (isActive) {
-                if (player.isPlaying) {
-                    updateWidgetUI(true)
+                // nobody sees a widget with the screen off, and redrawing it every second there was all cost
+                if (player.isPlaying && powerManager?.isInteractive != false) {
+                    updateWidgetUI(true, progressOnly = true)
                 }
                 // the widget's progress bar moves in whole seconds anyway; more often only cost
                 // frames in the app
@@ -4327,7 +4523,7 @@ class MusicService :
     private fun copyPlayOrder(from: Player, to: ExoPlayer) {
         val count = to.mediaItemCount
         if (count > 0) {
-            to.setShuffleOrder(UnshuffledShuffleOrder(count))
+            to.setShuffleOrder(androidx.media3.exoplayer.source.ShuffleOrder.UnshuffledShuffleOrder(count))
         }
     }
 
@@ -4912,6 +5108,9 @@ class MusicService :
 
 /** How often a placed home screen widget's progress is redrawn while playing. */
 private const val WidgetProgressIntervalMs = 1_000L
+
+// a timed save skips a place in the song that moved less than this; coming back a second or two early doesn't matter
+private const val PositionSaveStepMs = 2_000L
 
 // the passthrough switch, its mode and whether anything shapes the sound, compared as one so audio pass hears each change once
 private data class PassSettings(val enabled: Boolean, val mode: AudioPassMode, val blocked: Boolean, val fixedVolume: Boolean)

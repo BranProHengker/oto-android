@@ -150,7 +150,6 @@ constructor(
         }
 
         if (!isNetworkAvailable) {
-            // not "not found": nothing was asked, and saying so would be saved as the answer
             return LyricsWithProvider(LYRICS_NOT_FOUND, NoConnectionProvider)
         }
 

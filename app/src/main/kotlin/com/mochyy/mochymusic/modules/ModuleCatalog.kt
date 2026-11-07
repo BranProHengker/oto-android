@@ -20,6 +20,8 @@ data class CatalogModule(
     val url: String,
     val adds: Set<ModuleFeature>,
     val author: String?,
+    /** a link to its icon, shown on its row before it's added */
+    val icon: String? = null,
 )
 
 @Singleton
@@ -47,6 +49,7 @@ class ModuleCatalog @Inject constructor() {
                     url = url,
                     adds = adds,
                     author = item.optString("author").takeIf { it.isNotBlank() },
+                    icon = item.optString("icon").takeIf { it.startsWith("https://") },
                 )
             }
         }
@@ -56,10 +59,11 @@ class ModuleCatalog @Inject constructor() {
         "audio", "source", "songs" -> ModuleFeature.AudioSource
         "lyrics" -> ModuleFeature.Lyrics
         "look", "theme" -> ModuleFeature.Look
+        "metadata", "info" -> ModuleFeature.Metadata
         else -> null
     }
 
     private companion object {
-        const val CatalogUrl = "https://raw.githubusercontent.com/BranProHengker/oto-android/main/modules/catalog.json"
+        const val CatalogUrl = "https://raw.githubusercontent.com/realidkroo/Mochy-Music/main/modules/catalog.json"
     }
 }

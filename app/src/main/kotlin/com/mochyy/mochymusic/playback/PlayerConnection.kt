@@ -463,8 +463,8 @@ class PlayerConnection(
     }
 
     /** Moves a song to play straight after [afterUid]. */
-    fun moveQueueItem(uid: Int, afterUid: Int) {
-        val from = mediaIndexOf(uid)
+    fun moveQueueItem(fromUid: Int, afterUid: Int) {
+        val from = mediaIndexOf(fromUid)
         val after = mediaIndexOf(afterUid)
         if (from == C.INDEX_UNSET || after == C.INDEX_UNSET || from == after) return
         try {

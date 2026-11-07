@@ -49,6 +49,7 @@ import com.mochyy.mochymusic.lyrics.LyricsProviderRegistry
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.ui.utils.safeOpenUri
 import com.mochyy.mochymusic.viewmodels.LyricsMenuViewModel
+import com.mochyy.mochymusic.ui.component.RemoteFocus
 
 private val LabelColor = Color.White.copy(alpha = 0.55f)
 private val ValueColor = Color.White.copy(alpha = 0.38f)
@@ -99,10 +100,9 @@ internal fun LyricsSourceFooter(
     }
 }
 
-/** The name to show for a saved provider, including the non-online sources. */
+/** The name to show for a saved provider, including the two that aren't online sources. */
 private fun sourceName(provider: String): String = when (provider) {
     EmbeddedLyrics.Provider -> "Song file"
-    com.mochyy.mochymusic.lyrics.SidecarLyrics.Provider -> "Local .lrc"
     LyricsMenuViewModel.USER_EDITED -> "Your edit"
     else -> LyricsProviderRegistry.getDisplayName(provider)
 }
@@ -175,7 +175,7 @@ private fun FooterButton(
             }
             .clip(shape)
             .background(background)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .clickable(interactionSource = interaction, indication = RemoteFocus, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         content()

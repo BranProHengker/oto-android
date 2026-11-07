@@ -99,6 +99,8 @@ private fun FindModulesContent(viewModel: ModulesViewModel, onAdded: (String) ->
             LinkCheck.NotAZip -> problem = context.getString(R.string.modules_file_not_a_zip)
             LinkCheck.NeedsUrl -> problem = context.getString(R.string.modules_file_needs_url)
             LinkCheck.NotSigned -> problem = context.getString(R.string.modules_file_not_signed)
+            LinkCheck.NoRelease -> problem = context.getString(R.string.modules_github_no_release)
+            LinkCheck.NoModuleInRelease -> problem = context.getString(R.string.modules_github_no_module)
         }
     }
 
@@ -237,7 +239,7 @@ private fun CatalogRow(item: CatalogModule, enabled: Boolean, onClick: () -> Uni
             .clickable(enabled = enabled, onClick = onClick)
             .padding(14.dp),
     ) {
-        ModuleLogo(item.url, item.name, size = 40)
+        ModuleLogo(item.url, item.name, size = 40, art = item.icon)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(item.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)

@@ -53,7 +53,9 @@ import com.mochyy.mochymusic.core.updater.InstagramUrl
 import com.mochyy.mochymusic.core.updater.ThreadsUrl
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
 import com.mochyy.mochymusic.ui.component.pressBounce
+import com.mochyy.mochymusic.ui.screens.donate.showDonateSheet
 import com.mochyy.mochymusic.ui.utils.SoftBlurTransformation
+import com.mochyy.mochymusic.ui.component.RemoteFocus
 
 internal data class DevSocial(val label: String, val url: String)
 
@@ -138,13 +140,21 @@ internal fun DevProfilePage(
                 Rule()
             }
 
-            if (person.socials.isNotEmpty()) {
+            if (person.takesDonations || person.socials.isNotEmpty()) {
                 Column(Modifier.rise(2).padding(top = 22.dp)) {
-                    val context = LocalContext.current
-                    SectionTitle("Socials")
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        person.socials.forEach { social ->
-                            DevLinkRow(social.label) { context.openDevUrl(social.url) }
+                    if (person.takesDonations) {
+                        val popup = LocalZoomOutOverlayState.current
+                        SectionTitle("Donate")
+                        DevLinkRow("Donate me!") { popup.showDonateSheet() }
+                        Spacer(Modifier.height(14.dp))
+                    }
+                    if (person.socials.isNotEmpty()) {
+                        val context = LocalContext.current
+                        SectionTitle("Socials")
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            person.socials.forEach { social ->
+                                DevLinkRow(social.label) { context.openDevUrl(social.url) }
+                            }
                         }
                     }
                     Rule(Modifier.padding(top = 22.dp))
@@ -236,7 +246,7 @@ private fun DevLinkRow(label: String, onClick: () -> Unit) {
             .height(42.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(DevCard)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .clickable(interactionSource = interaction, indication = RemoteFocus, onClick = onClick)
             .padding(horizontal = 18.dp),
     ) {
         Text(label, style = devText(15f, FontWeight.SemiBold, DevLinkText, -0.4f), maxLines = 1)
