@@ -143,6 +143,7 @@ import com.mochyy.mochymusic.constants.ScrobbleMinSongDurationKey
 import com.mochyy.mochymusic.constants.ShowLyricsKey
 import com.mochyy.mochymusic.constants.ShuffleModeKey
 import com.mochyy.mochymusic.constants.ShufflePlaylistFirstKey
+import com.mochyy.mochymusic.constants.ShuffleStateKey
 import com.mochyy.mochymusic.constants.PreventDuplicateTracksInQueueKey
 import com.mochyy.mochymusic.constants.SimilarContent
 import com.mochyy.mochymusic.constants.SkipSilenceInstantKey
