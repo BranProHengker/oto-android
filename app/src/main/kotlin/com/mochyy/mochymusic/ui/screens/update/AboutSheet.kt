@@ -53,27 +53,11 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.mochyy.mochymusic.BuildConfig
 import com.mochyy.mochymusic.R
-import com.mochyy.mochymusic.core.updater.GithubOwner
-import com.mochyy.mochymusic.core.updater.GithubRepo
 import com.mochyy.mochymusic.core.updater.GithubRepoUrl
 import com.mochyy.mochymusic.ui.component.PopupSheetState
 import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.player.menu.MenuRowSurface
-import com.mochyy.mochymusic.ui.screens.donate.showSupportSheet
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import java.net.HttpURLConnection
-import java.net.URL
 import com.mochyy.mochymusic.ui.component.RemoteFocus
-
-@Immutable
-private data class LeadDevEntry(
-    val name: String,
-    val githubUser: String,
-    val devSpaceIndex: Int,
-    @DrawableRes val fallbackAvatar: Int,
-)
 
 @Immutable
 private data class CreditEntry(
@@ -89,28 +73,6 @@ private data class LicenseEntry(
     val title: String,
     val subtitle: String,
     val url: String,
-)
-
-@Immutable
-private data class ContributorEntry(
-    val login: String,
-    val avatarUrl: String,
-    val profileUrl: String,
-)
-
-private val LeadDevs = listOf(
-    LeadDevEntry(
-        name = "Roo",
-        githubUser = "realidkroo",
-        devSpaceIndex = 0,
-        fallbackAvatar = R.drawable.frame_51_3,
-    ),
-    LeadDevEntry(
-        name = "key",
-        githubUser = "realkeichi",
-        devSpaceIndex = 1,
-        fallbackAvatar = R.drawable.dev_keycii,
-    ),
 )
 
 private val BaseCredits = listOf(
@@ -230,70 +192,9 @@ private val Licenses = listOf(
     ),
 )
 
-//  this guy promote the app
-private val ExtraContributors = listOf(
-    ContributorEntry(
-        login = "swtstvn",
-        avatarUrl = githubAvatarUrl("swtstvn"),
-        profileUrl = "https://github.com/swtstvn",
-    ),
-)
-
-private val FallbackContributors = listOf(
-    ContributorEntry(
-        login = "realidkroo",
-        avatarUrl = githubAvatarUrl("realidkroo"),
-        profileUrl = "https://github.com/realidkroo",
-    ),
-    ContributorEntry(
-        login = "realkeichi",
-        avatarUrl = githubAvatarUrl("realkeichi"),
-        profileUrl = "https://github.com/realkeichi",
-    ),
-) + ExtraContributors
-
-// kept in memory for the session so reopening the about sheet never hits github twice
-@Volatile
-private var cachedContributors: List<ContributorEntry>? = null
-
 // github redirects username.png straight to the user's current avatar without counting against the api rate limit
 private fun githubAvatarUrl(githubUser: String): String =
     "https://github.com/$githubUser.png?size=160"
-
-private suspend fun fetchContributors(): List<ContributorEntry> {
-    cachedContributors?.let { return it }
-    return withContext(Dispatchers.IO) {
-        runCatching {
-            val url = URL("https://api.github.com/repos/$GithubOwner/$GithubRepo/contributors?per_page=30")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 8_000
-                readTimeout = 8_000
-                setRequestProperty("Accept", "application/vnd.github+json")
-                setRequestProperty("User-Agent", "mochy-android")
-            }
-            try {
-                val arr = JSONArray(conn.inputStream.bufferedReader().use { it.readText() })
-                buildList {
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        val type = obj.optString("type", "User")
-                        if (type.equals("Bot", ignoreCase = true)) continue
-                        val login = obj.optString("login").takeIf { it.isNotBlank() } ?: continue
-                        if (login.endsWith("[bot]", ignoreCase = true)) continue
-                        val avatar = obj.optString("avatar_url").ifBlank { githubAvatarUrl(login) }
-                        val html = obj.optString("html_url").ifBlank { "https://github.com/$login" }
-                        add(ContributorEntry(login = login, avatarUrl = avatar, profileUrl = html))
-                    }
-                }.ifEmpty { FallbackContributors }
-                    .plus(ExtraContributors)
-                    .distinctBy { it.login.lowercase() }
-                    .also { cachedContributors = it }
-            } finally {
-                conn.disconnect()
-            }
-        }.getOrDefault(FallbackContributors)
-    }
-}
 
 fun PopupSheetState.showAboutSheet(onOpenDevSpace: (Int) -> Unit = {}) {
     val popup = this
@@ -319,22 +220,17 @@ private fun PopupSheetState.showLicenseSheet() {
 @Composable
 private fun ColumnScope.AboutSheetContent(
     popup: PopupSheetState,
-    onOpenDevSpace: (Int) -> Unit,
+    onOpenDevSpace: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
     val installed = shortVersion(BuildConfig.VERSION_NAME)
     val scrollState = rememberScrollState()
     val ringScrollRangePx = with(LocalDensity.current) { 180.dp.toPx() }
-    var contributors by remember { mutableStateOf(cachedContributors ?: FallbackContributors) }
-
-    LaunchedEffect(Unit) {
-        contributors = fetchContributors()
-    }
 
     Box(Modifier.fillMaxWidth()) {
         // zero-size layout places the spinning ring behind the top icon without pushing the column down
         VersionRing(
-            text = "MOCHY $installed",
+            text = "OTO $installed",
             scrollProgress = { scrollState.value / ringScrollRangePx },
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -417,35 +313,9 @@ private fun ColumnScope.AboutSheetContent(
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AboutPillRow(
-                    text = "Support me please :3 \u2192",
-                    onClick = { popup.showSupportSheet() },
-                )
-                AboutPillRow(
                     text = "Oto on GitHub \u2192",
                     onClick = { context.openUrl(GithubRepoUrl) },
                 )
-            }
-
-            Spacer(Modifier.height(18.dp))
-            SectionHeader("meet the lead dev")
-            Spacer(Modifier.height(8.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MenuRowSurface)
-                    .padding(vertical = 6.dp),
-            ) {
-                LeadDevs.forEach { dev ->
-                    PersonRow(
-                        name = dev.name,
-                        subtitle = null,
-                        avatarUrl = githubAvatarUrl(dev.githubUser),
-                        fallbackRes = dev.fallbackAvatar,
-                        showArrow = true,
-                        onClick = { onOpenDevSpace(dev.devSpaceIndex) },
-                    )
-                }
             }
 
             Spacer(Modifier.height(18.dp))
@@ -482,27 +352,6 @@ private fun ColumnScope.AboutSheetContent(
                 text = "More about license",
                 onClick = { popup.showLicenseSheet() },
             )
-
-            Spacer(Modifier.height(18.dp))
-            SectionHeader("Cool contributors")
-            Spacer(Modifier.height(8.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MenuRowSurface)
-                    .padding(vertical = 6.dp),
-            ) {
-                contributors.forEach { contributor ->
-                    PersonRow(
-                        name = contributor.login,
-                        subtitle = null,
-                        avatarUrl = contributor.avatarUrl,
-                        showArrow = false,
-                        onClick = { context.openUrl(contributor.profileUrl) },
-                    )
-                }
-            }
             Spacer(Modifier.height(8.dp))
         }
     }

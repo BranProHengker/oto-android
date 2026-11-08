@@ -57,7 +57,7 @@ jobs:
           ./gradlew :app:assembleArm64FossRelease --no-configuration-cache --console=plain
           ./gradlew :app:assembleUniversalFossRelease --no-configuration-cache --console=plain
 
-      - name: Prepare APKs
+      - name: Prepare Release Assets
         run: |
           mkdir -p release-apks
           TAG="${{ github.ref_name }}"
@@ -66,6 +66,25 @@ jobs:
           fi
           cp app/build/outputs/apk/arm64Foss/release/*-release.apk release-apks/oto-${TAG}-arm64-v8a.apk
           cp app/build/outputs/apk/universalFoss/release/*-release.apk release-apks/oto-${TAG}-universal.apk
+          if [ -f fastlane/metadata/android/en-US/changelogs/default.txt ]; then
+            cp fastlane/metadata/android/en-US/changelogs/default.txt release-apks/release_notes.md
+          fi
+          cat << 'EOF' > release-apks/changelog.json
+          {
+            "description": "Oto Music release",
+            "changelog": [
+              {
+                "title": "Features & Improvements",
+                "items": [
+                  "Synced upstream Mochy engine (MicroSD support, Download exporter, Flagship landscape, FFmpeg fallback decoder, Skin shaders).",
+                  "Preserved all custom Oto features (Sidecar LRC, Smart 3-State Shuffle).",
+                  "Completely removed all donation popups, nag screens, and developer cards.",
+                  "Replaced all Mochy branding across UI and in-app updater with pure Oto."
+                ]
+              }
+            ]
+          }
+          EOF
           ls -la release-apks/
 
       - name: Create GitHub Release
@@ -78,10 +97,16 @@ jobs:
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG exists, uploading assets..."
-            gh release upload "$TAG" release-apks/*.apk --clobber
+            gh release upload "$TAG" release-apks/*.apk release-apks/changelog.json --clobber
           else
             echo "Creating release $TAG..."
-            gh release create "$TAG" release-apks/*.apk \
-              --title "Oto $TAG" \
-              --generate-notes
+            if [ -f release-apks/release_notes.md ]; then
+              gh release create "$TAG" release-apks/*.apk release-apks/changelog.json \
+                --title "Oto $TAG" \
+                --notes-file release-apks/release_notes.md
+            else
+              gh release create "$TAG" release-apks/*.apk release-apks/changelog.json \
+                --title "Oto $TAG" \
+                --generate-notes
+            fi
           fi

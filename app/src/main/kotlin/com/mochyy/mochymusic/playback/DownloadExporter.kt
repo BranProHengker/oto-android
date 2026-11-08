@@ -33,7 +33,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 // the folder everything goes into, wherever the user points the export
-private const val RootFolder = "mochy-preserve"
+private const val RootFolder = "oto-preserve"
 
 private const val CoverPx = 1200
 

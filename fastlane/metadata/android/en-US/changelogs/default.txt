@@ -1,0 +1,14 @@
+### What's New in Oto:
+- **Zero Ads & Zero Nagging**: Completely purged all upstream Mochy donation popups, nag dialogs, support sheets, and donation buttons.
+- **Clean Profile**: Removed developer showcase cards, contributor sections, and third-party promo links.
+- **Engine Improvements (Synced Upstream)**:
+  - MicroSD Card support for offline downloads and local library indexing.
+  - Download Exporter to export downloaded tracks to local storage.
+  - Flagship Landscape mode with custom dual-pane tablet/phone layouts.
+  - Media3 FFmpeg fallback audio decoder.
+  - Skin shaders and enhanced visual customisation.
+- **Oto Signature Features Retained**:
+  - Embedded & Sidecar LRC lyric support.
+  - Smart 3-State Shuffle (Off / Random / Balanced Smart Shuffle).
+  - Pure, lightweight ad-free music player experience.
+- **Updater & Branding**: In-app updater and version sheets aligned strictly with Oto releases.

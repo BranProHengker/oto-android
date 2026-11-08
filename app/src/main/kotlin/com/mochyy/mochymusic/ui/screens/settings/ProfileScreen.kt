@@ -166,10 +166,6 @@ import com.mochyy.mochymusic.ui.screens.recap.recapBarcodeCaption
 import com.mochyy.mochymusic.ui.screens.recap.recapBarcodePayload
 import com.mochyy.mochymusic.ui.screens.recap.recapDots
 import com.mochyy.mochymusic.ui.screens.recap.rememberRecapTime
-import com.mochyy.mochymusic.core.updater.DiscordUrl
-import com.mochyy.mochymusic.ui.screens.settings.devspace.DevAvatar
-import com.mochyy.mochymusic.ui.screens.settings.devspace.DevPeople
-import com.mochyy.mochymusic.ui.screens.settings.devspace.openDevUrl
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.IdCardAspect
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProfileIdCard
 import com.mochyy.mochymusic.ui.screens.update.UpdateHeadline
@@ -299,7 +295,7 @@ fun ProfileScreen(navController: NavController) {
     val time = rememberRecapTime(running = !storyCovering, held = { profile.holdsPage || obscured.value })
     val measurer = rememberTextMeasurer()
     val giant = remember {
-        GiantTextState("MOCHY", filledRows = 0..0).apply { color = { lerp(HeaderText, StoryTextDark, expand) } }
+        GiantTextState("OTO", filledRows = 0..0).apply { color = { lerp(HeaderText, StoryTextDark, expand) } }
     }
 
     // whether there's a recap waiting, so the pull hint can say so now and then
@@ -714,26 +710,18 @@ fun ProfileScreen(navController: NavController) {
                         Spacer(Modifier.height(24.dp))
                         ListeningTimeCard(totalListeningMs, onViewStats = { navController.navigate("stats") })
                         Spacer(Modifier.height(16.dp))
-                        val openDevSpace: (Int) -> Unit = { personIndex ->
-                            zoomOutState.dismissAll()
-                            navController.navigate("developer_space?person=$personIndex")
-                        }
                         val hasUpdate = updateState is com.mochyy.mochymusic.core.updater.UpdateState.Available
                         VersionCard(
                             updateHeadline = if (hasUpdate) UpdateHeadline else null,
-                            onCardClick = { zoomOutState.showUpdateSheet(updateState, onOpenDevSpace = openDevSpace) },
+                            onCardClick = { zoomOutState.showUpdateSheet(updateState) },
                             onPillClick = {
                                 if (hasUpdate) {
-                                    zoomOutState.showUpdateSheet(updateState, onOpenDevSpace = openDevSpace)
+                                    zoomOutState.showUpdateSheet(updateState)
                                 } else {
-                                    zoomOutState.showAboutSheet(onOpenDevSpace = openDevSpace)
+                                    zoomOutState.showAboutSheet()
                                 }
                             },
                         )
-                        Spacer(Modifier.height(16.dp))
-                        DeveloperCard(onClick = { navController.navigate("developer_space") })
-                        Spacer(Modifier.height(16.dp))
-                        DiscordCard(onClick = { context.openDevUrl(DiscordUrl) })
                         Spacer(Modifier.height(28.dp))
                         Text("Settings", style = PageTitle.copy(fontSize = 15.sp), modifier = Modifier.padding(start = 2.dp, bottom = 10.dp))
                         OpenSettingsRow(onClick = { navController.navigate("mochy_settings") })
@@ -1066,80 +1054,6 @@ private fun VersionCapsule(update: Boolean, onAbout: () -> Unit) {
                 softWrap = false,
             )
         }
-    }
-}
-
-@Composable
-private fun DeveloperCard(onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val spread by animateFloatAsState(
-        targetValue = if (pressed) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.55f, stiffness = 420f),
-        label = "devCardSpread",
-    )
-    val face = 30.dp
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(PageCard)
-            .clickable(interactionSource = interaction, indication = RemoteFocus, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        // room for every face at rest, 40% of a face apart; pressed they spill to the right
-        Box(Modifier.size(width = face + face * 0.4f * (DevPeople.size - 1), height = face)) {
-            DevPeople.forEachIndexed { i, person ->
-                DevAvatar(
-                    person,
-                    Modifier
-                        .size(face)
-                        .graphicsLayer { translationX = i * face.toPx() * (0.4f + 0.35f * spread) }
-                        .border(1.5.dp, PageCard, CircleShape),
-                )
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            "meet da dev and contributors :3",
-            style = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = (-0.6).sp, color = Color(0xFF9A9A9A)),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun DiscordCard(onClick: () -> Unit) {
-    val face = 30.dp
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(PageCard)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Image(
-            painter = painterResource(R.drawable.mochy_discord),
-            contentDescription = "Discord",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(face)
-                .clip(CircleShape)
-                .background(Color.White),
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            "Join mochy’s discord server!",
-            style = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = (-0.6).sp, color = Color.White),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
     }
 }
 

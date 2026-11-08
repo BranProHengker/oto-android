@@ -53,7 +53,6 @@ import com.mochyy.mochymusic.core.updater.InstagramUrl
 import com.mochyy.mochymusic.core.updater.ThreadsUrl
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
 import com.mochyy.mochymusic.ui.component.pressBounce
-import com.mochyy.mochymusic.ui.screens.donate.showDonateSheet
 import com.mochyy.mochymusic.ui.utils.SoftBlurTransformation
 import com.mochyy.mochymusic.ui.component.RemoteFocus
 
@@ -63,8 +62,6 @@ internal data class DevPerson(
     val name: String,
     val bio: String,
     @DrawableRes val avatar: Int,
-    /** the main dev takes donations, the donate section only shows for them */
-    val takesDonations: Boolean = false,
     val socials: List<DevSocial> = emptyList(),
 )
 
@@ -140,21 +137,13 @@ internal fun DevProfilePage(
                 Rule()
             }
 
-            if (person.takesDonations || person.socials.isNotEmpty()) {
+            if (person.socials.isNotEmpty()) {
                 Column(Modifier.rise(2).padding(top = 22.dp)) {
-                    if (person.takesDonations) {
-                        val popup = LocalZoomOutOverlayState.current
-                        SectionTitle("Donate")
-                        DevLinkRow("Donate me!") { popup.showDonateSheet() }
-                        Spacer(Modifier.height(14.dp))
-                    }
-                    if (person.socials.isNotEmpty()) {
-                        val context = LocalContext.current
-                        SectionTitle("Socials")
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            person.socials.forEach { social ->
-                                DevLinkRow(social.label) { context.openDevUrl(social.url) }
-                            }
+                    val context = LocalContext.current
+                    SectionTitle("Socials")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        person.socials.forEach { social ->
+                            DevLinkRow(social.label) { context.openDevUrl(social.url) }
                         }
                     }
                     Rule(Modifier.padding(top = 22.dp))

@@ -88,7 +88,6 @@ import com.mochyy.mochymusic.ui.component.PopupSheetState
 import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.player.menu.MenuRowSurface
 import com.mochyy.mochymusic.ui.player.menu.MenuSurface
-import com.mochyy.mochymusic.ui.screens.donate.showSupportSheet
 import kotlinx.coroutines.launch
 import com.mochyy.mochymusic.ui.component.RemoteFocus
 
@@ -187,7 +186,7 @@ private fun ColumnScope.UpdateSheetContent(
     Box(Modifier.fillMaxWidth()) {
         // centred just inside the sheet's top-right corner so its edge cuts the ring off, no size of its own so it never pushes content around
         VersionRing(
-            text = "MOCHY $installed",
+            text = "OTO $installed",
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .layout { measurable, constraints ->
@@ -269,12 +268,7 @@ private fun ColumnScope.UpdateSheetContent(
                 ActionRow(
                     icon = R.drawable.info,
                     label = "About app",
-                    onClick = { popup.showAboutSheet(onOpenDevSpace = onOpenDevSpace) },
-                )
-                ActionRow(
-                    icon = R.drawable.favorite,
-                    label = "Help us!",
-                    onClick = { popup.showSupportSheet() },
+                    onClick = { popup.showAboutSheet() },
                 )
             }
             Spacer(Modifier.height(6.dp))

@@ -483,7 +483,7 @@ private fun VolumeCard(viewModel: AudioLabViewModel) {
                 LabSlider("Volume limit", pct(volume.limit), volume.limit,
                     { v -> viewModel.updateVolume { it.copy(limit = (v * 100).roundToInt() / 100f) } }, 0.2f..1f)
                 Text(
-                    "Shapes Mochy's own volume (the player's slider, fades and ducking). The limit caps how loud the app ever plays.",
+                    "Shapes Oto's own volume (the player's slider, fades and ducking). The limit caps how loud the app ever plays.",
                     fontFamily = InterFontFamily, fontSize = 12.sp, lineHeight = 16.sp, color = LabColors.Secondary,
                     modifier = Modifier.padding(top = 4.dp),
                 )

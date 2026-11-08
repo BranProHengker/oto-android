@@ -929,12 +929,6 @@ class MainActivity : ComponentActivity() {
                     ) {
                     com.mochyy.mochymusic.ui.screens.update.UpdateNotificationOpener(
                         requests = openUpdateRequests,
-                        onOpenDevSpace = { personIndex ->
-                            navController.navigate("developer_space?person=$personIndex")
-                        },
-                    )
-                    com.mochyy.mochymusic.ui.screens.donate.DonatePromptScheduler(
-                        enabled = setupCompleted && onboardedHere && !forceShowSetup,
                     )
                         SetupWizardContainer(
                             isVisible = !setupCompleted || !onboardedHere || forceShowSetup,
