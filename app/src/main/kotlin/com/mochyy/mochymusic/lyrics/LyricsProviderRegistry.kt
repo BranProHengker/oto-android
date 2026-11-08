@@ -75,6 +75,8 @@ object LyricsProviderRegistry {
     }
 
     fun getDisplayName(name: String): String = when (name) {
+        "LocalLrc"        -> "Local .lrc"
+        "Embedded"        -> "Song file"
         "YouLyPlus"       -> "YouLyPlus"
         "Paxsenix"        -> "PaxSenix"
         "BetterLyrics"    -> "Apple Music"

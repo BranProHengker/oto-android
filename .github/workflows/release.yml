@@ -76,6 +76,7 @@ jobs:
               {
                 "title": "Features & Improvements",
                 "items": [
+                  "Local .lrc File Picker: pick custom .lrc files from storage directly in the Switch Lyrics sheet.",
                   "Clean Modules Screen: removed Mochy mascot banner and third-party promo.",
                   "Replaced all leftover Mochy mentions in Apple Music module and bridge.",
                   "Purged legacy mascot and promo drawables.",

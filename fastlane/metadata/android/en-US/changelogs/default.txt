@@ -1,4 +1,5 @@
 ### What's New in Oto v1.0.6:
+- **Local .lrc File Picker**: Added file picker directly in the "Switch Lyrics" sheet to select custom `.lrc` files from device storage, plus one-tap switching for local sidecar `.lrc` files and embedded audio tags.
 - **Clean Modules Screen**: Removed Mochy anime mascot banner and third-party promo cards from the Modules screen.
 - **Module Branding**: Replaced all leftover Mochy mentions across module descriptions (Apple Music, Bridge, Catalog) with pure Oto.
 - **Assets Cleanup**: Completely purged all legacy Mochy mascot and promo image assets.

@@ -151,7 +151,7 @@ object SidecarLyrics {
         file.inputStream().use { readLrcStream(it) }
     }.getOrNull()
 
-    private fun readFromUri(context: Context, uri: Uri): String? = runCatching {
+    fun readFromUri(context: Context, uri: Uri): String? = runCatching {
         context.contentResolver.openInputStream(uri)?.use { readLrcStream(it) }
     }.getOrNull()
 
