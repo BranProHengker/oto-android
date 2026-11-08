@@ -70,7 +70,6 @@ internal val DevPeople = listOf(
         name = "idkroo",
         bio = "ui ux guy here uhh idk what to write here, pls star the repo",
         avatar = R.drawable.frame_51_3,
-        takesDonations = true,
         socials = listOf(
             DevSocial("Instagram", InstagramUrl),
             DevSocial("Discord", DiscordUrl),
