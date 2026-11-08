@@ -1,14 +1,6 @@
-### What's New in Oto:
-- **Zero Ads & Zero Nagging**: Completely purged all upstream Mochy donation popups, nag dialogs, support sheets, and donation buttons.
-- **Clean Profile**: Removed developer showcase cards, contributor sections, and third-party promo links.
-- **Engine Improvements (Synced Upstream)**:
-  - MicroSD Card support for offline downloads and local library indexing.
-  - Download Exporter to export downloaded tracks to local storage.
-  - Flagship Landscape mode with custom dual-pane tablet/phone layouts.
-  - Media3 FFmpeg fallback audio decoder.
-  - Skin shaders and enhanced visual customisation.
-- **Oto Signature Features Retained**:
-  - Embedded & Sidecar LRC lyric support.
-  - Smart 3-State Shuffle (Off / Random / Balanced Smart Shuffle).
-  - Pure, lightweight ad-free music player experience.
-- **Updater & Branding**: In-app updater and version sheets aligned strictly with Oto releases.
+### What's New in Oto v1.0.6:
+- **Clean Modules Screen**: Removed Mochy anime mascot banner and third-party promo cards from the Modules screen.
+- **Module Branding**: Replaced all leftover Mochy mentions across module descriptions (Apple Music, Bridge, Catalog) with pure Oto.
+- **Assets Cleanup**: Completely purged all legacy Mochy mascot and promo image assets.
+- **Provider User-Agents**: Aligned provider and scrobbler network identification with Oto.
+- **Localization Polish**: Sanitized remaining translation strings across all supported languages.

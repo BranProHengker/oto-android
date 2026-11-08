@@ -447,7 +447,7 @@
     <string name="wrapped_ready_title">YOUR WRAPPED IS READY!</string>
     <string name="wrapped_ready_subtitle">Time to see what you loved this year.</string>
     <string name="wrapped_thank_you">Thank you for listening</string>
-    <string name="wrapped_special_thanks">Special thanks to mochydh for creating Oto</string>
+    <string name="wrapped_special_thanks">Special thanks to Oto contributors</string>
     <string name="wrapped_close">Close wrapped</string>
     <string name="wrapped_playlist_title">Your %s Wrapped</string>
     <string name="wrapped_create_playlist">Create playlist</string>
@@ -472,7 +472,7 @@
     <string name="error_title">Error</string>
     <string name="error_eq_apply_failed">Failed to apply EQ profile: %1$s</string>
     <!-- mochyEqualizer Strings -->
-    <string name="mochy_equalizer">mochyEqualizer</string>
+    <string name="mochy_equalizer">OtoEqualizer</string>
     <string name="mochy_equalizer_desc">Pro-grade acoustic tuning &amp; effects</string>
     <string name="eq_simple">Simple</string>
     <string name="eq_advanced">Advanced</string>
@@ -497,7 +497,7 @@
     <string name="eq_preset_dirac_music">Dirac Music</string>
     <string name="eq_preset_dirac_movie">Dirac Movie</string>
     <string name="eq_preset_dirac_game">Dirac Game</string>
-    <string name="eq_enable_title">mochyEqualizer</string>
+    <string name="eq_enable_title">OtoEqualizer</string>
     <string name="eq_enable_summary">Toggle professional audio processing</string>
     <string name="eq_label_mochy">Oto Signature</string>
     <string name="eq_label_dolby">Dolby Atmos</string>

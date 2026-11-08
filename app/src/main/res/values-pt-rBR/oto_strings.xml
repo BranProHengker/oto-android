@@ -478,7 +478,7 @@
     <string name="error_title">Erro inesperado</string>
     <string name="error_eq_apply_failed">Falha ao aplicar o perfil de equalização: %1$s</string>
     <!-- mochyEqualizer Strings -->
-    <string name="mochy_equalizer">mochyEqualizer</string>
+    <string name="mochy_equalizer">OtoEqualizer</string>
     <string name="mochy_equalizer_desc">Pro-grade acoustic tuning &amp; effects</string>
     <string name="eq_simple">Simple</string>
     <string name="eq_advanced">Advanced</string>
@@ -503,7 +503,7 @@
     <string name="eq_preset_dirac_music">Dirac Music</string>
     <string name="eq_preset_dirac_movie">Dirac Movie</string>
     <string name="eq_preset_dirac_game">Dirac Game</string>
-    <string name="eq_enable_title">mochyEqualizer</string>
+    <string name="eq_enable_title">OtoEqualizer</string>
     <string name="eq_enable_summary">Toggle professional audio processing</string>
     <string name="eq_label_mochy">Oto Signature</string>
     <string name="eq_label_dolby">Dolby Atmos</string>

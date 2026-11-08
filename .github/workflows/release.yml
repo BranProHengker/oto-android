@@ -76,10 +76,10 @@ jobs:
               {
                 "title": "Features & Improvements",
                 "items": [
-                  "Synced upstream Mochy engine (MicroSD support, Download exporter, Flagship landscape, FFmpeg fallback decoder, Skin shaders).",
-                  "Preserved all custom Oto features (Sidecar LRC, Smart 3-State Shuffle).",
-                  "Completely removed all donation popups, nag screens, and developer cards.",
-                  "Replaced all Mochy branding across UI and in-app updater with pure Oto."
+                  "Clean Modules Screen: removed Mochy mascot banner and third-party promo.",
+                  "Replaced all leftover Mochy mentions in Apple Music module and bridge.",
+                  "Purged legacy mascot and promo drawables.",
+                  "Aligned provider User-Agent headers and translation strings with Oto."
                 ]
               }
             ]
