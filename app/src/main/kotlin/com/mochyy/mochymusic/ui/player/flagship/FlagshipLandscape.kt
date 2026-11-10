@@ -4,6 +4,7 @@ import android.graphics.Shader
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,6 +33,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
@@ -85,6 +91,12 @@ private const val CoverAspect = 1.2f
 // the last part of the cover fades into its blurred copy behind, so it melts into the panel instead of ending in an edge
 private const val CoverFadeShare = 0.16f
 
+// a tv is watched from across the room: the cover melts away over much more of its width, and at the bottom too
+private const val TvCoverFadeShare = 0.45f
+private const val TvCoverFadeDownFrom = 0.62f
+// the tv's title sits this far in from the cover's left and bottom edges, like the rest of the tv app
+private val TvTitleInset = 48.dp
+
 // with the lyrics up, the bottom of the cover goes soft under the title and the seek bar, the blur growing toward the edge
 private const val LyricsBandShare = 0.46f
 private const val LyricsBandRadius = 30f
@@ -124,6 +136,17 @@ internal fun FlagshipLandscape(
     val connection = LocalPlayerConnection.current ?: return
     val track by connection.uiState.trackInfo.collectAsState()
     val carousel = LocalSongCarousel.current
+    // on a tv the remote does the playing; the player is the cover and its lyrics, no buttons and no queue
+    val onTv = com.mochyy.mochymusic.ui.utils.isTvLayout()
+    val fadeShare = if (onTv) TvCoverFadeShare else CoverFadeShare
+    // the tv's "flagship square": the whole cover, square and rounded, instead of one melting down the side
+    val squareCover by com.mochyy.mochymusic.utils.rememberPreference(com.mochyy.mochymusic.constants.TvFlagshipSquareKey, defaultValue = false)
+    // the tv's control bar takes over the title: the cover's own one glides down into it and fades
+    val handedToBar = androidx.compose.animation.core.animateFloatAsState(
+        if (onTv && com.mochyy.mochymusic.ui.player.TvPlayerRemote.controlsShown) 1f else 0f,
+        androidx.compose.animation.core.tween(420),
+        label = "handedToBar",
+    )
     val direction = LocalLayoutDirection.current
     val sides = WindowInsets.navigationBarsIgnoringVisibility.union(WindowInsets.displayCutout).asPaddingValues()
     val endInset = sides.calculateEndPadding(direction)
@@ -135,8 +158,8 @@ internal fun FlagshipLandscape(
     val lyricsMounted by remember(pages) {
         derivedStateOf { pages.lyricsProgress > 0.001f || pages.preparing == PlayerPage.LYRICS }
     }
-    val queueMounted by remember(pages) {
-        derivedStateOf { pages.queueProgress > 0.001f || pages.preparing == PlayerPage.QUEUE }
+    val queueMounted by remember(pages, onTv) {
+        derivedStateOf { !onTv && (pages.queueProgress > 0.001f || pages.preparing == PlayerPage.QUEUE) }
     }
     // the right panel's title and seek bar, until the lyrics have taken their place
     val panelInfoShown by remember(pages) { derivedStateOf { pages.lyricsProgress < 0.999f && pages.queueProgress < 0.999f } }
@@ -154,17 +177,17 @@ internal fun FlagshipLandscape(
                 .fillMaxSize()
                 .drawWithContent {
                     drawContent()
-                    val from = coverWidth.toPx() * (1f - CoverFadeShare)
+                    val from = coverWidth.toPx() * (1f - fadeShare)
+                    // one ramp across the whole width that holds the shade past the cover; a second flat rect on top doubled it into a hard line
                     drawRect(
                         Brush.horizontalGradient(
                             0f to Color.Transparent,
+                            0.5f to PanelShade.copy(alpha = PanelShade.alpha * 0.4f),
                             1f to PanelShade,
                             startX = from,
                             endX = coverWidth.toPx(),
                         ),
-                        topLeft = androidx.compose.ui.geometry.Offset(from, 0f),
                     )
-                    drawRect(PanelShade, topLeft = androidx.compose.ui.geometry.Offset(coverWidth.toPx(), 0f))
                 },
         )
 
@@ -173,7 +196,27 @@ internal fun FlagshipLandscape(
             thumbnailUrl = track.thumbnailUrl,
             interactive = interactive,
             lyricsProgress = lyricsProgress,
+            fadeShare = fadeShare,
+            fadeDownFrom = if (onTv && !squareCover) TvCoverFadeDownFrom else null,
+            square = onTv && squareCover,
+            band = !onTv,
         )
+        if (onTv) {
+            // a soft dark floor across the bottom, so the title always reads and the cover and lyrics sink into it
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .drawBehind {
+                        drawRect(
+                            Brush.verticalGradient(
+                                0.5f to Color.Transparent,
+                                0.75f to Color.Black.copy(alpha = 0.45f),
+                                1f to Color.Black.copy(alpha = 0.85f),
+                            ),
+                        )
+                    },
+            )
+        }
 
         // with the lyrics up: the title, the artist and the seek bar over the soft bottom of the cover
         if (lyricsMounted) {
@@ -181,18 +224,24 @@ internal fun FlagshipLandscape(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .width(coverWidth)
-                    .padding(start = CoverGutter, end = CoverGutter + ButtonSize * 2 + ButtonGap, bottom = bottomInset + 14.dp)
+                    // on a tv the title stands alone at the cover's foot, lined up with the tv's own margins
+                    .padding(
+                        start = if (onTv) TvTitleInset else CoverGutter,
+                        end = if (onTv) TvTitleInset else CoverGutter + ButtonSize * 2 + ButtonGap,
+                        bottom = bottomInset + if (onTv) TvTitleInset else 14.dp,
+                    )
                     .graphicsLayer {
                         val p = lyricsProgress()
-                        alpha = p
-                        translationY = (1f - p) * 24.dp.toPx()
+                        val handed = handedToBar.value
+                        alpha = p * (1f - handed)
+                        translationY = (1f - p) * 24.dp.toPx() + handed * 30.dp.toPx()
                     },
             ) {
                 SongTitles(title = track.title, artist = track.artist, onClick = onSongInfo)
             }
         }
 
-        CoverButtons(
+        if (!onTv) CoverButtons(
             liked = track.liked,
             likeBurst = likeBurst,
             onChevron = onChevron,
@@ -205,13 +254,13 @@ internal fun FlagshipLandscape(
                 .padding(start = (coverWidth - CoverGutter - ButtonSize * 2 - ButtonGap).coerceAtLeast(0.dp), bottom = bottomInset + 18.dp),
         )
 
-        if (lyricsMounted) {
+        if (lyricsMounted && !onTv) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .width(coverWidth)
                     .padding(start = CoverGutter - 8.dp, end = CoverGutter - 8.dp, bottom = bottomInset)
-                    .graphicsLayer { alpha = lyricsProgress() },
+                    .graphicsLayer { alpha = lyricsProgress() * (1f - handedToBar.value) },
             ) {
                 Column { PlayerProgressSlider(active = sheetShowing) }
             }
@@ -278,8 +327,10 @@ internal fun FlagshipLandscape(
                     )
                 }
             }
-            transport(Modifier.padding(vertical = 6.dp))
-            bottom(Modifier.padding(horizontal = 8.dp))
+            if (!onTv) {
+                transport(Modifier.padding(vertical = 6.dp))
+                bottom(Modifier.padding(horizontal = 8.dp))
+            }
         }
     }
 }
@@ -291,9 +342,19 @@ private fun BoxScope.LandscapeCover(
     thumbnailUrl: String?,
     interactive: () -> Boolean,
     lyricsProgress: () -> Float,
+    fadeShare: Float,
+    // where the cover starts fading towards its bottom, as a share of its height; null keeps the bottom whole
+    fadeDownFrom: Float?,
+    square: Boolean = false,
+    // the blurred copy of the cover's foot under the title; a tv lays a dark floor there instead, a bright cover turned it white
+    band: Boolean = true,
 ) {
     val connection = LocalPlayerConnection.current
     val carousel = LocalSongCarousel.current
+    if (square) {
+        SquareCover(coverWidth = coverWidth, thumbnailUrl = thumbnailUrl, interactive = interactive)
+        return
+    }
     // the cover is recorded once a frame it changes and drawn again, blurred, into the band under the lyrics' title
     val coverLayer = rememberGraphicsLayer()
     val bandShown by remember { derivedStateOf { lyricsProgress() > 0.001f } }
@@ -305,14 +366,43 @@ private fun BoxScope.LandscapeCover(
             // its own layer, so the fade can cut the edge away without touching the backdrop behind
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithContent {
-                coverLayer.record { this@drawWithContent.drawContent() }
-                drawLayer(coverLayer)
-                val from = size.width * (1f - CoverFadeShare)
+                if (band) {
+                    coverLayer.record { this@drawWithContent.drawContent() }
+                    drawLayer(coverLayer)
+                } else {
+                    drawContent()
+                }
+                val from = size.width * (1f - fadeShare)
+                // eased in and out, so the edge has no line where the fade starts or ends, straight onto the
+                // blurred backdrop behind it - a blurred band here only drew a second edge where its own blur
+                // met the backdrop's different one
                 drawRect(
-                    Brush.horizontalGradient(0f to Color.Transparent, 1f to Color.Black, startX = from, endX = size.width),
+                    Brush.horizontalGradient(
+                        0f to Color.Transparent,
+                        0.3f to Color.Black.copy(alpha = 0.1f),
+                        0.65f to Color.Black.copy(alpha = 0.55f),
+                        1f to Color.Black,
+                        startX = from,
+                        endX = size.width,
+                    ),
                     topLeft = androidx.compose.ui.geometry.Offset(from, 0f),
                     blendMode = BlendMode.DstOut,
                 )
+                if (fadeDownFrom != null) {
+                    val top = size.height * fadeDownFrom
+                    drawRect(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.35f to Color.Black.copy(alpha = 0.15f),
+                            0.7f to Color.Black.copy(alpha = 0.6f),
+                            1f to Color.Black,
+                            startY = top,
+                            endY = size.height,
+                        ),
+                        topLeft = androidx.compose.ui.geometry.Offset(0f, top),
+                        blendMode = BlendMode.DstOut,
+                    )
+                }
             },
     ) {
         CarouselPictures(carousel = carousel, fallbackUrl = thumbnailUrl, modifier = Modifier.fillMaxSize()) { url, pictureModifier ->
@@ -324,7 +414,7 @@ private fun BoxScope.LandscapeCover(
             )
         }
     }
-    if (bandShown) {
+    if (bandShown && band) {
         LyricsBand(coverWidth = coverWidth, coverLayer = coverLayer, lyricsProgress = lyricsProgress)
     }
 }
@@ -441,5 +531,33 @@ private fun CoverButtons(
             onClick = onChevron,
             modifier = Modifier.onGloballyPositioned { if (settled()) onChevronPlaced(it.boundsInRoot()) },
         )
+    }
+}
+
+// the whole cover as a rounded square over the blurred copy, a little above the middle so the title fits under it
+@Composable
+private fun BoxScope.SquareCover(coverWidth: Dp, thumbnailUrl: String?, interactive: () -> Boolean) {
+    val connection = LocalPlayerConnection.current
+    val carousel = LocalSongCarousel.current
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.width(coverWidth).fillMaxHeight()) {
+        val side = minOf(maxWidth * 0.74f, maxHeight * 0.62f)
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = TvTitleInset, bottom = 70.dp)
+                .size(side)
+                .shadow(28.dp, RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(18.dp))
+                .styleSongSwipe(interactive, carousel) { connection?.player },
+        ) {
+            CarouselPictures(carousel = carousel, fallbackUrl = thumbnailUrl, modifier = Modifier.fillMaxSize()) { url, pictureModifier ->
+                AsyncImage(
+                    model = url?.resize(900, 900),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = pictureModifier,
+                )
+            }
+        }
     }
 }

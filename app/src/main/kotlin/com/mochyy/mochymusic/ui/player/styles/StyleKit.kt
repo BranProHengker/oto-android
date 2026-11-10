@@ -375,6 +375,8 @@ private const val CircleSkipWidth = 0.46f
 /** previous, play/pause and next as three [StyleCircle]s, laid out by the caller's [Row] or [Column] */
 @Composable
 fun TransportCircles(tones: StyleTones, size: Dp = 30.dp, vertical: Boolean = false, spacing: Dp = 8.dp) {
+    // a tv's remote plays and skips, buttons on the screen are only more things for focus to land on
+    if (com.mochyy.mochymusic.ui.utils.isTvLayout()) return
     val connection = LocalPlayerConnection.current ?: return
     val transport by connection.uiState.transportState.collectAsState()
     val scope = rememberCoroutineScope()
@@ -439,6 +441,8 @@ class StyleActions(
     val onOpenRoute: (String) -> Unit = {},
     // folds the player down to the mini player, for a module's close button
     val onClose: () -> Unit = {},
+    // opens the queue over the style, for the styles whose menu offers it (the poster)
+    val onQueue: (() -> Unit)? = null,
 )
 
 /**
@@ -529,6 +533,8 @@ fun BoxScope.StyleMenu(
     /** the button and the menu's circles dressed as the Turntable's pills */
     pill: Boolean = false,
     extras: List<StyleMenuExtra> = emptyList(),
+    // a queue row under lyrics, opening the queue page over the style
+    queue: Boolean = false,
 ) {
     val reveal = remember { Animatable(0f) }
     LaunchedEffect(open) {
@@ -562,8 +568,10 @@ fun BoxScope.StyleMenu(
                 active = transport.repeatMode != Player.REPEAT_MODE_OFF,
             ) { connection.player.toggleRepeatMode() },
         ) else emptyList()
+        val queueLabel = androidx.compose.ui.res.stringResource(R.string.queue)
         val rows = listOfNotNull(
             actions.onLyrics?.let { open -> MenuItem("Lyrics", R.drawable.lyrics) { onOpenChange(false); open() } },
+            actions.onQueue?.takeIf { queue }?.let { open -> MenuItem(queueLabel, R.drawable.queue_music) { onOpenChange(false); open() } },
         ) + shuffleAndRepeat + extras.map { extra ->
             MenuItem(extra.label, extra.icon, extra.active, extra.picture) {
                 if (!extra.keepsOpen) onOpenChange(false)

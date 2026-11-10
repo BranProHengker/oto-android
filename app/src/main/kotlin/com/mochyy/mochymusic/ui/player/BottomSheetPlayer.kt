@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -134,13 +135,13 @@ import com.mochyy.mochymusic.ui.utils.stableStatusBars
  * so the same 64dp lift dragged the title, timestamps and seek bar back up onto the cover - the
  * overlap that showed up once SQUARED became the default on devices without blur.
  */
-private val ControlsDrawShift = 64.dp
+internal val ControlsDrawShift = 64.dp
 
 /** Small upward nudge for the seek bar and its timestamps, so they sit off the controls below. */
-private val SeekBarLift = 6.dp
+internal val SeekBarLift = 6.dp
 
 /** the Turntable's controls stand this far above the card, as in its frame */
-private val TurntableControlsLift = 44.dp
+internal val TurntableControlsLift = 44.dp
 
 /** The queue page's third button (autoplay) and the gap above it, on top of the lyrics pair. */
 private val QueueButtonExtraHeight = 41.dp
@@ -185,7 +186,7 @@ private val PlayerCloseStrip = 64.dp
 private const val StyleHiddenBelow = 0.25f
 
 /** The old gap from the seek bar down to the buttons (24dp plus the bar's lift). */
-private val TransportGapAboveRow = 24.dp + SeekBarLift
+internal val TransportGapAboveRow = 24.dp + SeekBarLift
 
 /** From the top of the page column's chevron to the top of the button under it (34dp + a 7dp gap). */
 private val PageButtonStep = 41.dp
@@ -277,11 +278,14 @@ private fun PlayerSheet(
 
     // the player studio: the selector the player shrinks into, and the flagship's in-place editor
     // a look module with a player of its own puts that style first in the selector, for as long as it's on
-    val hasModuleStyle = com.mochyy.mochymusic.modules.skin.ActiveSkin.current?.player != null
+    val onTv = com.mochyy.mochymusic.ui.utils.isTvLayout()
+    val hasModuleStyle = !onTv && com.mochyy.mochymusic.modules.skin.ActiveSkin.current?.player != null
     // the selector's columns, as indexes into PlayerStyle.entries: the flagship with its older layouts under it
-    val selectorColumns = remember(hasModuleStyle) {
+    val selectorColumns = remember(hasModuleStyle, onTv) {
         val columns = if (hasModuleStyle) listOf(listOf(PlayerStyle.MODULE)) + PlayerStyle.selectorColumns else PlayerStyle.selectorColumns
-        columns.map { column -> column.map { it.ordinal } }
+        // a tv only offers the looks made for it
+        val shown = if (onTv) columns.map { column -> column.filter { it.availableOnTv } }.filter { it.isNotEmpty() } else columns
+        shown.map { column -> column.map { it.ordinal } }
     }
     val studio = com.mochyy.mochymusic.ui.player.studio.rememberPlayerStudioState(selectorColumns)
     val studioAnchors = remember { com.mochyy.mochymusic.ui.player.studio.StudioAnchors() }
@@ -329,7 +333,29 @@ private fun PlayerSheet(
     // card - the old style grew, then the new one was built mid-spring, and the spring stuttered.
     var pickedPlayerStyle by remember { mutableStateOf<PlayerStyle?>(null) }
     // the module style draws the look that's on; with none on, the flagship stands in
-    val playerStyle = (pickedPlayerStyle ?: savedPlayerStyle).let { if (it == PlayerStyle.MODULE && !hasModuleStyle) PlayerStyle.FLAGSHIP else it }
+    val playerStyle = (pickedPlayerStyle ?: savedPlayerStyle)
+        .let { if (it == PlayerStyle.MODULE && !hasModuleStyle) PlayerStyle.FLAGSHIP else it }
+        // a phone's ipod or turntable picked before the tv had its own list lands on the flagship there
+        .let { if (onTv && !it.availableOnTv) PlayerStyle.FLAGSHIP else it }
+    // on a tv the lyrics are the player: they open with it, and the remote opens and closes them
+    if (onTv) {
+        val currentStyle by androidx.compose.runtime.rememberUpdatedState(playerStyle)
+        LaunchedEffect(transition, state) {
+            snapshotFlow { state.isExpandedOrExpanding }
+                .collect { open -> if (open && currentStyle != PlayerStyle.VIDEO && transition.page == PlayerPage.NONE) transition.open(PlayerPage.LYRICS) }
+        }
+        LaunchedEffect(transition) {
+            TvPlayerRemote.commands.collect { command ->
+                when (command) {
+                    // full video keeps its own lyrics pane and song sheet, it answers those itself
+                    TvPlayerCommand.Lyrics -> if (currentStyle != PlayerStyle.VIDEO) {
+                        if (transition.page == PlayerPage.LYRICS) transition.close() else transition.open(PlayerPage.LYRICS)
+                    }
+                    TvPlayerCommand.ClosePage -> if (transition.page != PlayerPage.NONE) transition.close()
+                }
+            }
+        }
+    }
     LaunchedEffect(savedPlayerStyle) {
         if (savedPlayerStyle == pickedPlayerStyle) pickedPlayerStyle = null
     }
@@ -441,9 +467,12 @@ private fun PlayerSheet(
     }
     // the song's whole lyrics, opened over an alternate style from its ••• menu
     var styleLyricsOpen by remember { mutableStateOf(false) }
-    // that page fully up: the style under it stops drawing, and its clocks stop with it
+    // the queue, opened over the poster from its chevron menu
+    var styleQueueOpen by remember { mutableStateOf(false) }
+    // either page fully up: the style under it stops drawing, and its clocks stop with it
     var styleCovered by remember { mutableStateOf(false) }
-    val styleCoveredNow = remember { { styleCovered } }
+    var styleQueueCovered by remember { mutableStateOf(false) }
+    val styleCoveredNow = remember { { styleCovered || styleQueueCovered } }
     val styleActions = remember(openStudio) {
         com.mochyy.mochymusic.ui.player.styles.StyleActions(
             onOtherMenu = {
@@ -468,6 +497,7 @@ private fun PlayerSheet(
                 state.collapseSoft()
             },
             onClose = { state.collapseSoft() },
+            onQueue = { styleQueueOpen = true },
         )
     }
 
@@ -1011,12 +1041,17 @@ private fun PlayerSheet(
                             // under a lyrics page that fills the screen it needn't be drawn
                             modifier = Modifier
                                 .fillMaxSize()
-                                .graphicsLayer { alpha = if (styleCovered) 0f else 1f },
+                                .graphicsLayer { alpha = if (styleCovered || styleQueueCovered) 0f else 1f },
                         )
                     }
                 }
                 // closed with the player, so it isn't still up the next time it opens
-                LaunchedEffect(styleOpen) { if (!styleOpen) styleLyricsOpen = false }
+                LaunchedEffect(styleOpen) {
+                    if (!styleOpen) {
+                        styleLyricsOpen = false
+                        styleQueueOpen = false
+                    }
+                }
                 com.mochyy.mochymusic.ui.player.styles.StyleLyricsPage(
                     open = styleLyricsOpen && styleOpen,
                     onClose = { styleLyricsOpen = false },
@@ -1024,8 +1059,13 @@ private fun PlayerSheet(
                     onCoveredChange = { styleCovered = it },
                     onSwitchSource = { showLyricsSource = true },
                 )
+                com.mochyy.mochymusic.ui.player.styles.StyleQueuePage(
+                    open = styleQueueOpen && styleOpen,
+                    onClose = { styleQueueOpen = false },
+                    onCoveredChange = { styleQueueCovered = it },
+                )
                 // the ipod, the full video mode and the bedside each have their own close, a bar over them would just be in the way
-                if (playerStyle != PlayerStyle.IPOD && playerStyle != PlayerStyle.VIDEO && !playerStyle.isBedside) PlayerHandle(
+                if (!onTv && playerStyle != PlayerStyle.IPOD && playerStyle != PlayerStyle.VIDEO && !playerStyle.isBedside) PlayerHandle(
                     state = handleState,
                     sheet = state,
                     statusBarTop = statusBarTopInset,
@@ -1091,7 +1131,8 @@ private fun PlayerSheet(
                             }
                         },
                 )
-                PlayerHandle(
+                // a tv closes its player with the back button, it has no handle to drag
+                if (!onTv) PlayerHandle(
                     state = handleState,
                     sheet = state,
                     statusBarTop = 0.dp,
@@ -1635,8 +1676,8 @@ private fun PlayerSheet(
             // the editor's tiles: inside the sheet, so they shrink and grow with it
             EditTiles(studioParts)
 
-            // over everything on the player, pages included
-            PlayerHandle(
+            // over everything on the player, pages included; a tv closes it with the back button instead
+            if (!onTv) PlayerHandle(
                 state = handleState,
                 sheet = state,
                 statusBarTop = statusBarTopInset,

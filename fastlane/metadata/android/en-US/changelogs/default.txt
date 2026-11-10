@@ -1,7 +1,7 @@
-### What's New in Oto v1.0.6:
-- **Local .lrc File Picker**: Added file picker directly in the "Switch Lyrics" sheet to select custom `.lrc` files from device storage, plus one-tap switching for local sidecar `.lrc` files and embedded audio tags.
-- **Clean Modules Screen**: Removed Mochy anime mascot banner and third-party promo cards from the Modules screen.
-- **Module Branding**: Replaced all leftover Mochy mentions across module descriptions (Apple Music, Bridge, Catalog) with pure Oto.
-- **Assets Cleanup**: Completely purged all legacy Mochy mascot and promo image assets.
-- **Provider User-Agents**: Aligned provider and scrobbler network identification with Oto.
-- **Localization Polish**: Sanitized remaining translation strings across all supported languages.
+### What's New in Oto v1.0.7:
+- **Android TV Mode & Phone Link**: Added dedicated TV interface + phone-to-TV pairing, two-way library sync, local download streaming, and remote queue controls straight from the player menu.
+- **Blend Skips & Crossfade**: Preloads adjacent tracks (configurable ahead count, Data Saver aware) so skips/backs crossfade seamlessly.
+- **Per-Song Speed & Pitch**: Option to save playback speed and pitch exclusively for the current song.
+- **Storage Flexibility**: Choose any custom folder on internal storage or SD card for downloads and cache.
+- **Playlist, Search & Player Upgrades**: Auto-download new playlist songs, in-playlist & in-album search, Recent Searches, Studio Version playback for music videos, Keep Shuffle On, Poster chevron queue access, Discord custom artwork, and preserved Local .lrc File Picker + Smart 3-State Shuffle.
+- **Pure Oto Experience**: All upstream Mochy mascot assets, donate prompts, and branding stripped and aligned cleanly with Oto.

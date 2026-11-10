@@ -53,6 +53,7 @@ import com.mochyy.mochymusic.constants.LyricsMotionStyleKey
 import com.mochyy.mochymusic.constants.MixWithOtherAppsKey
 import com.mochyy.mochymusic.constants.OfflineModeKey
 import com.mochyy.mochymusic.constants.PersistentQueueKey
+import com.mochyy.mochymusic.constants.PersistentShuffleAcrossQueuesKey
 import com.mochyy.mochymusic.constants.ProxyEnabledKey
 import com.mochyy.mochymusic.constants.ProxyUrlKey
 import com.mochyy.mochymusic.constants.PlayVideoBackgroundKey
@@ -339,13 +340,24 @@ private fun localItems(): List<SettingsItem> {
 @Composable
 private fun playerBehaviourItems(): List<SettingsItem> {
     val (disableVideoAutoplay, onDisableVideoAutoplayChange) = rememberPreference(DisableVideoAutoplayKey, defaultValue = false)
+    val (studioForVideos, onStudioForVideosChange) = rememberPreference(com.mochyy.mochymusic.constants.StudioForVideosKey, defaultValue = false)
     val (youtubeTranslations, onYoutubeTranslationsChange) = rememberPreference(YouTubeCaptionTranslationKey, defaultValue = true)
     val (syncLyricsToVideo, onSyncLyricsToVideoChange) = rememberPreference(SyncLyricsToVideoKey, defaultValue = true)
     val (dontSkipOnFailure, onDontSkipOnFailureChange) = rememberPreference(DontSkipOnFailureKey, defaultValue = false)
     val (failureTimeout, onFailureTimeoutChange) = rememberPreference(StreamFailureTimeoutKey, defaultValue = 6)
     val (skipSilence, onSkipSilenceChange) = rememberPreference(SkipSilenceKey, defaultValue = false)
     val (reportPlays, onReportPlaysChange) = rememberPreference(YtReportPlaysKey, defaultValue = true)
+    val (persistentShuffle, onPersistentShuffleChange) = rememberPreference(PersistentShuffleAcrossQueuesKey, defaultValue = true)
     return listOf(
+        // shuffle stays on from one playlist to the next, like spotify, until it's turned off
+        switchItem(
+            key = "Keep shuffle on",
+            title = stringResource(R.string.settings_persistent_shuffle),
+            description = stringResource(R.string.settings_persistent_shuffle_desc),
+            icon = painterResource(R.drawable.shuffle),
+            checked = persistentShuffle,
+            onCheckedChange = onPersistentShuffleChange,
+        ),
         switchItem(
             key = "Disable auto-playing YouTube video",
             title = stringResource(R.string.settings_disable_video_autoplay),
@@ -353,6 +365,14 @@ private fun playerBehaviourItems(): List<SettingsItem> {
             icon = painterResource(R.drawable.slow_motion_video),
             checked = disableVideoAutoplay,
             onCheckedChange = onDisableVideoAutoplayChange,
+        ),
+        switchItem(
+            key = "Studio version for music videos",
+            title = stringResource(R.string.settings_studio_for_videos),
+            description = stringResource(R.string.settings_studio_for_videos_desc),
+            icon = painterResource(R.drawable.music_note),
+            checked = studioForVideos,
+            onCheckedChange = onStudioForVideosChange,
         ),
         switchItem(
             key = "Translations from YouTube",

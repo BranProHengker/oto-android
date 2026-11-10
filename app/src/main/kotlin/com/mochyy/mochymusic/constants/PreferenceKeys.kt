@@ -226,6 +226,9 @@ val AboutSongSourceKey = stringPreferencesKey("aboutSongSource")
 
 val PersistentQueueKey = booleanPreferencesKey("persistentQueue")
 val PersistentShuffleAcrossQueuesKey = booleanPreferencesKey("persistentShuffleAcrossQueues")
+
+// playlists whose new songs download by themselves, as json: each id with where it started counting (see AutoDownloads)
+val AutoDownloadPlaylistsKey = stringPreferencesKey("autoDownloadPlaylists")
 val RememberShuffleAndRepeatKey = booleanPreferencesKey("rememberShuffleAndRepeat")
 val ShuffleModeKey = booleanPreferencesKey("shuffleMode")
 val ShuffleStateKey = stringPreferencesKey("shuffleState")
@@ -273,6 +276,16 @@ val TransportFadeEnabledKey = booleanPreferencesKey("transportFadeEnabled")
 val TransportFadeSecondsKey = floatPreferencesKey("transportFadeSeconds")
 val TransportEffectKey = stringPreferencesKey("transportEffect")
 
+// skips and backs cross over on two players, the songs either side fetched ahead so they start at once
+val SkipBlendKey = booleanPreferencesKey("skipBlend")
+
+// how many songs coming up get their start fetched for blend skips, 1 to 4; data saver keeps it at 1
+val SkipBlendAheadKey = intPreferencesKey("skipBlendAhead")
+const val SkipBlendAheadMax = 4
+
+// a music video plays its song's studio upload when there is one, without the video's skits and sound effects
+val StudioForVideosKey = booleanPreferencesKey("studioForVideos")
+
 const val TransportFadeDefaultSeconds = 2f
 const val TransportFadeMinSeconds = 0.5f
 const val TransportFadeMaxSeconds = 10f
@@ -316,6 +329,9 @@ val DiscordLargeTextKey = stringPreferencesKey("discordPresenceLargeText")
 val DiscordSmallTextKey = stringPreferencesKey("discordPresenceSmallText")
 val DiscordLargeImageKey = stringPreferencesKey("discordPresenceLargeImage")
 val DiscordSmallImageKey = stringPreferencesKey("discordPresenceSmallImage")
+// the pictures picked for "your own picture", kept as files in mochy's own folder
+val DiscordLargeCustomImageKey = stringPreferencesKey("discordPresenceLargeCustomImage")
+val DiscordSmallCustomImageKey = stringPreferencesKey("discordPresenceSmallCustomImage")
 val DiscordSpinSecondsKey = intPreferencesKey("discordPresenceSpinSeconds")
 val DiscordSpinFpsKey = intPreferencesKey("discordPresenceSpinFps")
 val DiscordButton1TextKey = stringPreferencesKey("discordPresenceButton1Text")
@@ -668,6 +684,9 @@ enum class PlayerStyle(val displayName: String, val selectorName: String) {
     // the two flagships the full editor works on: cover, middle part, controls and bottom bar
     val hasFullEditor: Boolean get() = this == FLAGSHIP || this == CLASSIC
 
+    // the looks that read well across a room and stay smooth on a tv's gpu; the rest stay on phones
+    val availableOnTv: Boolean get() = this == FLAGSHIP || this == POSTER || this == VIDEO || this == TIMELINE || isBedside
+
     companion object {
         /** the styles these replaced, so a stored choice lands on its nearest successor */
         fun fromStored(name: String?): PlayerStyle? = when (name) {
@@ -694,6 +713,9 @@ enum class PlayerStyle(val displayName: String, val selectorName: String) {
 }
 
 val PlayerStyleKey = stringPreferencesKey("playerStyle")
+
+// the tv's "flagship square": the flagship with its whole cover as a rounded square
+val TvFlagshipSquareKey = booleanPreferencesKey("tvFlagshipSquare")
 
 // the ipod player's body colours, ipod.js's three plus a pitch black one with a dark screen
 enum class IpodTheme { SILVER, BLACK, U2, TRUE_DARK }

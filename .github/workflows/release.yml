@@ -76,11 +76,11 @@ jobs:
               {
                 "title": "Features & Improvements",
                 "items": [
-                  "Local .lrc File Picker: pick custom .lrc files from storage directly in the Switch Lyrics sheet.",
-                  "Clean Modules Screen: removed Mochy mascot banner and third-party promo.",
-                  "Replaced all leftover Mochy mentions in Apple Music module and bridge.",
-                  "Purged legacy mascot and promo drawables.",
-                  "Aligned provider User-Agent headers and translation strings with Oto."
+                  "Android TV Mode & Phone Link: sync library, stream local downloads, and control playback from your phone.",
+                  "Blend Skips & Crossfade: preloads upcoming/previous songs for seamless transitions.",
+                  "Per-Song Speed/Pitch & Storage Folder Picker: save tuning per track and pick any folder for downloads/cache.",
+                  "Playlist & Search Upgrades: search inside playlists/albums, auto-download new playlist tracks, Recent Searches, Studio Version for music videos.",
+                  "Preserved Oto Signature Features: Local .lrc File Picker, Smart 3-State Shuffle, and 100% ad-free / mascot-free Oto branding."
                 ]
               }
             ]

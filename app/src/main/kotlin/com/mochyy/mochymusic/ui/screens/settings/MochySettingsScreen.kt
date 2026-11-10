@@ -99,7 +99,11 @@ private val LocalizedSettingsTitles = mapOf(
     "Play alongside other apps" to R.string.playback_mix_other_apps,
     "Save Player's last state" to R.string.playback_save_state,
     "Local song auto metadata" to R.string.settings_local_auto_metadata,
+    "Keep shuffle on" to R.string.settings_persistent_shuffle,
     "Disable auto-playing YouTube video" to R.string.settings_disable_video_autoplay,
+    "Studio version for music videos" to R.string.settings_studio_for_videos,
+    "Blend skips" to R.string.settings_blend_skips,
+    "Oto on your TV" to R.string.tv_link_title,
     "Translations from YouTube" to R.string.settings_youtube_translations,
     "Sync lyrics to music videos" to R.string.settings_sync_lyrics_video,
     "Don't skip on failure" to R.string.settings_dont_skip_failure,
@@ -148,7 +152,7 @@ private val SettingsIndex = listOf(
     SettingsEntry("Cover rounding", "Customisation", "customisation_settings", "square rounded corner radius px thumbnail art"),
     SettingsEntry("Playlist styles", "Customisation", "customisation_settings", "flow classic minimal header layout"),
     SettingsEntry("Player styles", "Customisation", "customisation_settings", "flagship turntable ipod poster timeline lyrics studio customize player cover"),
-    SettingsEntry("Home styles", "Customisation", "customisation_settings", "mochyy listen now hop in hero layout grid"),
+    SettingsEntry("Home styles", "Customisation", "customisation_settings", "oto listen now hop in hero layout grid"),
     SettingsEntry("Blur", "Customisation", "customisation_settings", "blur glass frosted performance lag"),
     SettingsEntry("Progressive blur", "Customisation", "customisation_settings", "gradient fade top bar hairline flat"),
     SettingsEntry("Blur quality", "Customisation", "customisation_settings", "low high glass performance"),
@@ -177,7 +181,9 @@ private val SettingsIndex = listOf(
     SettingsEntry("Play alongside other apps", "App behaviour", "general_settings", "audio focus mix pause other app video game sound together"),
     SettingsEntry("Save Player's last state", "App behaviour", "general_settings", "persistent queue restore track state"),
     SettingsEntry("Local song auto metadata", "App behaviour", "general_settings", "match tags id3 covers lyrics"),
+    SettingsEntry("Keep shuffle on", "App behaviour", "general_settings", "shuffle persistent spotify random keep new playlist"),
     SettingsEntry("Disable auto-playing YouTube video", "App behaviour", "general_settings", "music video live autoplay cover"),
+    SettingsEntry("Studio version for music videos", "App behaviour", "general_settings", "music video mv omv audio studio album version skit sound effects official"),
     SettingsEntry("Translations from YouTube", "App behaviour", "general_settings", "captions translate lyrics language"),
     SettingsEntry("Sync lyrics to music videos", "App behaviour", "general_settings", "lyrics video timing intro skit"),
     SettingsEntry("Don't skip on failure", "App behaviour", "general_settings", "fail stream error stay skip"),
@@ -193,6 +199,7 @@ private val SettingsIndex = listOf(
     // Audio Lab
     SettingsEntry("Audio Lab", "Audio Lab", "audio_lab", "sound effects equalizer fx quality"),
     SettingsEntry("Crossfade", "Audio Lab", "crossmix_settings", "crossmix automix transition gapless blend"),
+    SettingsEntry("Blend skips", "Audio Lab", "crossmix_settings", "skip next previous back crossfade seamless preload transition fade blend"),
     SettingsEntry("Equalizer", "Audio Lab", "equalizer", "eq bass treble band parametric graph autoeq headphones correction preset"),
     SettingsEntry("AutoEQ", "Audio Lab", "equalizer", "headphones earbuds correction harman database model"),
     SettingsEntry("Audio Quality", "Audio Lab", "audio_quality", "bitrate stream high low lossless hi-res flac monochrome"),
@@ -229,6 +236,7 @@ private val SettingsIndex = listOf(
     SettingsEntry("Remove all downloads", "Storage", "storage_settings", "delete clear downloads offline space"),
 
     // Experimental
+    SettingsEntry("Oto on your TV", "Import & sync", com.mochyy.mochymusic.ui.screens.settings.tvlink.TvLinkRoute, "tv television android tv google tv pair link phone sync stream downloads big screen"),
     SettingsEntry("Import & sync", "Experimental", "experimental_settings", "import spotify apple music deezer tidal tunemymusic csv youtube sync export backup transfer"),
     SettingsEntry("Big disc cover styles", "Experimental", "experimental_settings", "disc vinyl cover"),
     SettingsEntry("Music haptics", "Experimental", "experimental_settings", "vibration haptic"),
@@ -549,6 +557,13 @@ fun MochySettingsScreen(navController: NavController, pane: SettingsPane? = null
                             iconRes = R.drawable.integration,
                             selected = selected == IntegrationsRoute,
                             onClick = { open(IntegrationsRoute) }
+                        )
+
+                        CategoryBubble(
+                            title = stringResource(R.string.tv_link_title),
+                            iconRes = R.drawable.cast_connected,
+                            selected = selected == com.mochyy.mochymusic.ui.screens.settings.tvlink.TvLinkRoute,
+                            onClick = { open(com.mochyy.mochymusic.ui.screens.settings.tvlink.TvLinkRoute) }
                         )
 
                         CategoryBubble(
