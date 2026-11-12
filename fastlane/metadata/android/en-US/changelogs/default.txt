@@ -1,4 +1,5 @@
-### What's New in Oto v1.0.8:
-- **Local Playback & Offline Mode Fix**: Local audio files (`content://` / `file://`) now read directly from storage without hitting `playerCache` or falling back to online YouTube lookups.
-- **No False "Stream failed: no internet connection" on Local Songs**: Local playback errors never lock onto network retry loops when Offline Mode is enabled or WiFi/data is off, and report accurate file/permission errors cleanly.
-- **Crossfade & Multi-Track Stability Fix**: Fixed crossfade player swap deadlocks, preserved shuffle order across crossfades, prevented `isCrossfading` / `STATE_IDLE` lockups so playback never pauses permanently after several songs, and restored direct Play/Resume recovery from idle/error states.
+### What's New in Oto v1.0.9:
+- **Direct Local MediaSource & Cancellation Race Fix**: Local `content://` and `file://` tracks now bypass `DynamicResolvingMediaSource` completely, eliminating `CancellationException` / `IO_UNSPECIFIED` ("stream interrupted") failures during queue changes, Hero Carousel rolls, and crossfades.
+- **MediaStore Fallback & Raw Path Normalization**: Added automatic `MediaStore.getMediaUri` fallback if opening a SAF `content://` URI fails, plus raw filesystem path normalization.
+- **Hero Carousel Local Playback Fix**: Local tracks rolled or played from the Hero Carousel now queue locally via `ListQueue` instead of invoking online YouTube Radio lookups.
+- **Clear Local Error Diagnostics**: Local playback errors surface the exact underlying cause instead of masking `IO_UNSPECIFIED` as "stream interrupted".

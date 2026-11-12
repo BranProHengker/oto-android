@@ -1831,6 +1831,11 @@ class MusicService :
             causes.any { it is java.io.FileNotFoundException } ||
                 e.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "file not found"
             isContainerParseError(e) -> "unsupported or damaged audio file"
+            e.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> {
+                causes.asReversed().firstNotNullOfOrNull { t ->
+                    t.message?.takeIf { it.isNotBlank() } ?: t.javaClass.simpleName.takeIf { it.isNotBlank() }
+                } ?: "could not read audio file"
+            }
             else -> plainReason(e)
         }
     }
@@ -4052,7 +4057,22 @@ class MusicService :
                     }
                     listeners.forEach(source::addTransferListener)
                     active = source
-                    return source.open(dataSpec)
+                    return try {
+                        source.open(dataSpec)
+                    } catch (primaryError: Exception) {
+                        if (scheme == "content") {
+                            val fallback = com.mochyy.mochymusic.importer.LocalFolders.mediaStoreUri(this@MusicService, dataSpec.uri)
+                            if (fallback != null && fallback != dataSpec.uri) {
+                                runCatching { source.close() }
+                                val retrySource = localFactory.createDataSource()
+                                listeners.forEach(retrySource::addTransferListener)
+                                active = retrySource
+                                return runCatching { retrySource.open(dataSpec.withUri(fallback)) }
+                                    .getOrElse { throw primaryError }
+                            }
+                        }
+                        throw primaryError
+                    }
                 }
 
                 override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
@@ -4154,6 +4174,18 @@ class MusicService :
 
         return object : androidx.media3.exoplayer.source.MediaSource.Factory by defaultFactory {
             override fun createMediaSource(mediaItem: androidx.media3.common.MediaItem): androidx.media3.exoplayer.source.MediaSource {
+                val uri = mediaItem.localConfiguration?.uri
+                if (uri?.scheme == "content" || uri?.scheme == "file") {
+                    val mediaId = mediaItem.mediaId
+                    forgetModuleFacts(mediaId)
+                    notePlayingFrom(mediaId, PlayingFrom(PlayingFrom.Device, "This device"))
+                    resolvedStreamSources[mediaId] = "this device"
+                    playingStreams[mediaId] = com.mochyy.mochymusic.playback.custom.CustomStreamResult(
+                        streamUrl = uri.toString(),
+                        source = "this device",
+                    )
+                    return defaultFactory.createMediaSource(mediaItem)
+                }
                 return com.mochyy.mochymusic.playback.custom.DynamicResolvingMediaSource(
                     originalMediaItem = mediaItem,
                     mediaSourceFactoryProvider = { drmManager ->
@@ -5000,9 +5032,12 @@ class MusicService :
     private suspend fun deviceStream(mediaItem: androidx.media3.common.MediaItem): com.mochyy.mochymusic.playback.custom.CustomStreamResult? {
         val mediaId = mediaItem.mediaId
         val uri = mediaItem.localConfiguration?.uri
-        val file = when {
+        val rawFile = when {
             uri?.scheme == "content" || uri?.scheme == "file" -> uri.toString()
             else -> mediaItem.metadata?.localUri ?: database.song(mediaId).first()?.song?.localUri
+        }
+        val file = rawFile?.let { path ->
+            if (path.startsWith("/")) android.net.Uri.fromFile(java.io.File(path)).toString() else path
         }
         if (file != null) {
             forgetModuleFacts(mediaId)

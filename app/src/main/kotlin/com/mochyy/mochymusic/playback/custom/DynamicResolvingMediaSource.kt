@@ -52,7 +52,7 @@ class DynamicResolvingMediaSource(
     // never decrypted anything ("DefaultDrmSessionManager accessed on the wrong thread").
     @Volatile private var playbackHandler: Handler? = null
     /** bumped on every prepare and release, so a resolution that finishes late is dropped */
-    private var generation = 0
+    @Volatile private var generation = 0
 
     override fun prepareSourceInternal(mediaTransferListener: androidx.media3.datasource.TransferListener?) {
         super.prepareSourceInternal(mediaTransferListener)
@@ -68,27 +68,30 @@ class DynamicResolvingMediaSource(
 
         fetchScope.launch {
             val mediaId = originalMediaItem.mediaId
+            var resolutionError: IOException? = null
             val result = try {
                 fetcherAction(mediaId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: androidx.media3.common.PlaybackException) {
-
-                fetchError = java.io.IOException(e)
+                resolutionError = java.io.IOException(e)
                 null
             } catch (e: Exception) {
                 Timber.e(e, "Failed to fetch stream for mediaId: $mediaId")
-                fetchError = if (e is java.io.IOException) e else java.io.IOException(e)
+                resolutionError = if (e is java.io.IOException) e else java.io.IOException(e)
                 null
             }
 
-            // a failed lookup plays from nowhere: announcing YouTube for it would be wrong
-            if (fetchError == null) onSourceResolved(mediaId, result?.source ?: "YouTube Music")
+            if (gen != generation) return@launch
+            if (resolutionError != null) {
+                fetchError = resolutionError
+                return@launch
+            }
+
+            onSourceResolved(mediaId, result?.source ?: "YouTube Music")
 
             if (result == null) {
-                if (fetchError == null) {
-
-                    prepareChild(gen, mediaSourceFactoryProvider(null), originalMediaItem)
-                }
-
+                prepareChild(gen, mediaSourceFactoryProvider(null), originalMediaItem)
                 return@launch
             }
 

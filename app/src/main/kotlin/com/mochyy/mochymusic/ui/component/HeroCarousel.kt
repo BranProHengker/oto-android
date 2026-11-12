@@ -110,10 +110,12 @@ import com.mochyy.mochymusic.constants.CanvasThumbnailAnimationKey
 import com.mochyy.mochymusic.constants.CanvasWifiOnlyKey
 import com.mochyy.mochymusic.constants.DisableBlurKey
 import com.mochyy.mochymusic.db.entities.LocalItem
+import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.models.MediaMetadata
 import com.mochyy.mochymusic.models.SimilarRecommendation
 import com.mochyy.mochymusic.models.toMediaMetadata
 import com.mochyy.mochymusic.playback.PlayerConnection
+import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.ui.player.CanvasArtworkPlaybackCache
 import com.mochyy.mochymusic.ui.player.CanvasArtworkPlayer
@@ -257,6 +259,8 @@ data class KeepListeningItem(val item: MediaMetadata, val isLastPlayed: Boolean 
     override fun onPlay(playerConnection: PlayerConnection, navController: NavController) {
         if (isLastPlayed) {
             playerConnection.play()
+        } else if (item.localUri != null || item.id.startsWith("LOCAL_")) {
+            playerConnection.playQueue(ListQueue(title = item.title, items = listOf(item.toMediaItem())))
         } else {
             playerConnection.playQueue(YouTubeQueue(WatchEndpoint(videoId = item.id), item))
         }
@@ -718,7 +722,11 @@ private fun HeroPager(
                     gacha.burst.animateTo(1f, tween(1100, easing = CubicBezierEasing(0.2f, 0.7f, 0.3f, 1f)))
                     gacha.burst.snapTo(0f)
                 }
-                playerConnection.playQueue(YouTubeQueue.radio(won))
+                if (won.localUri != null || won.id.startsWith("LOCAL_")) {
+                    playerConnection.playQueue(ListQueue(title = won.title, items = listOf(won.toMediaItem())))
+                } else {
+                    playerConnection.playQueue(YouTubeQueue.radio(won))
+                }
             } finally {
                 if (gacha.phase == GachaPhase.Rolling) gacha.phase = GachaPhase.Idle
             }
