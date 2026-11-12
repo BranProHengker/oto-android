@@ -78,7 +78,11 @@ internal class TvActions(
 
     fun open(item: LocalItem) {
         when (item) {
-            is Song -> player()?.playQueue(YouTubeQueue(WatchEndpoint(videoId = item.id), item.toMediaMetadata()))
+            is Song -> if (item.song.isLocal) {
+                player()?.playQueue(ListQueue(title = item.song.title, items = listOf(item.toMediaItem())))
+            } else {
+                player()?.playQueue(YouTubeQueue(WatchEndpoint(videoId = item.id), item.toMediaMetadata()))
+            }
             is Album -> navController.navigate("album/${item.id}")
             is Artist -> navController.navigate("artist/${item.id}")
             is Playlist -> navController.navigate("local_playlist/${item.id}")

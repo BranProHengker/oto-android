@@ -370,15 +370,9 @@ class MusicService :
     private val secondaryPlayerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
             Timber.tag(TAG).e(error, "Secondary player error")
-            secondaryPlayer?.stop()
-            secondaryPlayer?.clearMediaItems()
-            // dropped without this, its decoders and audio track stayed alive with nothing to free them
             secondaryPlayer?.let { failed ->
                 failed.removeListener(this)
-                playerCrossmixProcessors.remove(failed)
-                playerSilenceProcessors.remove(failed)
-                unregisterEqualizer(failed)
-                failed.release()
+                releasePlayerResources(failed)
             }
             secondaryPlayer = null
         }
@@ -547,6 +541,12 @@ class MusicService :
     private var fadingPlayer: ExoPlayer? = null
     private var isCrossfading = false
     private var crossfadeJob: Job? = null
+    private var crossfadeMirrorListener: Player.Listener? = null
+    private var promotingCrossfade = false
+
+    @Volatile private var hapticsEnabled = false
+    @Volatile private var hapticsSensitivity = HapticSensitivity.MEDIUM
+    @Volatile private var hapticsFocus = com.mochyy.mochymusic.constants.HapticFocus.VIBE
 
     // "blend skips": skips and backs cross over on two players, the neighbours' first seconds fetched ahead
     @Volatile private var skipBlend = false
@@ -804,6 +804,7 @@ class MusicService :
             dataStore.data.map { it[MusicHapticsEnabledKey] ?: false }
                 .distinctUntilChanged()
                 .collect { enabled ->
+                    hapticsEnabled = enabled
                     hapticAudioProcessor.enabled = enabled
                 }
         }
@@ -812,6 +813,7 @@ class MusicService :
             dataStore.data.map { it[MusicHapticsSensitivityKey]?.toEnum(HapticSensitivity.MEDIUM) ?: HapticSensitivity.MEDIUM }
                 .distinctUntilChanged()
                 .collect { sensitivity ->
+                    hapticsSensitivity = sensitivity
                     hapticAudioProcessor.sensitivity = sensitivity
                 }
         }
@@ -820,6 +822,7 @@ class MusicService :
             dataStore.data.map { it[com.mochyy.mochymusic.constants.HapticFocusKey]?.toEnum(com.mochyy.mochymusic.constants.HapticFocus.VIBE) ?: com.mochyy.mochymusic.constants.HapticFocus.VIBE }
                 .distinctUntilChanged()
                 .collect { focus ->
+                    hapticsFocus = focus
                     hapticAudioProcessor.focus = focus
                 }
         }
@@ -929,10 +932,10 @@ class MusicService :
 
                     Timber.tag("MusicService").i("QUALITY CHANGED: $oldQuality -> $newQuality")
 
-                    val mediaId = player.currentMediaItem?.mediaId ?: return@collect
-                    // a downloaded song plays its own file, and that download is the user's to keep:
-                    // the new quality applies to what's streamed from here on
-                    if (isFullyDownloaded(mediaId)) return@collect
+                    val currentItem = player.currentMediaItem ?: return@collect
+                    val mediaId = currentItem.mediaId
+                    // a downloaded or local song plays its own file, not a YouTube quality tier
+                    if (isLocalTrack(currentItem) || isFullyDownloaded(mediaId)) return@collect
                     val currentPosition = player.currentPosition
                     val wasPlaying = player.playWhenReady
                     val currentIndex = player.currentMediaItemIndex
@@ -967,7 +970,9 @@ class MusicService :
 
                     Timber.tag("MusicService").i("IP VERSION CHANGED: $oldIpVersion -> $newIpVersion")
 
-                    val mediaId = player.currentMediaItem?.mediaId ?: return@collect
+                    val currentItem = player.currentMediaItem ?: return@collect
+                    if (isLocalTrack(currentItem) || isFullyDownloaded(currentItem.mediaId)) return@collect
+                    val mediaId = currentItem.mediaId
                     val currentPosition = player.currentPosition
                     val currentIndex = player.currentMediaItemIndex
                     val wasPlaying = player.isPlaying
@@ -1106,10 +1111,18 @@ class MusicService :
         // offload skips the app's own audio processing, so the equalizer and effects would go silent
         combine(
             dataStore.data.map { it[AudioOffload] ?: false },
-            dataStore.data.map { it[CrossfadeEnabledKey] ?: false },
+            dataStore.data.map { prefs ->
+                val legacy = prefs[CrossfadeEnabledKey] ?: false
+                val mode = (
+                    prefs[CrossmixModeKey]
+                        ?.let { value -> runCatching { CrossmixMode.valueOf(value) }.getOrNull() }
+                        ?: if (legacy) CrossmixMode.MANUAL_CROSSFADE else CrossmixMode.AUTO_CROSSFADE
+                    ).playable()
+                mode != CrossmixMode.OFF
+            },
             audioLab.shapesSound,
-        ) { offloadPref, crossfadeEnabled, shapesSound ->
-             offloadPref && !crossfadeEnabled && !shapesSound
+        ) { offloadPref, crossfadeOn, shapesSound ->
+             offloadPref && !crossfadeOn && !shapesSound
         }.distinctUntilChanged()
         .collectLatest(scope) { useOffload ->
              player.setOffloadEnabled(useOffload)
@@ -1352,6 +1365,10 @@ class MusicService :
                     Timber.e(e, "Error processing haptics")
                 }
             }
+        }.apply {
+            enabled = hapticsEnabled
+            sensitivity = hapticsSensitivity
+            focus = hapticsFocus
         }
 
         runBlocking {
@@ -1409,7 +1426,7 @@ class MusicService :
         player.apply {
                 runBlocking {
                     val offload = dataStore.get(AudioOffload, false)
-                    val crossfade = dataStore.get(CrossfadeEnabledKey, false)
+                    val crossfade = crossfadeEnabled || dataStore.get(CrossfadeEnabledKey, false)
                     setOffloadEnabled(if (crossfade) false else offload)
                     skipSilenceEnabled = dataStore.get(SkipSilenceKey, false)
                 }
@@ -1612,7 +1629,15 @@ class MusicService :
         return hasAudioFocus
     }
 
+    private fun isLocalTrack(item: MediaItem?): Boolean {
+        if (item == null) return false
+        val scheme = item.localConfiguration?.uri?.scheme
+        return scheme == "content" || scheme == "file" ||
+            item.mediaId.startsWith("LOCAL_") || item.metadata?.localUri != null
+    }
+
     private fun waitOnNetworkError() {
+        if (isLocalTrack(player.currentMediaItem)) return
         if (waitingForNetworkConnection.value) return
 
         if (retryCount >= MAX_RETRY_COUNT) {
@@ -1739,6 +1764,8 @@ class MusicService :
 
     /** A failed stream the player has given up on: says so, and skips after the timeout unless that's turned off. */
     private fun failStream() {
+        waitingForNetworkConnection.value = false
+        retryJob?.cancel()
         player.pause()
         announceStreamFailure()
         clearStreamFailure()
@@ -1784,13 +1811,28 @@ class MusicService :
             com.mochyy.mochymusic.ui.component.TopToaster.error(notice.text)
             return
         }
+        val localTrack = isLocalTrack(player.currentMediaItem)
         val reason = when {
+            localTrack -> if (e != null) plainLocalReason(e) else "unknown error"
             !isNetworkConnected.value || (e != null && isNetworkRelatedError(e)) -> "no internet connection"
             e != null && getHttpResponseCode(e) != null -> "server error ${getHttpResponseCode(e)}"
             e != null -> plainReason(e)
             else -> "unknown error"
         }
-        com.mochyy.mochymusic.ui.component.TopToaster.error("Stream failed: $reason")
+        val prefix = if (localTrack) "Couldn't play local file" else "Stream failed"
+        com.mochyy.mochymusic.ui.component.TopToaster.error("$prefix: $reason")
+    }
+
+    private fun plainLocalReason(e: PlaybackException): String {
+        val causes = generateSequence<Throwable>(e) { it.cause }.toList()
+        return when {
+            causes.any { it is SecurityException } ||
+                e.errorCode == PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> "no permission to read file"
+            causes.any { it is java.io.FileNotFoundException } ||
+                e.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "file not found"
+            isContainerParseError(e) -> "unsupported or damaged audio file"
+            else -> plainReason(e)
+        }
     }
 
     /** A readable reason from the root cause, since IO_UNSPECIFIED alone says nothing. */
@@ -1943,6 +1985,11 @@ class MusicService :
             return
         }
 
+        cancelCrossfade()
+        waitingForNetworkConnection.value = false
+        retryJob?.cancel()
+        retryCount = 0
+        consecutivePlaybackErr = 0
         currentQueue = queue
         queueTitle = null
         resetQueueRunway()
@@ -2839,7 +2886,9 @@ class MusicService :
         reason: Int,
     ) {
         clearStreamFailure()
-        if (!promotingCrossmix) crossmixDirector.onItemChanged()
+        waitingForNetworkConnection.value = false
+        retryJob?.cancel()
+        if (!promotingCrossmix && !promotingCrossfade) crossmixDirector.onItemChanged()
 
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
             // round again: a mute or a low volume left by a mix or a fade went round with it and the loop played silent until a seek
@@ -2864,9 +2913,6 @@ class MusicService :
             manualCount = (manualCount - advanced).coerceAtLeast(0)
         }
         previousMediaItemIndex = player.currentMediaItemIndex
-        if (shuffleMode != ShuffleMode.OFF) {
-            ensureIdentityShuffleOrder()
-        }
 
         mediaItem?.mediaId?.let { announceStreamSource(it) }
         mediaItem?.mediaId?.let { announceMusicVideoAudio(it) }
@@ -2908,6 +2954,10 @@ class MusicService :
     ) {
         // IDLE is where a failed stream sits; anything else means it's loading or playing again
         if (playbackState != Player.STATE_IDLE) clearStreamFailure()
+        if (playbackState == Player.STATE_BUFFERING) {
+            waitingForNetworkConnection.value = false
+            retryJob?.cancel()
+        }
 
         if (playbackState == Player.STATE_ENDED) {
             val repeatMode = runBlocking { dataStore.get(RepeatModeKey, REPEAT_MODE_OFF) }
@@ -3262,6 +3312,10 @@ class MusicService :
             return
         }
 
+        if (isCrossfading) {
+            cancelCrossfade()
+        }
+
         // Offline mode refused a song that isn't on the device before anything went out. Nothing
         // to retry or recover - and the recovery below clears the song's cache, which is what
         // offline playback plays from - so straight on to the next song that is on the device.
@@ -3281,6 +3335,19 @@ class MusicService :
         }
 
         lastPlaybackError = error
+        val currentItem = player.currentMediaItem
+        val mediaId = currentItem?.mediaId
+        if (isLocalTrack(currentItem)) {
+            Timber.tag(TAG).w(error, "Local playback error occurred for $mediaId: errorCode=${error.errorCode}, message=${error.message}")
+            reportException(error)
+            if (isAudioRendererError(error) && (mediaId == null || !hasExceededRetryLimit(mediaId))) {
+                handleAudioRendererError(mediaId)
+                return
+            }
+            if (mediaId != null) markSongAsFailed(mediaId)
+            failStream()
+            return
+        }
         // every provider that's on was already asked: retrying would only ask them all again, so
         // straight on with the reason. Without a connection it waits for one like any other song.
         if (isNetworkConnected.value &&
@@ -3289,7 +3356,6 @@ class MusicService :
             failStream()
             return
         }
-        val mediaId = player.currentMediaItem?.mediaId
         Timber.tag(TAG).w(error, "Player error occurred for $mediaId: errorCode=${error.errorCode}, message=${error.message}, causes=${generateSequence<Throwable>(error) { it.cause }.joinToString(" <- ") { it.javaClass.simpleName + ":" + it.message }}")
         reportException(error)
 
@@ -3612,6 +3678,7 @@ class MusicService :
                 CacheDataSource
                     .Factory()
                     .setCache(playerCache)
+                    .setFlags(FLAG_IGNORE_CACHE_ON_ERROR)
                     .setUpstreamDataSourceFactory(
                         DefaultDataSource.Factory(
                             this,
@@ -3800,13 +3867,14 @@ class MusicService :
     fun shareDataSourceFactory(): DataSource.Factory = createDataSourceFactory()
 
     private fun createDataSourceFactory(): DataSource.Factory {
-        return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
+        val localFactory = DefaultDataSource.Factory(this)
+        val cachedFactory = ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
             // a stream a source module or backend resolved to a real URL (an HLS playlist, given
             // as a data: URI when the module rewrote it, and its segments) carries no media id:
             // it's fetched as it is
             val mediaId = dataSpec.key ?: run {
                 val scheme = dataSpec.uri.scheme
-                if (scheme == "https" || scheme == "http" || scheme == "data") return@Factory dataSpec
+                if (scheme == "https" || scheme == "http" || scheme == "data" || scheme == "content" || scheme == "file") return@Factory dataSpec
                 error("No media id")
             }
 
@@ -3963,6 +4031,47 @@ class MusicService :
                     .withRequestHeaders(dataSpec.httpRequestHeaders + nonNullPlayback.streamHeaders)
             }
         }
+        // Local content:// and file:// audio must read directly from storage without writing
+        // into playerCache or failing on cache locks/eviction across multi-song playback.
+        return DataSource.Factory {
+            object : DataSource {
+                private val listeners = ArrayList<androidx.media3.datasource.TransferListener>()
+                private var active: DataSource? = null
+
+                override fun addTransferListener(transferListener: androidx.media3.datasource.TransferListener) {
+                    listeners += transferListener
+                    active?.addTransferListener(transferListener)
+                }
+
+                override fun open(dataSpec: DataSpec): Long {
+                    val scheme = dataSpec.uri.scheme
+                    val source = if (scheme == "content" || scheme == "file") {
+                        localFactory.createDataSource()
+                    } else {
+                        cachedFactory.createDataSource()
+                    }
+                    listeners.forEach(source::addTransferListener)
+                    active = source
+                    return source.open(dataSpec)
+                }
+
+                override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+                    active?.read(buffer, offset, length) ?: C.RESULT_END_OF_INPUT
+
+                override fun getUri(): android.net.Uri? = active?.uri
+
+                override fun getResponseHeaders(): Map<String, List<String>> =
+                    active?.responseHeaders ?: emptyMap()
+
+                override fun close() {
+                    try {
+                        active?.close()
+                    } finally {
+                        active = null
+                    }
+                }
+            }
+        }
     }
 
     private fun announceMusicVideoAudio(mediaId: String) {
@@ -4058,10 +4167,19 @@ class MusicService :
                         factory
                     },
                     fetcherAction = { mediaId ->
-                        val forced = forcedRoutes.containsKey(mediaId)
-                        ((if (forced) null else deviceStream(mediaItem)) ?: routeStream(mediaId)).also { stream ->
-                            if (stream != null) playingStreams[mediaId] = stream else playingStreams.remove(mediaId)
+                        val local = isLocalTrack(mediaItem)
+                        val forced = !local && forcedRoutes.containsKey(mediaId)
+                        val stream = if (forced) {
+                            routeStream(mediaId)
+                        } else {
+                            deviceStream(mediaItem) ?: if (local) {
+                                throw java.io.FileNotFoundException("Local audio file not found")
+                            } else {
+                                routeStream(mediaId)
+                            }
                         }
+                        if (stream != null) playingStreams[mediaId] = stream else playingStreams.remove(mediaId)
+                        stream
                     },
                     onSourceResolved = { mediaId, source ->
                         resolvedStreamSources[mediaId] = source
@@ -4302,8 +4420,7 @@ class MusicService :
         abandonAudioFocus()
         releaseLoudnessEnhancer()
         crossmixDirector.release()
-        fadingLoudnessEnhancer?.runCatching { release() }
-        fadingLoudnessEnhancer = null
+        cancelCrossfade()
         mediaSession.release()
         player.removeListener(this)
         player.removeListener(sleepTimer)
@@ -4548,7 +4665,10 @@ class MusicService :
         // the next one first, then back, then the rest coming up
         val ids = (upcoming.take(1) + player.previousMediaItemIndex + upcoming.drop(1))
             .filter { it != C.INDEX_UNSET && it < player.mediaItemCount }
-            .map { player.getMediaItemAt(it).mediaId }
+            .mapNotNull { idx ->
+                val item = player.getMediaItemAt(idx)
+                item.mediaId.takeUnless { isLocalTrack(item) }
+            }
             .distinct()
         if (ids.isEmpty()) return
         prefetchJob = scope.launch(Dispatchers.IO) {
@@ -4604,11 +4724,13 @@ class MusicService :
 
     // starts targetIndex on a second player and crosses the two over in durationMs; the end-of-song crossfade and blended skips both come through here
     private fun crossfadeTo(targetIndex: Int, durationMs: Long) {
-        val savedRepeatMode = runBlocking { dataStore.get(RepeatModeKey, REPEAT_MODE_OFF) }
-        val savedShuffleEnabled = runBlocking { dataStore.get(ShuffleModeKey, false) }
+        cancelCrossfade()
 
-        secondaryPlayer = createExoPlayer()
-        val secPlayer = secondaryPlayer!!
+        val currentRepeatMode = player.repeatMode
+        val currentShuffleEnabled = player.shuffleModeEnabled
+
+        val secPlayer = createExoPlayer(publish = false)
+        secondaryPlayer = secPlayer
         secPlayer.addListener(secondaryPlayerListener)
 
         val items = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
@@ -4617,8 +4739,8 @@ class MusicService :
         secPlayer.playbackParameters = player.playbackParameters
         secPlayer.seekTo(targetIndex, 0L)
         secPlayer.volume = 0f
-        secPlayer.repeatMode = savedRepeatMode
-        secPlayer.shuffleModeEnabled = savedShuffleEnabled
+        secPlayer.repeatMode = currentRepeatMode
+        secPlayer.shuffleModeEnabled = currentShuffleEnabled
         secPlayer.prepare()
         secPlayer.playWhenReady = true
 
@@ -4627,38 +4749,57 @@ class MusicService :
 
     /**
      * Gives a player taking over the same shuffle order as the one handing over, so the queue the
-     * user sees carries on as it was. Each crossfade used to reshuffle everything from the new
-     * song, which brought songs that had already played back into the queue and changed what
-     * "next song" showed after every song.
+     * user sees carries on as it was.
      */
     private fun copyPlayOrder(from: Player, to: ExoPlayer) {
         val count = to.mediaItemCount
-        if (count > 0) {
+        if (count <= 0) return
+        val timeline = from.currentTimeline
+        if (!from.shuffleModeEnabled || timeline.isEmpty || timeline.windowCount != count) {
             to.setShuffleOrder(androidx.media3.exoplayer.source.ShuffleOrder.UnshuffledShuffleOrder(count))
+            return
         }
+        val order = IntArray(count)
+        val seen = BooleanArray(count)
+        var pos = 0
+        var idx = timeline.getFirstWindowIndex(true)
+        while (idx != C.INDEX_UNSET && pos < count) {
+            if (idx in 0 until count && !seen[idx]) {
+                seen[idx] = true
+                order[pos++] = idx
+            } else {
+                break
+            }
+            idx = timeline.getNextWindowIndex(idx, REPEAT_MODE_OFF, true)
+        }
+        for (i in 0 until count) {
+            if (!seen[i] && pos < count) order[pos++] = i
+        }
+        to.setShuffleOrder(DefaultShuffleOrder(order, System.currentTimeMillis()))
     }
 
     private fun performCrossfadeSwap(durationMs: Long) {
-        isCrossfading = true
         val nextPlayer = secondaryPlayer ?: return
         val currentPlayer = player
+        closeAudioEffectSession()
+        isCrossfading = true
 
         fadingPlayer = currentPlayer
         player = nextPlayer
-        _playerFlow.value = player
         secondaryPlayer = null
 
-        fadingPlayer?.removeListener(this)
-        fadingPlayer?.removeListener(sleepTimer)
+        currentPlayer.removeListener(this)
+        currentPlayer.removeListener(sleepTimer)
         // The old player has the whole queue too. If the new song took a moment to load, the fade
         // waited while the old one finished its song and rolled on into the next one - the same
         // song the new player was starting - so it played twice over itself.
-        fadingPlayer?.pauseAtEndOfMediaItems = true
+        currentPlayer.pauseAtEndOfMediaItems = true
 
-        nextPlayer.addListener(object : Player.Listener {
+        crossfadeMirrorListener?.let { nextPlayer.removeListener(it) }
+        val mirror = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 val out = fadingPlayer
-                if (!isCrossfading || out == null) {
+                if (!isCrossfading || out == null || player !== nextPlayer) {
                     nextPlayer.removeListener(this)
                     return
                 }
@@ -4671,38 +4812,68 @@ class MusicService :
                     out.pause()
                 }
             }
-        })
+        }
+        crossfadeMirrorListener = mirror
+        nextPlayer.addListener(mirror)
 
         nextPlayer.removeListener(secondaryPlayerListener)
         nextPlayer.addListener(this)
         nextPlayer.addListener(sleepTimer)
 
-        sleepTimer.player = player
+        sleepTimer.player = nextPlayer
+        _playerFlow.value = nextPlayer
 
         try {
-            (mediaSession as MediaSession).player = TransportFadingPlayer(player, transport, audioPass)
+            (mediaSession as MediaSession).player = TransportFadingPlayer(nextPlayer, transport, audioPass)
         } catch (e: Exception) {
             timber.log.Timber.e(e, "Failed to swap player in MediaSession")
+        }
+
+        currentMediaMetadata.value = nextPlayer.currentMetadata
+        promotingCrossfade = true
+        try {
+            onMediaItemTransition(
+                nextPlayer.currentMediaItem,
+                if (durationMs == SkipBlendMs) Player.MEDIA_ITEM_TRANSITION_REASON_SEEK else Player.MEDIA_ITEM_TRANSITION_REASON_AUTO,
+            )
+        } finally {
+            promotingCrossfade = false
         }
 
         crossfadeJob = scope.launch {
             val startVolume = runCatching { fadingPlayer?.volume ?: 1f }.getOrDefault(1f)
             // the old song carries on as it was until the new one is really heard, so a slow start never leaves a gap
-            while (isActive && !player.isPlaying) delay(CrossfadeFrameMs)
+            while (
+                isActive &&
+                player === nextPlayer &&
+                !nextPlayer.isPlaying &&
+                nextPlayer.playerError == null &&
+                nextPlayer.playbackState != Player.STATE_IDLE &&
+                nextPlayer.playbackState != Player.STATE_ENDED
+            ) {
+                delay(CrossfadeFrameMs)
+            }
             // stepped every frame by the time actually played: twenty fixed steps were heard as the volume jumping
             var heardMs = 0L
             var last = android.os.SystemClock.elapsedRealtime()
-            while (isActive && heardMs < durationMs) {
+            while (
+                isActive &&
+                player === nextPlayer &&
+                heardMs < durationMs &&
+                nextPlayer.playerError == null &&
+                nextPlayer.playbackState != Player.STATE_IDLE &&
+                nextPlayer.playbackState != Player.STATE_ENDED
+            ) {
                 delay(CrossfadeFrameMs)
                 val now = android.os.SystemClock.elapsedRealtime()
                 // a pause mid-crossfade holds both songs where they are
-                if (player.isPlaying) heardMs += now - last
+                if (nextPlayer.isPlaying) heardMs += now - last
                 last = now
                 val progress = (heardMs.toFloat() / durationMs).coerceIn(0f, 1f)
                 try {
                     // the new song fades up to the volume it should be at now: started from the old
                     // one's, a fade begun while muted or ducked ended at 0 or a fifth, and stayed
-                    player.volume = targetVolume() * kotlin.math.sin(progress * Math.PI / 2.0).toFloat()
+                    nextPlayer.volume = targetVolume() * kotlin.math.sin(progress * Math.PI / 2.0).toFloat()
                     fadingPlayer?.volume = startVolume * kotlin.math.cos(progress * Math.PI / 2.0).toFloat()
                 } catch (e: Exception) {
                     break
@@ -4711,25 +4882,63 @@ class MusicService :
 
             try {
                 fadingPlayer?.volume = 0f
-                player.volume = targetVolume()
+                if (player === nextPlayer) nextPlayer.volume = targetVolume()
                 cleanupCrossfade()
             } catch (e: Exception) { }
         }
     }
 
+    private fun cancelCrossfade() {
+        crossfadeTriggerJob?.cancel()
+        crossfadeTriggerJob = null
+        crossfadeJob?.cancel()
+        crossfadeJob = null
+        crossfadeMirrorListener?.let { listener ->
+            if (::player.isInitialized) player.removeListener(listener)
+        }
+        crossfadeMirrorListener = null
+        secondaryPlayer?.let { sec ->
+            sec.removeListener(secondaryPlayerListener)
+            releasePlayerResources(sec)
+        }
+        secondaryPlayer = null
+        fadingPlayer?.let(::releasePlayerResources)
+        fadingPlayer = null
+        fadingLoudnessEnhancer?.runCatching { release() }
+        fadingLoudnessEnhancer = null
+        isCrossfading = false
+        if (::player.isInitialized) {
+            runCatching { player.volume = targetVolume() }
+        }
+    }
+
     private fun cleanupCrossfade() {
-        fadingPlayer?.stop()
-        fadingPlayer?.clearMediaItems()
-        fadingPlayer?.release()
-        fadingPlayer?.let(playerCrossmixProcessors::remove)
-        fadingPlayer?.let(playerSilenceProcessors::remove)
-        fadingPlayer?.let(::unregisterEqualizer)
+        crossfadeJob = null
+        crossfadeMirrorListener?.let { listener ->
+            if (::player.isInitialized) player.removeListener(listener)
+        }
+        crossfadeMirrorListener = null
+        fadingPlayer?.let(::releasePlayerResources)
         fadingPlayer = null
         fadingLoudnessEnhancer?.runCatching { release() }
         fadingLoudnessEnhancer = null
         isCrossfading = false
         sleepTimer.notifySongTransition()
         prefetchNeighbours()
+    }
+
+    private fun releasePlayerResources(target: ExoPlayer) {
+        runCatching {
+            target.stop()
+            target.clearMediaItems()
+            target.release()
+        }
+        playerCrossmixProcessors.remove(target)
+        playerSilenceProcessors.remove(target)
+        playerReplayGain.remove(target)
+        playerSpectra.remove(target)
+        playerInspectors.remove(target)
+        unregisterEqualizer(target)
     }
 
     private fun unregisterEqualizer(player: Player) {
@@ -4793,10 +5002,7 @@ class MusicService :
         val uri = mediaItem.localConfiguration?.uri
         val file = when {
             uri?.scheme == "content" || uri?.scheme == "file" -> uri.toString()
-            // an imported file queued from somewhere that only had its id - a search result, a
-            // pinned tile, a radio - would otherwise be looked up on YouTube by that id
-            mediaId.startsWith("LOCAL_") -> database.song(mediaId).first()?.song?.localUri
-            else -> null
+            else -> mediaItem.metadata?.localUri ?: database.song(mediaId).first()?.song?.localUri
         }
         if (file != null) {
             forgetModuleFacts(mediaId)
@@ -4991,9 +5197,7 @@ class MusicService :
 
     /** An imported file, a download, or a song the player has cached whole. */
     private fun playsOffline(item: androidx.media3.common.MediaItem): Boolean {
-        val scheme = item.localConfiguration?.uri?.scheme
-        return scheme == "content" || scheme == "file" || item.mediaId.startsWith("LOCAL_") ||
-            isFullyDownloaded(item.mediaId) || isFullyCached(item.mediaId)
+        return isLocalTrack(item) || isFullyDownloaded(item.mediaId) || isFullyCached(item.mediaId)
     }
 
     /** every byte of the song is in the player's own cache, from having played it */
@@ -5106,15 +5310,7 @@ class MusicService :
         }
 
         override fun release(outgoing: ExoPlayer) {
-            runCatching {
-                outgoing.stop()
-                outgoing.clearMediaItems()
-                outgoing.release()
-            }
-            playerCrossmixProcessors.remove(outgoing)
-            playerSilenceProcessors.remove(outgoing)
-            playerReplayGain.remove(outgoing)
-            unregisterEqualizer(outgoing)
+            releasePlayerResources(outgoing)
             if (fadingPlayer === outgoing) fadingPlayer = null
             fadingLoudnessEnhancer?.runCatching { release() }
             fadingLoudnessEnhancer = null
@@ -5122,14 +5318,7 @@ class MusicService :
         }
 
         override fun discard(incoming: ExoPlayer) {
-            runCatching {
-                incoming.stop()
-                incoming.release()
-            }
-            playerCrossmixProcessors.remove(incoming)
-            playerSilenceProcessors.remove(incoming)
-            playerReplayGain.remove(incoming)
-            unregisterEqualizer(incoming)
+            releasePlayerResources(incoming)
         }
 
         override fun crossmixBlocker(): String? = when {

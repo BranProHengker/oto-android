@@ -834,6 +834,8 @@ fun HomeScreen(
     val playSong: (Song) -> Unit = { song ->
         if (song.id == mediaMetadataState.value?.id) {
             playerConnection.togglePlayPause()
+        } else if (song.song.isLocal) {
+            playerConnection.playQueue(ListQueue(title = song.song.title, items = listOf(song.toMediaItem())))
         } else {
             playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
         }

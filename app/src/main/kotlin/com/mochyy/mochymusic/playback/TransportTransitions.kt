@@ -74,7 +74,7 @@ class TransportTransitions(
 
     fun togglePlayPause() {
         val player = host.player
-        val playing = if (phase == Phase.Pausing) false else player.playWhenReady && player.playbackState != Player.STATE_ENDED
+        val playing = if (phase == Phase.Pausing) false else player.playWhenReady && player.playbackState != Player.STATE_ENDED && player.playbackState != Player.STATE_IDLE
         if (playing) pause() else play()
     }
 
@@ -127,7 +127,7 @@ class TransportTransitions(
     fun play() {
         val player = host.player
         val resumingFrom = if (phase == Phase.Pausing) currentLevel() else 0f
-        if (phase != Phase.Pausing && player.playWhenReady && player.playbackState != Player.STATE_ENDED) {
+        if (phase != Phase.Pausing && player.playWhenReady && player.playbackState != Player.STATE_ENDED && player.playbackState != Player.STATE_IDLE) {
             stopFade()
             return
         }

@@ -43,7 +43,7 @@ class DynamicResolvingMediaSource(
 
     private var innerMediaSource: MediaSource? = null
     private var timeline: Timeline? = null
-    private var fetchError: IOException? = null
+    @Volatile private var fetchError: IOException? = null
     private var fetchScope = CoroutineScope(Dispatchers.IO + Job())
 
     // The resolved stream's source is built and prepared on the playback thread this source was

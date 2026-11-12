@@ -99,7 +99,7 @@ class PlayerConnection(
         val initialState = try {
             val initialPlayer = getPlayerSafe()
             Triple(initialPlayer.playbackState, initialPlayer.playWhenReady,
-                   initialPlayer.playWhenReady && initialPlayer.playbackState != STATE_ENDED)
+                   initialPlayer.playWhenReady && initialPlayer.playbackState != STATE_ENDED && initialPlayer.playbackState != Player.STATE_IDLE)
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error during PlayerConnection initialization, using defaults")
             Triple(Player.STATE_IDLE, false, false)
@@ -109,7 +109,7 @@ class PlayerConnection(
         playWhenReady = MutableStateFlow(initialState.second)
         // a pause or play fade shows what you pressed straight away, not when the player catches up
         isPlaying = combine(playbackState, playWhenReady, service.transport.playIntent) { state, ready, intent ->
-            (intent ?: ready) && state != STATE_ENDED
+            (intent ?: ready) && state != STATE_ENDED && state != Player.STATE_IDLE
         }.stateIn(
             scope,
             SharingStarted.Lazily,
@@ -137,7 +137,7 @@ class PlayerConnection(
     }.stateIn(
         scope,
         SharingStarted.Lazily,
-        player.playbackState != STATE_ENDED && player.playWhenReady
+        player.playbackState != STATE_ENDED && player.playbackState != Player.STATE_IDLE && player.playWhenReady
     )
 
     val mediaMetadata = MutableStateFlow(player.currentMetadata)

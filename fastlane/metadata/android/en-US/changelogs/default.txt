@@ -1,7 +1,4 @@
-### What's New in Oto v1.0.7:
-- **Android TV Mode & Phone Link**: Added dedicated TV interface + phone-to-TV pairing, two-way library sync, local download streaming, and remote queue controls straight from the player menu.
-- **Blend Skips & Crossfade**: Preloads adjacent tracks (configurable ahead count, Data Saver aware) so skips/backs crossfade seamlessly.
-- **Per-Song Speed & Pitch**: Option to save playback speed and pitch exclusively for the current song.
-- **Storage Flexibility**: Choose any custom folder on internal storage or SD card for downloads and cache.
-- **Playlist, Search & Player Upgrades**: Auto-download new playlist songs, in-playlist & in-album search, Recent Searches, Studio Version playback for music videos, Keep Shuffle On, Poster chevron queue access, Discord custom artwork, and preserved Local .lrc File Picker + Smart 3-State Shuffle.
-- **Pure Oto Experience**: All upstream Mochy mascot assets, donate prompts, and branding stripped and aligned cleanly with Oto.
+### What's New in Oto v1.0.8:
+- **Local Playback & Offline Mode Fix**: Local audio files (`content://` / `file://`) now read directly from storage without hitting `playerCache` or falling back to online YouTube lookups.
+- **No False "Stream failed: no internet connection" on Local Songs**: Local playback errors never lock onto network retry loops when Offline Mode is enabled or WiFi/data is off, and report accurate file/permission errors cleanly.
+- **Crossfade & Multi-Track Stability Fix**: Fixed crossfade player swap deadlocks, preserved shuffle order across crossfades, prevented `isCrossfading` / `STATE_IDLE` lockups so playback never pauses permanently after several songs, and restored direct Play/Resume recovery from idle/error states.
