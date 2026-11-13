@@ -1,5 +1,4 @@
-### What's New in Oto v1.0.9:
-- **Direct Local MediaSource & Cancellation Race Fix**: Local `content://` and `file://` tracks now bypass `DynamicResolvingMediaSource` completely, eliminating `CancellationException` / `IO_UNSPECIFIED` ("stream interrupted") failures during queue changes, Hero Carousel rolls, and crossfades.
-- **MediaStore Fallback & Raw Path Normalization**: Added automatic `MediaStore.getMediaUri` fallback if opening a SAF `content://` URI fails, plus raw filesystem path normalization.
-- **Hero Carousel Local Playback Fix**: Local tracks rolled or played from the Hero Carousel now queue locally via `ListQueue` instead of invoking online YouTube Radio lookups.
-- **Clear Local Error Diagnostics**: Local playback errors surface the exact underlying cause instead of masking `IO_UNSPECIFIED` as "stream interrupted".
+### What's New in Oto v1.0.10:
+- **Resilient Local Audio Resolution (SAF Tree / Non-ASCII / Kanji Paths)**: Fixed the persistent local playback error (`Failed to determine if primary:... is child of primary:...`) caused by Android SAF `ExternalStorageProvider` canonicalization failures on deep folders or non-ASCII characters (e.g. Japanese Kanji). The new `LocalAudioResolver` transparently resolves document URIs directly to accessible filesystem paths or canonical `MediaStore` URIs.
+- **Universal Local Playback Direct Path**: Ensured all local playback triggers (single track, playlist, queue, shuffle, and Hero Carousel gacha roll) resolve local URIs directly through `DefaultMediaSourceFactory`, completely eliminating `DynamicResolvingMediaSource` cancellation races and spurious "stream interrupted" errors.
+- **Robust Multi-Strategy Fallback**: Multi-tier resolution (direct File -> MediaStore query by DATA -> MediaStore query by displayName + relativePath/size -> non-tree SAF document URI) ensures local tracks (including Hi-Res FLAC) play immediately without intermittent stalls.

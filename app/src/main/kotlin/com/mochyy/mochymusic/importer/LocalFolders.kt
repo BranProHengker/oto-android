@@ -51,6 +51,7 @@ object LocalFolders {
     fun mediaStoreUri(context: Context, document: Uri): Uri? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         return runCatching { MediaStore.getMediaUri(context, document) }.getOrNull()
+            ?: com.mochyy.mochymusic.playback.LocalAudioResolver.resolvePlayableUri(context, document).takeIf { it.scheme == "content" && it.authority == "media" }
     }
 
     /** every audio file under tree, folders inside it included. hidden folders are skipped */

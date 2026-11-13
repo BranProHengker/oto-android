@@ -1832,9 +1832,13 @@ class MusicService :
                 e.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "file not found"
             isContainerParseError(e) -> "unsupported or damaged audio file"
             e.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> {
-                causes.asReversed().firstNotNullOfOrNull { t ->
-                    t.message?.takeIf { it.isNotBlank() } ?: t.javaClass.simpleName.takeIf { it.isNotBlank() }
-                } ?: "could not read audio file"
+                val specific = causes.asReversed().firstNotNullOfOrNull { t ->
+                    val msg = t.message
+                    if (!msg.isNullOrBlank() && !msg.equals("stream interrupted", ignoreCase = true)) {
+                        msg
+                    } else null
+                }
+                specific ?: "could not read audio file"
             }
             else -> plainReason(e)
         }
@@ -4061,8 +4065,8 @@ class MusicService :
                         source.open(dataSpec)
                     } catch (primaryError: Exception) {
                         if (scheme == "content") {
-                            val fallback = com.mochyy.mochymusic.importer.LocalFolders.mediaStoreUri(this@MusicService, dataSpec.uri)
-                            if (fallback != null && fallback != dataSpec.uri) {
+                            val fallback = LocalAudioResolver.resolvePlayableUri(this@MusicService, dataSpec.uri)
+                            if (fallback != dataSpec.uri) {
                                 runCatching { source.close() }
                                 val retrySource = localFactory.createDataSource()
                                 listeners.forEach(retrySource::addTransferListener)
@@ -4175,16 +4179,31 @@ class MusicService :
         return object : androidx.media3.exoplayer.source.MediaSource.Factory by defaultFactory {
             override fun createMediaSource(mediaItem: androidx.media3.common.MediaItem): androidx.media3.exoplayer.source.MediaSource {
                 val uri = mediaItem.localConfiguration?.uri
-                if (uri?.scheme == "content" || uri?.scheme == "file") {
+                val local = isLocalTrack(mediaItem)
+                if (local || uri?.scheme == "content" || uri?.scheme == "file") {
                     val mediaId = mediaItem.mediaId
                     forgetModuleFacts(mediaId)
                     notePlayingFrom(mediaId, PlayingFrom(PlayingFrom.Device, "This device"))
                     resolvedStreamSources[mediaId] = "this device"
+
+                    val rawTargetUri = uri?.takeIf { it.scheme == "content" || it.scheme == "file" } ?: run {
+                        val localUriStr = mediaItem.metadata?.localUri
+                            ?: runBlocking(Dispatchers.IO) { database.song(mediaId).first()?.song?.localUri }
+                        localUriStr?.let(Uri::parse)
+                    }
+
+                    val resolvedUri = rawTargetUri?.let { LocalAudioResolver.resolvePlayableUri(this@MusicService, it) } ?: uri
+                    val resolvedItem = if (resolvedUri != null && resolvedUri != uri) {
+                        mediaItem.buildUpon().setUri(resolvedUri).build()
+                    } else {
+                        mediaItem
+                    }
+
                     playingStreams[mediaId] = com.mochyy.mochymusic.playback.custom.CustomStreamResult(
-                        streamUrl = uri.toString(),
+                        streamUrl = (resolvedUri ?: uri).toString(),
                         source = "this device",
                     )
-                    return defaultFactory.createMediaSource(mediaItem)
+                    return defaultFactory.createMediaSource(resolvedItem)
                 }
                 return com.mochyy.mochymusic.playback.custom.DynamicResolvingMediaSource(
                     originalMediaItem = mediaItem,
@@ -5037,7 +5056,8 @@ class MusicService :
             else -> mediaItem.metadata?.localUri ?: database.song(mediaId).first()?.song?.localUri
         }
         val file = rawFile?.let { path ->
-            if (path.startsWith("/")) android.net.Uri.fromFile(java.io.File(path)).toString() else path
+            val parsed = Uri.parse(path)
+            LocalAudioResolver.resolvePlayableUri(this, parsed).toString()
         }
         if (file != null) {
             forgetModuleFacts(mediaId)

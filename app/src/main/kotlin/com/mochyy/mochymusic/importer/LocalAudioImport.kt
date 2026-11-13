@@ -36,16 +36,17 @@ suspend fun importLocalAudio(
     database: MusicDatabase,
     uri: Uri,
 ): String {
+    val playableUri = com.mochyy.mochymusic.playback.LocalAudioResolver.resolvePlayableUri(context, uri)
     val metadata = withContext(Dispatchers.IO) {
-        extractAudioMetadata(context, uri)
+        extractAudioMetadata(context, playableUri)
     }
 
     // the file's own lyrics if its tags have any, saved with it so they work offline from the first play
     val embeddedLyrics = withContext(Dispatchers.IO) {
-        com.mochyy.mochymusic.lyrics.readEmbeddedLyrics(context, uri)
+        com.mochyy.mochymusic.lyrics.readEmbeddedLyrics(context, playableUri)
     }
 
-    val isAlac = withContext(Dispatchers.IO) { isMp4(metadata.mimeType) && holdsAlac(context, uri) }
+    val isAlac = withContext(Dispatchers.IO) { isMp4(metadata.mimeType) && holdsAlac(context, playableUri) }
 
     val songId = "LOCAL_${UUID.randomUUID()}"
     val thumbnailUrl = withContext(Dispatchers.IO) {
@@ -65,7 +66,7 @@ suspend fun importLocalAudio(
                     albumName = metadata.album,
                     isLocal = true,
                     inLibrary = LocalDateTime.now(),
-                    localUri = uri.toString(),
+                    localUri = playableUri.toString(),
                 ),
             )
 
