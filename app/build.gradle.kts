@@ -27,8 +27,8 @@ extensions.configure<ApplicationExtension> {
         applicationId = "co.oto.music"
         minSdk = 24
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.0.10"
+        versionCode = 12
+        versionName = "1.0.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -387,6 +387,9 @@ dependencies {
 
     implementation(libs.media3)
     implementation(libs.media3.session)
+    implementation(libs.car.app)
+    implementation(libs.car.app.projected)
+    implementation(libs.androidx.media)
     implementation(libs.media3.hls)
     implementation(libs.media3.dash)
     implementation(libs.media3.ui)

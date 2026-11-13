@@ -64,7 +64,7 @@ internal object PhoneLinkNotices {
         manager.notify(
             NoticeId,
             NotificationCompat.Builder(context, ChannelId)
-                .setSmallIcon(R.drawable.oto_notification)
+                .setSmallIcon(R.drawable.mochy_notification)
                 .setContentTitle(title)
                 .setContentText(detail)
                 .setContentIntent(open)

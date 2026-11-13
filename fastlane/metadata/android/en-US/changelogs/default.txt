@@ -1,4 +1,6 @@
-### What's New in Oto v1.0.10:
-- **Resilient Local Audio Resolution (SAF Tree / Non-ASCII / Kanji Paths)**: Fixed the persistent local playback error (`Failed to determine if primary:... is child of primary:...`) caused by Android SAF `ExternalStorageProvider` canonicalization failures on deep folders or non-ASCII characters (e.g. Japanese Kanji). The new `LocalAudioResolver` transparently resolves document URIs directly to accessible filesystem paths or canonical `MediaStore` URIs.
-- **Universal Local Playback Direct Path**: Ensured all local playback triggers (single track, playlist, queue, shuffle, and Hero Carousel gacha roll) resolve local URIs directly through `DefaultMediaSourceFactory`, completely eliminating `DynamicResolvingMediaSource` cancellation races and spurious "stream interrupted" errors.
-- **Robust Multi-Strategy Fallback**: Multi-tier resolution (direct File -> MediaStore query by DATA -> MediaStore query by displayName + relativePath/size -> non-tree SAF document URI) ensures local tracks (including Hi-Res FLAC) play immediately without intermittent stalls.
+### What's New in Oto v1.0.11:
+- **Android Auto (AA) Support & Voice Commands**: Added native Android Auto interface with browsable media catalogs, driver-friendly player, synced lyrics display on car head units, and Google Assistant voice playback support.
+- **Full Song Metadata & Tag Editor**: Integrated comprehensive in-app editor for song title, artist relations, album, release year, custom cover art, and YouTube video link pairing.
+- **Crossmix & AudioPass Enhancements**: Refined seamless crossfade transitions and pass blockers handling for pristine gapless listening.
+- **Device Interconnectivity & Remote Control**: Seamless pairing and synchronized control between Oto on phone, car, and TV with secure SecretVault credentials.
+- **App Behaviour Controls**: Added Pause on Mute toggle and Resume on Bluetooth Connect toggle in App Behaviour settings.

@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +68,8 @@ import com.mochyy.mochymusic.lyrics.LyricsUtils
 import com.mochyy.mochymusic.lyrics.YouTubeCaptionTranslation
 import com.mochyy.mochymusic.ui.component.AppSwitch
 import com.mochyy.mochymusic.ui.component.SheetIcon
+import com.mochyy.mochymusic.ui.component.TopToaster
+import com.mochyy.mochymusic.ui.menu.songedit.LyricsFileBox
 import com.mochyy.mochymusic.utils.rememberPreference
 import com.mochyy.mochymusic.viewmodels.LyricsMenuViewModel
 import kotlinx.coroutines.Dispatchers
@@ -242,37 +245,6 @@ fun LyricsProviderSheet(onDismiss: () -> Unit) {
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val lyricsEntity by playerConnection.currentLyrics.collectAsState(initial = null)
     val sources by viewModel.sources.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
-
-    val lrcPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
-    ) { uri: android.net.Uri? ->
-        val metadata = mediaMetadata
-        if (uri != null && metadata != null) {
-            val content = com.mochyy.mochymusic.lyrics.SidecarLyrics.readFromUri(context, uri)
-            if (!content.isNullOrBlank()) {
-                viewModel.useLocalLyrics(metadata, content, com.mochyy.mochymusic.lyrics.SidecarLyrics.Provider)
-                onDismiss()
-            }
-        }
-    }
-
-    var sidecarLyrics by remember { mutableStateOf<String?>(null) }
-    var embeddedLyrics by remember { mutableStateOf<String?>(null) }
-
-    androidx.compose.runtime.LaunchedEffect(mediaMetadata?.localUri) {
-        val uriStr = mediaMetadata?.localUri
-        if (uriStr != null) {
-            val uri = android.net.Uri.parse(uriStr)
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                sidecarLyrics = com.mochyy.mochymusic.lyrics.SidecarLyrics.find(context, uri)
-                embeddedLyrics = com.mochyy.mochymusic.lyrics.readEmbeddedLyrics(context, uri)
-            }
-        } else {
-            sidecarLyrics = null
-            embeddedLyrics = null
-        }
-    }
 
     androidx.compose.runtime.LaunchedEffect(mediaMetadata?.id) {
         mediaMetadata?.let(viewModel::checkSources)
@@ -294,6 +266,7 @@ fun LyricsProviderSheet(onDismiss: () -> Unit) {
         )
     }
     val active = lyricsEntity?.provider
+    val addedText = stringResource(R.string.lyrics_file_added)
 
     MenuSheetSurface(onDismiss = onDismiss, wrapHeight = true) { _ ->
         val closeSheet = LocalMenuSheetClose.current
@@ -312,135 +285,16 @@ fun LyricsProviderSheet(onDismiss: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Action to pick custom .lrc file from storage
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MenuRowSurface)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = RemoteFocus,
-                    ) {
-                        lrcPicker.launch(arrayOf("*/*"))
-                    }
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.add),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Pick Local .lrc File",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "Select .lrc from device storage",
-                        color = Color(0xFF9A9A9A),
-                        fontSize = 11.sp,
-                    )
-                }
-            }
-
-            // Detected local sidecar .lrc if present
-            sidecarLyrics?.let { sidecarText ->
-                val isSidecarActive = active == com.mochyy.mochymusic.lyrics.SidecarLyrics.Provider
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MenuRowSurface)
-                        .clickable(
-                            enabled = !isSidecarActive,
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = RemoteFocus,
-                        ) {
-                            val metadata = mediaMetadata
-                            if (metadata != null) {
-                                viewModel.useLocalLyrics(metadata, sidecarText, com.mochyy.mochymusic.lyrics.SidecarLyrics.Provider)
-                                closeSheet()
-                            }
-                        }
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF4CD964))
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Local File (.lrc)",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = if (isSidecarActive) "In use" else "Available",
-                        color = if (isSidecarActive) Color.White else Color(0xFF9A9A9A),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-
-            // Detected embedded lyrics if present
-            embeddedLyrics?.let { embeddedText ->
-                val isEmbeddedActive = active == com.mochyy.mochymusic.lyrics.EmbeddedLyrics.Provider
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MenuRowSurface)
-                        .clickable(
-                            enabled = !isEmbeddedActive,
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = RemoteFocus,
-                        ) {
-                            val metadata = mediaMetadata
-                            if (metadata != null) {
-                                viewModel.useLocalLyrics(metadata, embeddedText, com.mochyy.mochymusic.lyrics.EmbeddedLyrics.Provider)
-                                closeSheet()
-                            }
-                        }
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF4CD964))
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Embedded Song File",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = if (isEmbeddedActive) "In use" else "Available",
-                        color = if (isEmbeddedActive) Color.White else Color(0xFF9A9A9A),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
+            // your own file sits above every source and, like tapping one, takes over straight away
+            LyricsFileBox(
+                picked = null,
+                onPicked = { file ->
+                    mediaMetadata?.let { viewModel.saveLyrics(it.id, file.text) }
+                    TopToaster.show(text = addedText, iconRes = R.drawable.lyrics)
+                    closeSheet()
+                },
+            )
+            Spacer(modifier = Modifier.height(14.dp))
 
             // A left-aligned list, not centred pills. These are named options being chosen from,
             // so they read down a common left edge like every other menu in the app; centred pills

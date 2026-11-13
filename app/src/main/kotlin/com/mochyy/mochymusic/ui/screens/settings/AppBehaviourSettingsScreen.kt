@@ -52,6 +52,8 @@ import com.mochyy.mochymusic.constants.LyricsMotionStyle
 import com.mochyy.mochymusic.constants.LyricsMotionStyleKey
 import com.mochyy.mochymusic.constants.MixWithOtherAppsKey
 import com.mochyy.mochymusic.constants.OfflineModeKey
+import com.mochyy.mochymusic.constants.PauseOnMute
+import com.mochyy.mochymusic.constants.ResumeOnBluetoothConnectKey
 import com.mochyy.mochymusic.constants.PersistentQueueKey
 import com.mochyy.mochymusic.constants.PersistentShuffleAcrossQueuesKey
 import com.mochyy.mochymusic.constants.ProxyEnabledKey
@@ -181,6 +183,8 @@ private fun generalItems(navController: NavController): List<SettingsItem> {
     val (dataSaverMobileOnly, onDataSaverMobileOnlyChange) = rememberPreference(DataSaverMobileOnlyKey, defaultValue = true)
     val (stopOnTaskRemoved, onStopOnTaskRemoved) = rememberPreference(StopPlaybackOnTaskRemovedKey, defaultValue = false)
     val (mixWithOtherApps, onMixWithOtherAppsChange) = rememberPreference(MixWithOtherAppsKey, defaultValue = false)
+    val (resumeOnBluetooth, onResumeOnBluetoothChange) = rememberPreference(ResumeOnBluetoothConnectKey, defaultValue = false)
+    val (pauseOnMute, onPauseOnMuteChange) = rememberPreference(PauseOnMute, defaultValue = false)
     val (persistentQueue, onPersistentQueueChange) = rememberPreference(PersistentQueueKey, defaultValue = true)
     val (albumsFromLikes, onAlbumsFromLikesChange) = rememberPreference(AlbumsFromLikedSongsKey, defaultValue = false)
     val (proxyOn) = rememberPreference(ProxyEnabledKey, defaultValue = false)
@@ -265,6 +269,22 @@ private fun generalItems(navController: NavController): List<SettingsItem> {
             icon = painterResource(R.drawable.volume_up),
             checked = mixWithOtherApps,
             onCheckedChange = onMixWithOtherAppsChange,
+        ),
+        switchItem(
+            key = "Resume on Bluetooth",
+            title = stringResource(R.string.playback_resume_bluetooth),
+            description = stringResource(R.string.playback_resume_bluetooth_desc),
+            icon = painterResource(R.drawable.bluetooth),
+            checked = resumeOnBluetooth,
+            onCheckedChange = onResumeOnBluetoothChange,
+        ),
+        switchItem(
+            key = "Pause when muted",
+            title = stringResource(R.string.pause_music_when_media_is_muted),
+            description = stringResource(R.string.pause_music_when_muted_desc),
+            icon = painterResource(R.drawable.volume_off),
+            checked = pauseOnMute,
+            onCheckedChange = onPauseOnMuteChange,
         ),
         switchItem(
             key = "Save Player's last state",
