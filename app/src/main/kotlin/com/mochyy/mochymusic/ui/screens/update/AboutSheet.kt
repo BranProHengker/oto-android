@@ -60,85 +60,11 @@ import com.mochyy.mochymusic.ui.player.menu.MenuRowSurface
 import com.mochyy.mochymusic.ui.component.RemoteFocus
 
 @Immutable
-private data class CreditEntry(
-    val name: String,
-    val subtitle: String,
-    val githubUser: String,
-    val url: String,
-)
-
-@Immutable
 private data class LicenseEntry(
     val tag: String,
     val title: String,
     val subtitle: String,
     val url: String,
-)
-
-private val BaseCredits = listOf(
-    CreditEntry(
-        name = "vivizzz007",
-        subtitle = "Vivimusic dev, The base of this app",
-        githubUser = "vivizzz007",
-        url = "https://github.com/vivizzz007/vivi-music",
-    ),
-    CreditEntry(
-        name = "Mostafa Alagamy",
-        subtitle = "Metrolist dev, The base of vivmusic too",
-        githubUser = "mostafaalagamy",
-        url = "https://github.com/mostafaalagamy/Metrolist",
-    ),
-)
-
-private val MoreCredits = listOf(
-    CreditEntry(
-        name = "maxrave-dev",
-        subtitle = "SimpMusic · lyrics API provider",
-        githubUser = "maxrave-dev",
-        url = "https://github.com/maxrave-dev/SimpMusic",
-    ),
-    CreditEntry(
-        name = "Rukamori",
-        subtitle = "ArchiveTune · design & architecture inspiration",
-        githubUser = "rukamori",
-        url = "https://github.com/rukamori/ArchiveTune",
-    ),
-    CreditEntry(
-        name = "fast4x",
-        subtitle = "RiMusic · YouTube Music InnerTube service wrapper",
-        githubUser = "fast4x",
-        url = "https://github.com/fast4x/RiMusic",
-    ),
-    CreditEntry(
-        name = "tranxuanthang",
-        subtitle = "LRCLIB · synchronized LRC lyrics provider",
-        githubUser = "tranxuanthang",
-        url = "https://github.com/tranxuanthang/lrclib",
-    ),
-    CreditEntry(
-        name = "monochrome-music",
-        subtitle = "Monochrome Music · lossless FLAC streams",
-        githubUser = "monochrome-music",
-        url = "https://github.com/monochrome-music/monochrome",
-    ),
-    CreditEntry(
-        name = "Jaakko Pasanen",
-        subtitle = "AutoEq · headphone equalizer database",
-        githubUser = "jaakkopasanen",
-        url = "https://github.com/jaakkopasanen/AutoEq",
-    ),
-    CreditEntry(
-        name = "Ibra Al Tabian",
-        subtitle = "LyricsPlus · open source lyrics server",
-        githubUser = "ibratabian17",
-        url = "https://github.com/ibratabian17/LyricsPlus",
-    ),
-    CreditEntry(
-        name = "Boidushya",
-        subtitle = "Better Lyrics API · synced syllable lyrics",
-        githubUser = "boidushya",
-        url = "https://github.com/better-lyrics/api",
-    ),
 )
 
 private val Licenses = listOf(
@@ -192,21 +118,10 @@ private val Licenses = listOf(
     ),
 )
 
-// github redirects username.png straight to the user's current avatar without counting against the api rate limit
-private fun githubAvatarUrl(githubUser: String): String =
-    "https://github.com/$githubUser.png?size=160"
-
 fun PopupSheetState.showAboutSheet(onOpenDevSpace: (Int) -> Unit = {}) {
     val popup = this
     show(buttonBar = { SheetPrimaryButton(text = "Done", onClick = popup::dismiss) }) {
         AboutSheetContent(popup = popup, onOpenDevSpace = onOpenDevSpace)
-    }
-}
-
-private fun PopupSheetState.showCreditsSheet() {
-    val popup = this
-    show(buttonBar = { SheetPrimaryButton(text = "Done", onClick = popup::dismiss) }) {
-        CreditsSheetContent()
     }
 }
 
@@ -319,33 +234,6 @@ private fun ColumnScope.AboutSheetContent(
             }
 
             Spacer(Modifier.height(18.dp))
-            SectionHeader("we wont exist without these guys")
-            Spacer(Modifier.height(8.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MenuRowSurface)
-                    .padding(vertical = 6.dp),
-            ) {
-                BaseCredits.forEach { credit ->
-                    PersonRow(
-                        name = credit.name,
-                        subtitle = credit.subtitle,
-                        avatarUrl = githubAvatarUrl(credit.githubUser),
-                        showArrow = false,
-                        onClick = { context.openUrl(credit.url) },
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            AndMoreRow(
-                avatars = remember { MoreCredits.take(3).map { githubAvatarUrl(it.githubUser) } },
-                onClick = { popup.showCreditsSheet() },
-            )
-
-            Spacer(Modifier.height(18.dp))
             SectionHeader("License")
             Spacer(Modifier.height(8.dp))
             AboutCardButton(
@@ -354,44 +242,6 @@ private fun ColumnScope.AboutSheetContent(
             )
             Spacer(Modifier.height(8.dp))
         }
-    }
-}
-
-@Composable
-private fun ColumnScope.CreditsSheetContent() {
-    val context = LocalContext.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-    ) {
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Credits",
-            fontSize = 36.sp,
-            lineHeight = 38.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-1.4).sp,
-        )
-        Spacer(Modifier.height(16.dp))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(MenuRowSurface)
-                .padding(vertical = 6.dp),
-        ) {
-            (BaseCredits + MoreCredits).forEach { credit ->
-                PersonRow(
-                    name = credit.name,
-                    subtitle = credit.subtitle,
-                    avatarUrl = githubAvatarUrl(credit.githubUser),
-                    showArrow = true,
-                    onClick = { context.openUrl(credit.url) },
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -486,102 +336,6 @@ private fun AboutCardButton(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PersonRow(
-    name: String,
-    subtitle: String?,
-    avatarUrl: String,
-    showArrow: Boolean,
-    onClick: () -> Unit,
-    @DrawableRes fallbackRes: Int? = null,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .pressBounce(interaction, pressedScale = 0.98f)
-            .fillMaxWidth()
-            .clickable(interactionSource = interaction, indication = RemoteFocus, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        GithubAvatar(
-            url = avatarUrl,
-            size = 44.dp,
-            fallbackRes = fallbackRes,
-        )
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = name,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.4).sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = (-0.2).sp,
-                    color = Color.White.copy(alpha = 0.65f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        if (showArrow) {
-            Spacer(Modifier.width(10.dp))
-            ArrowBadge()
-        }
-    }
-}
-
-@Composable
-private fun AndMoreRow(
-    avatars: List<String>,
-    onClick: () -> Unit,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    val circleSize = 22.dp
-    val step = 13.dp
-    val stackWidth = circleSize + step * (avatars.size - 1).coerceAtLeast(0)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .pressBounce(interaction, pressedScale = 0.97f)
-            .fillMaxWidth()
-            .height(54.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(MenuRowSurface)
-            .clickable(interactionSource = interaction, indication = RemoteFocus, onClick = onClick)
-            .padding(horizontal = 16.dp),
-    ) {
-        Box(
-            contentAlignment = Alignment.CenterStart,
-            modifier = Modifier.width(stackWidth).height(circleSize),
-        ) {
-            avatars.forEachIndexed { index, url ->
-                GithubAvatar(
-                    url = url,
-                    size = circleSize,
-                    modifier = Modifier
-                        .offset(x = step * index)
-                        .border(1.5.dp, MenuRowSurface, CircleShape),
-                )
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = "And more \u2192",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.4).sp,
-        )
-    }
-}
-
-@Composable
 private fun LicenseCard(
     entry: LicenseEntry,
     onClick: () -> Unit,
@@ -640,38 +394,6 @@ private fun ArrowBadge() {
             contentDescription = null,
             tint = Color.White.copy(alpha = 0.85f),
             modifier = Modifier.size(12.dp),
-        )
-    }
-}
-
-@Composable
-private fun GithubAvatar(
-    url: String,
-    size: Dp,
-    modifier: Modifier = Modifier,
-    @DrawableRes fallbackRes: Int? = null,
-) {
-    val context = LocalContext.current
-    val request = remember(url) {
-        ImageRequest.Builder(context)
-            .data(url)
-            .crossfade(true)
-            .build()
-    }
-    val fallback = fallbackRes?.let { painterResource(it) }
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(Color(0xFFD9D9D9)),
-    ) {
-        AsyncImage(
-            model = request,
-            contentDescription = null,
-            placeholder = fallback,
-            error = fallback,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
         )
     }
 }

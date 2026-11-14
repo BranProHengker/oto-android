@@ -99,6 +99,9 @@ private suspend fun getReleases(force: Boolean): Result<List<ParsedRelease>> {
             if (cached != null && System.currentTimeMillis() - cachedAt < CacheTtlMillis) {
                 return cached
             }
+        } else {
+            cachedResult = null
+            inFlight = null
         }
         inFlight ?: updateScope.async { fetchReleases() }.also { inFlight = it }
     }
@@ -134,8 +137,11 @@ private suspend fun fetchReleases(): Result<List<ParsedRelease>> = withContext(D
         val connection = (URL(ReleasesApi).openConnection() as HttpURLConnection).apply {
             connectTimeout = 12_000
             readTimeout = 12_000
+            useCaches = false
             setRequestProperty("Accept", "application/vnd.github+json")
             setRequestProperty("User-Agent", "oto-android")
+            setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate")
+            setRequestProperty("Pragma", "no-cache")
         }
         val json = connection.inputStream.bufferedReader().use { it.readText() }
         val releases = JSONArray(json)
@@ -225,22 +231,34 @@ private suspend fun fetchReleases(): Result<List<ParsedRelease>> = withContext(D
     }
 }
 
-fun isNewerThanInstalled(candidateVersionText: String): Boolean {
+fun isNewerThanInstalled(candidateVersionText: String, publishedAt: String = ""): Boolean {
     val candidate = parseFullVersion(candidateVersionText)
     val installed = parseFullVersion(BuildConfig.VERSION_NAME)
-    return candidate > installed
+    if (candidate > installed) return true
+    if (candidate == installed && publishedAt.isNotBlank()) {
+        val publishedMillis = runCatching {
+            java.time.Instant.parse(publishedAt).toEpochMilli()
+        }.getOrNull()
+        if (publishedMillis != null && BuildConfig.BUILD_TIME_MILLIS > 0L &&
+            publishedMillis > (BuildConfig.BUILD_TIME_MILLIS + 60_000L)
+        ) {
+            return true
+        }
+    }
+    return false
 }
 
 suspend fun downloadApk(
     context: Context,
     release: GithubRelease,
+    force: Boolean = false,
     onProgress: (Float) -> Unit,
 ): Result<File> = withContext(Dispatchers.IO) {
     runCatching {
         val url = release.apkUrl ?: error("This release has no APK attached")
         val target = apkFileFor(context, release)
 
-        if (isDownloaded(context, release)) {
+        if (!force && isDownloaded(context, release)) {
             onProgress(1f)
             return@runCatching target
         }
@@ -274,8 +292,16 @@ suspend fun downloadApk(
     }
 }
 
-fun apkFileFor(context: Context, release: GithubRelease): File =
-    File(context.cacheDir, release.apkName ?: "oto-update.apk")
+fun apkFileFor(context: Context, release: GithubRelease): File {
+    val cleanPublished = release.publishedAt.replace(":", "-").replace(".", "-")
+    val suffix = if (cleanPublished.isNotBlank()) "-$cleanPublished" else ""
+    val name = release.apkName?.let {
+        val base = it.substringBeforeLast('.')
+        val ext = it.substringAfterLast('.', "apk")
+        "$base$suffix.$ext"
+    } ?: "oto-update$suffix.apk"
+    return File(context.cacheDir, name)
+}
 
 fun isDownloaded(context: Context, release: GithubRelease): Boolean {
     val f = apkFileFor(context, release)

@@ -17,6 +17,8 @@ object LocalAudioResolver {
     private const val TAG = "LocalAudioResolver"
     private val uriCache = java.util.concurrent.ConcurrentHashMap<String, Uri>()
 
+    fun getCachedPlayableUri(uri: Uri): Uri? = uriCache[uri.toString()]
+
     /**
      * Resolves a local audio URI (which may be a SAF tree document URI with nested paths
      * or non-ASCII characters, a direct document URI, or a MediaStore/file URI) into
@@ -239,17 +241,14 @@ object LocalAudioResolver {
                     val childDocId = cursor.getString(0) ?: continue
                     val displayName = cursor.getString(1) ?: continue
                     val childExt = displayName.substringAfterLast('.', "")
-                    if (!childExt.equals(oldExt, ignoreCase = true)) continue
+                    if (oldExt.isNotBlank() && !childExt.equals(oldExt, ignoreCase = true)) continue
 
                     val childBase = displayName.substringBeforeLast('.')
                     if (childBase.equals(oldBase, ignoreCase = true)) {
                         return@use DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
                     }
 
-                    if (childBase.startsWith(oldBase, ignoreCase = true) ||
-                        oldBase.startsWith(childBase, ignoreCase = true) ||
-                        cleanTitle(childBase).equals(cleanTitle(oldBase), ignoreCase = true)
-                    ) {
+                    if (isTitleMatch(oldBase, childBase)) {
                         candidateDocId = childDocId
                     }
                 }
@@ -271,17 +270,14 @@ object LocalAudioResolver {
             var bestMatch: File? = null
             for (candidate in candidates) {
                 if (!candidate.isFile) continue
-                if (!candidate.extension.equals(oldExt, ignoreCase = true)) continue
+                if (oldExt.isNotBlank() && !candidate.extension.equals(oldExt, ignoreCase = true)) continue
 
                 val candidateBase = candidate.nameWithoutExtension
                 if (candidateBase.equals(oldBase, ignoreCase = true)) {
                     bestMatch = candidate
                     break
                 }
-                if (candidateBase.startsWith(oldBase, ignoreCase = true) ||
-                    oldBase.startsWith(candidateBase, ignoreCase = true) ||
-                    cleanTitle(candidateBase).equals(cleanTitle(oldBase), ignoreCase = true)
-                ) {
+                if (isTitleMatch(oldBase, candidateBase)) {
                     bestMatch = candidate
                 }
             }
@@ -289,28 +285,62 @@ object LocalAudioResolver {
         }.getOrNull()
     }
 
-    private fun cleanTitle(name: String): String {
-        return name
-            .substringBeforeLast(" - ")
-            .trim()
-            .replace(Regex("\\s+"), " ")
+    private fun isTitleMatch(oldBase: String, candidateBase: String): Boolean {
+        val c = candidateBase.trim()
+        val t = oldBase.trim()
+        if (c.equals(t, ignoreCase = true)) return true
+        if (c.startsWith(t, ignoreCase = true) || t.startsWith(c, ignoreCase = true)) return true
+
+        val candClean = stripSuffix(c)
+        val targetClean = stripSuffix(t)
+        if (candClean.equals(targetClean, ignoreCase = true) ||
+            candClean.equals(t, ignoreCase = true) ||
+            c.equals(targetClean, ignoreCase = true)
+        ) return true
+
+        // Compare bare song title without artist prefix ("Artist - Title" -> "Title")
+        val candTitle = if (candClean.contains(" - ")) candClean.substringAfterLast(" - ").trim() else candClean
+        val targetTitle = if (targetClean.contains(" - ")) targetClean.substringAfterLast(" - ").trim() else targetClean
+        if (candTitle.isNotEmpty() && targetTitle.isNotEmpty() && candTitle.equals(targetTitle, ignoreCase = true)) {
+            return true
+        }
+
+        return false
+    }
+
+    private fun stripSuffix(name: String): String {
+        return if (name.contains(" - ")) name.substringBeforeLast(" - ").trim() else name.trim()
     }
 
     private fun findRenamedFileInMediaStore(context: Context, oldFileName: String): Uri? {
         val oldBase = oldFileName.substringBeforeLast('.')
+        val oldExt = oldFileName.substringAfterLast('.', "")
         val externalUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME)
-        val selection = "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE ?"
-        val selectionArgs = arrayOf("$oldBase%")
 
-        return runCatching {
-            context.contentResolver.query(externalUri, projection, selection, selectionArgs, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
-                    ContentUris.withAppendedId(externalUri, id)
-                } else null
-            }
-        }.getOrNull()
+        val cleanPrefix = stripSuffix(oldBase)
+        val queries = listOf("$oldBase%", "$cleanPrefix%")
+        for (q in queries.distinct()) {
+            val selection = "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE ?"
+            val selectionArgs = arrayOf(q)
+
+            val match = runCatching {
+                context.contentResolver.query(externalUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
+                        val name = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)) ?: continue
+                        val ext = name.substringAfterLast('.', "")
+                        if (oldExt.isNotBlank() && !ext.equals(oldExt, ignoreCase = true)) continue
+                        if (isTitleMatch(oldBase, name.substringBeforeLast('.'))) {
+                            return@use ContentUris.withAppendedId(externalUri, id)
+                        }
+                    }
+                    null
+                }
+            }.getOrNull()
+            if (match != null) return match
+        }
+        return null
     }
 
     fun queryMediaStore(context: Context, file: File): Uri? {

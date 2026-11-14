@@ -4078,9 +4078,18 @@ class MusicService :
                     return try {
                         source.open(dataSpec)
                     } catch (primaryError: Exception) {
-                        if (scheme == "content") {
+                        if (scheme == "content" || scheme == "file") {
                             val fallback = LocalAudioResolver.resolvePlayableUri(this@MusicService, dataSpec.uri)
                             if (fallback != dataSpec.uri) {
+                                scope.launch(Dispatchers.IO) {
+                                    runCatching {
+                                        database.openHelper.writableDatabase.execSQL(
+                                            "UPDATE song SET localUri = ? WHERE localUri = ?",
+                                            arrayOf(fallback.toString(), dataSpec.uri.toString())
+                                        )
+                                        Timber.tag(TAG).i("Auto-healed localUri in database: ${dataSpec.uri} -> $fallback")
+                                    }
+                                }
                                 runCatching { source.close() }
                                 val retrySource = localFactory.createDataSource()
                                 listeners.forEach(retrySource::addTransferListener)
@@ -4203,7 +4212,8 @@ class MusicService :
                     val rawTargetUri = uri?.takeIf { it.scheme == "content" || it.scheme == "file" }
                         ?: mediaItem.metadata?.localUri?.let(Uri::parse)
 
-                    val resolvedUri = rawTargetUri?.let { LocalAudioResolver.resolvePlayableUri(this@MusicService, it) } ?: uri
+                    val cachedUri = rawTargetUri?.let { LocalAudioResolver.getCachedPlayableUri(it) }
+                    val resolvedUri = cachedUri ?: rawTargetUri ?: uri
                     if (resolvedUri != null && rawTargetUri != null && resolvedUri != rawTargetUri) {
                         scope.launch(Dispatchers.IO) {
                             runCatching {

@@ -105,7 +105,7 @@ fun UpdateNotificationOpener(requests: Int, onOpenDevSpace: (Int) -> Unit = {}) 
     LaunchedEffect(requests) {
         if (requests == 0) return@LaunchedEffect
         val release = getLatestRelease().getOrNull()
-        val state = if (release != null && isNewerThanInstalled(release.version)) {
+        val state = if (release != null && isNewerThanInstalled(release.version, release.publishedAt)) {
             UpdateState.Available(release)
         } else {
             UpdateState.UpToDate

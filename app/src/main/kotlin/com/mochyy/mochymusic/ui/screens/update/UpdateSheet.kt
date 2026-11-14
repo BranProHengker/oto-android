@@ -104,7 +104,7 @@ private suspend fun checkUpdate(force: Boolean): UpdateState =
         onSuccess = { release ->
             when {
                 release == null -> UpdateState.UpToDate
-                isNewerThanInstalled(release.version) -> UpdateState.Available(release)
+                isNewerThanInstalled(release.version, release.publishedAt) -> UpdateState.Available(release)
                 else -> UpdateState.UpToDate
             }
         },
@@ -231,6 +231,7 @@ private fun ColumnScope.UpdateSheetContent(
             Spacer(Modifier.height(16.dp))
             UpdateStatusCard(
                 state = state,
+                latest = latest,
                 onUpdate = { popup.showUpdateDetailSheet(it) },
                 onRetry = checkAgain,
             )
@@ -303,6 +304,7 @@ private fun ChannelBadge(latest: GithubRelease?) {
 @Composable
 private fun UpdateStatusCard(
     state: UpdateState,
+    latest: GithubRelease?,
     onUpdate: (GithubRelease) -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -324,14 +326,23 @@ private fun UpdateStatusCard(
             label = "updateStatus",
         ) { shown ->
             when (shown) {
-                is UpdateState.Available -> StatusRow(
-                    title = "New update!",
-                    big = shortVersion(shown.release.version),
-                    action = "UPDATE NOW",
-                    onAction = { onUpdate(shown.release) },
-                )
+                is UpdateState.Available -> {
+                    val isSameVersionNewBuild = parseFullVersion(shown.release.version).copy(buildNumber = 0) ==
+                        parseFullVersion(BuildConfig.VERSION_NAME).copy(buildNumber = 0)
+                    StatusRow(
+                        title = if (isSameVersionNewBuild) "New build available!" else "New update!",
+                        big = shortVersion(shown.release.version),
+                        action = "UPDATE NOW",
+                        onAction = { onUpdate(shown.release) },
+                    )
+                }
                 UpdateState.Checking -> StatusRow(title = "Looking for updates", big = "…", pulsing = true)
-                UpdateState.UpToDate -> StatusRow(title = "You're on the latest", big = "All good")
+                UpdateState.UpToDate -> StatusRow(
+                    title = "You're on the latest",
+                    big = "All good",
+                    action = latest?.let { "REINSTALL" },
+                    onAction = { latest?.let(onUpdate) },
+                )
                 is UpdateState.Failed -> StatusRow(
                     title = "Couldn't check for updates",
                     big = "Offline?",

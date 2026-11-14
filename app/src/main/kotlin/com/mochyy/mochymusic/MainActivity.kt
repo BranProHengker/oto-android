@@ -492,7 +492,7 @@ class MainActivity : ComponentActivity() {
                 // only: nothing about updates runs in the background.
                 val release = com.mochyy.mochymusic.core.updater.getLatestRelease().getOrNull()
                 val isAvailable = release != null &&
-                    com.mochyy.mochymusic.core.updater.isNewerThanInstalled(release.version)
+                    com.mochyy.mochymusic.core.updater.isNewerThanInstalled(release.version, release.publishedAt)
                 saveUpdateAvailableState(context, isAvailable)
 
                 if (release != null && isAvailable && getUpdateNotificationsSetting(context)) {
