@@ -652,6 +652,10 @@ class MusicService :
 
     private lateinit var mediaSession: MediaLibrarySession
 
+    // what android auto's templated player reads, handed over by the car app
+    val platformSessionToken: android.media.session.MediaSession.Token
+        get() = mediaSession.platformToken
+
     private val playerInitialized = MutableStateFlow(false)
     val isPlayerReady: kotlinx.coroutines.flow.StateFlow<Boolean> = playerInitialized.asStateFlow()
 

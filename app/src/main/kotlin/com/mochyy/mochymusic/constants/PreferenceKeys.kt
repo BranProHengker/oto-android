@@ -274,6 +274,8 @@ enum class CrossmixMode {
     CROSSMIX,
 }
 
+fun CrossmixMode.playable(): CrossmixMode = this
+
 // crossmix unless someone picked otherwise: the old default was a plain 5 s crossfade that never mixed anything
 val DefaultTransitionMode = CrossmixMode.CROSSMIX
 
