@@ -162,19 +162,22 @@ private fun DiagnosticsRow(label: String, value: String) {
 }
 
 private fun copyLogs(context: Context, logs: List<PlaybackLogEntry>) {
-    val text = logs.joinToString("\n") { entry ->
-        buildString {
-            append(entry.timestamp)
-            append(' ')
-            append(entry.level.name)
-            append(' ')
-            append(entry.message)
+    val sb = StringBuilder()
+    sb.append("=== Oto Diagnostics Report ===\n")
+    sb.append("App: Oto v1.1.0 (Code 13)\n")
+    sb.append("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE}, SDK ${android.os.Build.VERSION.SDK_INT})\n")
+    sb.append("Entries Count: ${logs.size}\n")
+    sb.append("----------------------------------------\n")
+    if (logs.isEmpty()) {
+        sb.append("No playback errors or stream events captured yet in this session.\n")
+    } else {
+        logs.forEach { entry ->
+            sb.append("[${entry.timestamp}] [${entry.level.name}] ${entry.message}\n")
             entry.details?.let {
-                append(" | ")
-                append(it)
+                sb.append("  Details: $it\n")
             }
         }
     }
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("mochy playback log", text))
+    clipboard?.setPrimaryClip(ClipData.newPlainText("oto playback log", sb.toString()))
 }

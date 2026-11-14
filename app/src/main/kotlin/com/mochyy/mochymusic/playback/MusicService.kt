@@ -1825,6 +1825,11 @@ class MusicService :
             else -> "unknown error"
         }
         val prefix = if (localTrack) "Couldn't play local file" else "Stream failed"
+        com.mochyy.mochymusic.utils.PlaybackLogManager.log(
+            com.mochyy.mochymusic.utils.PlaybackLogLevel.ERROR,
+            "$prefix: $reason",
+            "Track: ${player.currentMediaItem?.mediaMetadata?.title ?: player.currentMediaItem?.mediaId} (${player.currentMediaItem?.mediaId})\nURI: ${player.currentMediaItem?.localConfiguration?.uri}\nError: ${e?.message}"
+        )
         com.mochyy.mochymusic.ui.component.TopToaster.error("$prefix: $reason")
     }
 
@@ -1843,7 +1848,11 @@ class MusicService :
                         msg
                     } else null
                 }
-                specific ?: "could not read audio file"
+                when {
+                    specific == null -> "could not read audio file"
+                    specific.contains("is child of") || specific.contains("Missing file") -> "file moved, renamed, or not found on storage"
+                    else -> specific
+                }
             }
             else -> plainReason(e)
         }
@@ -4195,6 +4204,17 @@ class MusicService :
                         ?: mediaItem.metadata?.localUri?.let(Uri::parse)
 
                     val resolvedUri = rawTargetUri?.let { LocalAudioResolver.resolvePlayableUri(this@MusicService, it) } ?: uri
+                    if (resolvedUri != null && rawTargetUri != null && resolvedUri != rawTargetUri) {
+                        scope.launch(Dispatchers.IO) {
+                            runCatching {
+                                database.openHelper.writableDatabase.execSQL(
+                                    "UPDATE song SET localUri = ? WHERE id = ? OR localUri = ?",
+                                    arrayOf(resolvedUri.toString(), mediaId, rawTargetUri.toString())
+                                )
+                                Timber.tag(TAG).i("Auto-healed localUri for $mediaId: $resolvedUri")
+                            }
+                        }
+                    }
                     val resolvedItem = if (resolvedUri != null && resolvedUri != uri) {
                         mediaItem.buildUpon().setUri(resolvedUri).build()
                     } else {

@@ -22,9 +22,10 @@ object LocalAudioResolver {
      * or non-ASCII characters, a direct document URI, or a MediaStore/file URI) into
      * the most resilient, direct URI for ExoPlayer playback:
      * 1. file:// direct path if readable on disk (fastest, zero IPC, bypasses SAF entirely).
-     * 2. content://media/external/audio/media/<id> via MediaStore query.
-     * 3. Non-tree document URI if SAF tree provider fails isChildDocument checks.
-     * 4. Fallback to original URI.
+     * 2. Auto-heal renamed files on disk or inside SAF tree parent folder.
+     * 3. content://media/external/audio/media/<id> via MediaStore query.
+     * 4. Non-tree document URI if SAF tree provider fails isChildDocument checks.
+     * 5. Fallback to original URI.
      */
     fun resolvePlayableUri(context: Context, uri: Uri): Uri {
         val uriStr = uri.toString()
@@ -32,18 +33,41 @@ object LocalAudioResolver {
         if (cached != null) return cached
 
         val scheme = uri.scheme
+
+        // 1. file:// scheme
         if (scheme == "file") {
-            uriCache[uriStr] = uri
+            val path = uri.path
+            if (path != null) {
+                val file = File(path)
+                if (file.exists() && file.canRead()) {
+                    uriCache[uriStr] = uri
+                    return uri
+                }
+                val diskMatch = findRenamedFileOnDisk(path)
+                if (diskMatch != null) {
+                    Timber.tag(TAG).d("Auto-healed file URI: $uri -> $diskMatch")
+                    uriCache[uriStr] = diskMatch
+                    return diskMatch
+                }
+            }
             return uri
         }
 
-        // Already a canonical MediaStore audio URI
+        // 2. Canonical MediaStore audio URI: test if openable
         if (scheme == "content" && uri.authority == "media") {
+            if (testOpen(context, uri)) {
+                uriCache[uriStr] = uri
+                return uri
+            }
+        }
+
+        // 3. If original URI can be opened directly without error, use it
+        if (testOpen(context, uri)) {
             uriCache[uriStr] = uri
             return uri
         }
 
-        // Try resolving to direct file path first
+        // 4. Try direct POSIX path and check if file exists or was renamed
         val filePath = extractFilePath(uri)
         if (filePath != null) {
             val file = File(filePath)
@@ -60,26 +84,78 @@ object LocalAudioResolver {
                 return directUri
             }
 
-            // If direct file is blocked by Scoped Storage, query MediaStore
+            // Check if renamed on disk in the same directory
+            val renamedDisk = findRenamedFileOnDisk(filePath)
+            if (renamedDisk != null) {
+                Timber.tag(TAG).d("Auto-healed renamed file on disk: $renamedDisk")
+                uriCache[uriStr] = renamedDisk
+                return renamedDisk
+            }
+
+            // Query MediaStore by path
             val mediaStoreUri = queryMediaStore(context, file)
-            if (mediaStoreUri != null) {
+            if (mediaStoreUri != null && testOpen(context, mediaStoreUri)) {
                 Timber.tag(TAG).d("Resolved file path to MediaStore URI: $mediaStoreUri")
                 uriCache[uriStr] = mediaStoreUri
                 return mediaStoreUri
             }
         }
 
-        // Try extracting document ID and resolving via MediaStore or non-tree SAF
+        // 5. SAF Tree Resolution & Renamed Search
         val docId = extractDocId(uri)
         if (docId != null) {
-            val mediaStoreUri = queryMediaStoreByDocId(context, docId)
-            if (mediaStoreUri != null) {
-                Timber.tag(TAG).d("Resolved docId to MediaStore URI: $mediaStoreUri")
-                uriCache[uriStr] = mediaStoreUri
-                return mediaStoreUri
+            val decodedDocId = runCatching { URLDecoder.decode(docId, "UTF-8") }.getOrDefault(docId)
+
+            if (uriStr.contains("/tree/")) {
+                val treeId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+                    ?: uriStr.substringAfter("/tree/").substringBefore("/document/")
+                        .let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }
+                val treeUri = DocumentsContract.buildTreeDocumentUri("com.android.externalstorage.documents", treeId)
+
+                if (decodedDocId.contains('/')) {
+                    val parentDocId = decodedDocId.substringBeforeLast('/')
+                    val fileName = decodedDocId.substringAfterLast('/')
+                    val safHealed = findRenamedFileInSaf(context, treeUri, parentDocId, fileName)
+                    if (safHealed != null && testOpen(context, safHealed)) {
+                        Timber.tag(TAG).d("Auto-healed SAF tree URI to: $safHealed")
+                        uriCache[uriStr] = safHealed
+                        return safHealed
+                    }
+                }
+
+                // Check saved user folders from LocalFolders
+                val folders = com.mochyy.mochymusic.importer.LocalFolders.read(context)
+                for (savedTree in folders) {
+                    if (decodedDocId.contains('/')) {
+                        val parentDocId = decodedDocId.substringBeforeLast('/')
+                        val fileName = decodedDocId.substringAfterLast('/')
+                        val safHealed = findRenamedFileInSaf(context, savedTree, parentDocId, fileName)
+                        if (safHealed != null && testOpen(context, safHealed)) {
+                            Timber.tag(TAG).d("Auto-healed via saved LocalFolder: $safHealed")
+                            uriCache[uriStr] = safHealed
+                            return safHealed
+                        }
+                    }
+                }
             }
 
-            // If it's a tree document URI, try non-tree document URI to bypass isChildDocument checks
+            // 6. MediaStore query by displayName prefix/fuzzy
+            val fileName = decodedDocId.substringAfterLast('/')
+            val msMatch = findRenamedFileInMediaStore(context, fileName)
+            if (msMatch != null && testOpen(context, msMatch)) {
+                Timber.tag(TAG).d("Auto-healed via MediaStore displayName match: $msMatch")
+                uriCache[uriStr] = msMatch
+                return msMatch
+            }
+
+            val msByDoc = queryMediaStoreByDocId(context, docId)
+            if (msByDoc != null && testOpen(context, msByDoc)) {
+                Timber.tag(TAG).d("Resolved docId to MediaStore URI: $msByDoc")
+                uriCache[uriStr] = msByDoc
+                return msByDoc
+            }
+
+            // 7. Non-tree document URI fallback
             if (uriStr.contains("/tree/")) {
                 val nonTreeUri = runCatching {
                     DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", docId)
@@ -92,7 +168,17 @@ object LocalAudioResolver {
             }
         }
 
-        uriCache[uriStr] = uri
+        // 8. MediaStore.getMediaUri fallback
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val msUri = runCatching { MediaStore.getMediaUri(context, uri) }.getOrNull()
+            if (msUri != null && testOpen(context, msUri)) {
+                Timber.tag(TAG).d("Resolved via MediaStore.getMediaUri: $msUri")
+                uriCache[uriStr] = msUri
+                return msUri
+            }
+        }
+
+        // Do not cache broken URIs
         return uri
     }
 
@@ -127,6 +213,104 @@ object LocalAudioResolver {
             decodedDocId.startsWith("/") -> decodedDocId
             else -> null
         }
+    }
+
+    private fun findRenamedFileInSaf(
+        context: Context,
+        treeUri: Uri,
+        parentDocId: String,
+        oldFileName: String,
+    ): Uri? {
+        val childrenUri = runCatching {
+            DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
+        }.getOrNull() ?: return null
+
+        val oldBase = oldFileName.substringBeforeLast('.')
+        val oldExt = oldFileName.substringAfterLast('.', "")
+
+        return runCatching {
+            val projection = arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            )
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                var candidateDocId: String? = null
+                while (cursor.moveToNext()) {
+                    val childDocId = cursor.getString(0) ?: continue
+                    val displayName = cursor.getString(1) ?: continue
+                    val childExt = displayName.substringAfterLast('.', "")
+                    if (!childExt.equals(oldExt, ignoreCase = true)) continue
+
+                    val childBase = displayName.substringBeforeLast('.')
+                    if (childBase.equals(oldBase, ignoreCase = true)) {
+                        return@use DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
+                    }
+
+                    if (childBase.startsWith(oldBase, ignoreCase = true) ||
+                        oldBase.startsWith(childBase, ignoreCase = true) ||
+                        cleanTitle(childBase).equals(cleanTitle(oldBase), ignoreCase = true)
+                    ) {
+                        candidateDocId = childDocId
+                    }
+                }
+                candidateDocId?.let { DocumentsContract.buildDocumentUriUsingTree(treeUri, it) }
+            }
+        }.getOrNull()
+    }
+
+    private fun findRenamedFileOnDisk(filePath: String): Uri? {
+        val file = File(filePath)
+        val parent = file.parentFile ?: return null
+        if (!parent.exists() || !parent.isDirectory) return null
+
+        val oldBase = file.nameWithoutExtension
+        val oldExt = file.extension
+
+        return runCatching {
+            val candidates = parent.listFiles() ?: return@runCatching null
+            var bestMatch: File? = null
+            for (candidate in candidates) {
+                if (!candidate.isFile) continue
+                if (!candidate.extension.equals(oldExt, ignoreCase = true)) continue
+
+                val candidateBase = candidate.nameWithoutExtension
+                if (candidateBase.equals(oldBase, ignoreCase = true)) {
+                    bestMatch = candidate
+                    break
+                }
+                if (candidateBase.startsWith(oldBase, ignoreCase = true) ||
+                    oldBase.startsWith(candidateBase, ignoreCase = true) ||
+                    cleanTitle(candidateBase).equals(cleanTitle(oldBase), ignoreCase = true)
+                ) {
+                    bestMatch = candidate
+                }
+            }
+            bestMatch?.takeIf { it.canRead() }?.let { Uri.fromFile(it) }
+        }.getOrNull()
+    }
+
+    private fun cleanTitle(name: String): String {
+        return name
+            .substringBeforeLast(" - ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
+    }
+
+    private fun findRenamedFileInMediaStore(context: Context, oldFileName: String): Uri? {
+        val oldBase = oldFileName.substringBeforeLast('.')
+        val externalUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME)
+        val selection = "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE ?"
+        val selectionArgs = arrayOf("$oldBase%")
+
+        return runCatching {
+            context.contentResolver.query(externalUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
+                    ContentUris.withAppendedId(externalUri, id)
+                } else null
+            }
+        }.getOrNull()
     }
 
     fun queryMediaStore(context: Context, file: File): Uri? {

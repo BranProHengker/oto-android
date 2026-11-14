@@ -110,6 +110,20 @@ class LibraryImportViewModel @Inject constructor(
     suspend fun refreshLocal(): Boolean {
         val (fixedCovers, files) = withContext(Dispatchers.IO) {
             val fixed = LocalArtwork.repair(context, database, includeMissing = true)
+            // Auto-heal renamed / moved audio files in the database
+            val allLocal = database.localUris()
+            for (uriStr in allLocal) {
+                val parsed = Uri.parse(uriStr)
+                val healed = com.mochyy.mochymusic.playback.LocalAudioResolver.resolvePlayableUri(context, parsed)
+                if (healed != parsed) {
+                    runCatching {
+                        database.openHelper.writableDatabase.execSQL(
+                            "UPDATE song SET localUri = ? WHERE localUri = ?",
+                            arrayOf(healed.toString(), uriStr)
+                        )
+                    }
+                }
+            }
             val known = knownLocalUris(withMediaStore = false)
             fixed to LocalFolders.read(context).flatMap { LocalFolders.newAudioFiles(context, it, known) }.distinct()
         }
