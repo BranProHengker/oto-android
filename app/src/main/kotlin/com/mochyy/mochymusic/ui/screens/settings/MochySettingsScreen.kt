@@ -3,6 +3,7 @@
 package com.mochyy.mochymusic.ui.screens.settings
 
 import com.mochyy.mochymusic.ui.component.navigateToTab
+import com.mochyy.mochymusic.ui.screens.devices.showDeviceIntegration
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing

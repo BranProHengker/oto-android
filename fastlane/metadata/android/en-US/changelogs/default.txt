@@ -1,6 +1,10 @@
-### What's New in Oto v1.0.11:
-- **Android Auto (AA) Support & Voice Commands**: Added native Android Auto interface with browsable media catalogs, driver-friendly player, synced lyrics display on car head units, and Google Assistant voice playback support.
+### What's New in Oto v1.1.0:
+- **Local Audio CJK / Japanese Path Fix**: Resolved SAF (Storage Access Framework) failure on non-ASCII/Kanji folders (`Couldn't play local file: Failed to determine if primary:... is child of primary:...`) with direct POSIX & MediaStore fallbacks and automatic runtime permissions.
+- **Shuffle Freeze & ANR Deadlock Eradicated**: Eliminated blocking main-thread database queries during local music shuffle with zero-latency in-memory URI resolution.
+- **Crossfade Overlap & Duplicate Play Fix**: Fixed crossfade track truncation and audio volume ducking so outgoing tracks fade smoothly without overlapping next track duplication.
+- **Android Auto (AA) Support & Voice Commands**: Native Android Auto media browsing and head unit player.
 - **Full Song Metadata & Tag Editor**: Integrated comprehensive in-app editor for song title, artist relations, album, release year, custom cover art, and YouTube video link pairing.
+- **LrcRed / Apple Music TTML Lyrics Provider**: Word-by-word synchronized lyrics with romaji/furigana transliterations and translations.
 - **Crossmix & AudioPass Enhancements**: Refined seamless crossfade transitions and pass blockers handling for pristine gapless listening.
-- **Device Interconnectivity & Remote Control**: Seamless pairing and synchronized control between Oto on phone, car, and TV with secure SecretVault credentials.
+- **Device Interconnectivity & Remote Control**: Clean pairing and synchronized control between Oto on phone, car, and TV.
 - **App Behaviour Controls**: Added Pause on Mute toggle and Resume on Bluetooth Connect toggle in App Behaviour settings.
