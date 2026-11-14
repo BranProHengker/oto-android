@@ -295,6 +295,9 @@ class MainActivity : ComponentActivity() {
     /** Bumped when launched from an update notification; the composition opens the version sheet. */
     private var openUpdateRequests by mutableStateOf(0)
 
+    // the device link's notification asks for its sheet through this
+    private var openDevicesRequests by mutableStateOf(0)
+
     /** A fresh launch from the launcher plays the launch intro (ui/launch/LaunchIntro.kt). */
     private var introRequested = false
 
@@ -344,8 +347,19 @@ class MainActivity : ComponentActivity() {
         playerConnection?.isUiVisible?.value = true
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val permissions = mutableListOf<String>()
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1000)
+                permissions += Manifest.permission.POST_NOTIFICATIONS
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                permissions += Manifest.permission.READ_MEDIA_AUDIO
+            }
+            if (permissions.isNotEmpty()) {
+                ActivityCompat.requestPermissions(this, permissions.toTypedArray(), 1000)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 1000)
             }
         }
 
@@ -934,6 +948,7 @@ class MainActivity : ComponentActivity() {
                             com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState.current,
                         ),
                     ) {
+                    com.mochyy.mochymusic.ui.screens.devices.DeviceIntegrationOpener(requests = openDevicesRequests)
                     com.mochyy.mochymusic.ui.screens.update.UpdateNotificationOpener(
                         requests = openUpdateRequests,
                     )
@@ -1507,10 +1522,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleDeepLinkIntent(intent: Intent, navController: NavHostController) {
-        // the tv link's notification opens its settings page
+        // the device link's notification opens its sheet
         if (intent.action == com.mochyy.mochymusic.link.phone.PhoneLinkService.ActionOpenTvLink) {
             intent.action = null
-            navController.navigate(com.mochyy.mochymusic.ui.screens.settings.tvlink.TvLinkRoute)
+            openDevicesRequests++
             return
         }
         if (importSharedAudio(intent)) return

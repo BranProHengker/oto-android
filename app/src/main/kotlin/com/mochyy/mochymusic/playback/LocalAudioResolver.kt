@@ -15,6 +15,7 @@ import java.net.URLDecoder
 object LocalAudioResolver {
 
     private const val TAG = "LocalAudioResolver"
+    private val uriCache = java.util.concurrent.ConcurrentHashMap<String, Uri>()
 
     /**
      * Resolves a local audio URI (which may be a SAF tree document URI with nested paths
@@ -26,13 +27,19 @@ object LocalAudioResolver {
      * 4. Fallback to original URI.
      */
     fun resolvePlayableUri(context: Context, uri: Uri): Uri {
+        val uriStr = uri.toString()
+        val cached = uriCache[uriStr]
+        if (cached != null) return cached
+
         val scheme = uri.scheme
         if (scheme == "file") {
+            uriCache[uriStr] = uri
             return uri
         }
 
         // Already a canonical MediaStore audio URI
         if (scheme == "content" && uri.authority == "media") {
+            uriCache[uriStr] = uri
             return uri
         }
 
@@ -40,15 +47,24 @@ object LocalAudioResolver {
         val filePath = extractFilePath(uri)
         if (filePath != null) {
             val file = File(filePath)
-            if (file.exists() && file.canRead()) {
+            val directReadable = runCatching {
+                if (file.exists()) {
+                    file.canRead() || java.io.FileInputStream(file).use { true }
+                } else false
+            }.getOrDefault(false)
+
+            if (directReadable) {
                 Timber.tag(TAG).d("Resolved SAF URI to direct file: $filePath")
-                return Uri.fromFile(file)
+                val directUri = Uri.fromFile(file)
+                uriCache[uriStr] = directUri
+                return directUri
             }
 
             // If direct file is blocked by Scoped Storage, query MediaStore
             val mediaStoreUri = queryMediaStore(context, file)
             if (mediaStoreUri != null) {
                 Timber.tag(TAG).d("Resolved file path to MediaStore URI: $mediaStoreUri")
+                uriCache[uriStr] = mediaStoreUri
                 return mediaStoreUri
             }
         }
@@ -59,39 +75,35 @@ object LocalAudioResolver {
             val mediaStoreUri = queryMediaStoreByDocId(context, docId)
             if (mediaStoreUri != null) {
                 Timber.tag(TAG).d("Resolved docId to MediaStore URI: $mediaStoreUri")
+                uriCache[uriStr] = mediaStoreUri
                 return mediaStoreUri
             }
 
             // If it's a tree document URI, try non-tree document URI to bypass isChildDocument checks
-            val uriStr = uri.toString()
             if (uriStr.contains("/tree/")) {
                 val nonTreeUri = runCatching {
                     DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", docId)
                 }.getOrNull()
                 if (nonTreeUri != null && testOpen(context, nonTreeUri)) {
                     Timber.tag(TAG).d("Resolved tree URI to non-tree document URI: $nonTreeUri")
+                    uriCache[uriStr] = nonTreeUri
                     return nonTreeUri
                 }
             }
         }
 
+        uriCache[uriStr] = uri
         return uri
     }
 
     fun extractDocId(uri: Uri): String? {
-        return runCatching {
-            if (DocumentsContract.isDocumentUri(null, uri) || uri.toString().contains("/document/")) {
-                DocumentsContract.getDocumentId(uri)
-            } else {
-                null
-            }
-        }.getOrNull() ?: run {
-            val str = uri.toString()
-            if (str.contains("/document/")) {
-                val raw = str.substringAfter("/document/").substringBefore('?')
-                runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrNull()
-            } else null
+        val str = uri.toString()
+        if (str.contains("/document/")) {
+            val raw = str.substringAfter("/document/").substringBefore('?')
+            val decoded = runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrNull()
+            if (!decoded.isNullOrBlank()) return decoded
         }
+        return runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
     }
 
     fun extractFilePath(uri: Uri): String? {

@@ -4187,11 +4187,8 @@ class MusicService :
                     notePlayingFrom(mediaId, PlayingFrom(PlayingFrom.Device, "This device"))
                     resolvedStreamSources[mediaId] = "this device"
 
-                    val rawTargetUri = uri?.takeIf { it.scheme == "content" || it.scheme == "file" } ?: run {
-                        val localUriStr = mediaItem.metadata?.localUri
-                            ?: runBlocking(Dispatchers.IO) { database.song(mediaId).first()?.song?.localUri }
-                        localUriStr?.let(Uri::parse)
-                    }
+                    val rawTargetUri = uri?.takeIf { it.scheme == "content" || it.scheme == "file" }
+                        ?: mediaItem.metadata?.localUri?.let(Uri::parse)
 
                     val resolvedUri = rawTargetUri?.let { LocalAudioResolver.resolvePlayableUri(this@MusicService, it) } ?: uri
                     val resolvedItem = if (resolvedUri != null && resolvedUri != uri) {
@@ -4842,9 +4839,11 @@ class MusicService :
 
         currentPlayer.removeListener(this)
         currentPlayer.removeListener(sleepTimer)
-        // The old player has the whole queue too. If the new song took a moment to load, the fade
-        // waited while the old one finished its song and rolled on into the next one - the same
-        // song the new player was starting - so it played twice over itself.
+        currentPlayer.repeatMode = REPEAT_MODE_OFF
+        val outIndex = currentPlayer.currentMediaItemIndex
+        if (outIndex >= 0 && outIndex + 1 < currentPlayer.mediaItemCount) {
+            currentPlayer.removeMediaItems(outIndex + 1, currentPlayer.mediaItemCount)
+        }
         currentPlayer.pauseAtEndOfMediaItems = true
 
         crossfadeMirrorListener?.let { nextPlayer.removeListener(it) }
@@ -4894,18 +4893,6 @@ class MusicService :
 
         crossfadeJob = scope.launch {
             val startVolume = runCatching { fadingPlayer?.volume ?: 1f }.getOrDefault(1f)
-            // the old song carries on as it was until the new one is really heard, so a slow start never leaves a gap
-            while (
-                isActive &&
-                player === nextPlayer &&
-                !nextPlayer.isPlaying &&
-                nextPlayer.playerError == null &&
-                nextPlayer.playbackState != Player.STATE_IDLE &&
-                nextPlayer.playbackState != Player.STATE_ENDED
-            ) {
-                delay(CrossfadeFrameMs)
-            }
-            // stepped every frame by the time actually played: twenty fixed steps were heard as the volume jumping
             var heardMs = 0L
             var last = android.os.SystemClock.elapsedRealtime()
             while (
@@ -4918,13 +4905,14 @@ class MusicService :
             ) {
                 delay(CrossfadeFrameMs)
                 val now = android.os.SystemClock.elapsedRealtime()
-                // a pause mid-crossfade holds both songs where they are
-                if (nextPlayer.isPlaying) heardMs += now - last
+                if (nextPlayer.isPlaying) {
+                    heardMs += (now - last).coerceAtLeast(CrossfadeFrameMs)
+                } else {
+                    heardMs += CrossfadeFrameMs
+                }
                 last = now
                 val progress = (heardMs.toFloat() / durationMs).coerceIn(0f, 1f)
                 try {
-                    // the new song fades up to the volume it should be at now: started from the old
-                    // one's, a fade begun while muted or ducked ended at 0 or a fifth, and stayed
                     nextPlayer.volume = targetVolume() * kotlin.math.sin(progress * Math.PI / 2.0).toFloat()
                     fadingPlayer?.volume = startVolume * kotlin.math.cos(progress * Math.PI / 2.0).toFloat()
                 } catch (e: Exception) {
