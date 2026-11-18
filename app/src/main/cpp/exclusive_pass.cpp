@@ -147,7 +147,7 @@ Exclusive *exclusiveOf(jlong handle) { return reinterpret_cast<Exclusive *>(hand
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_co.oto.music_playback_audio_pass_PassNative_exclusiveOpen(JNIEnv *env, jobject, jint rate, jint channels, jint bits, jint device) {
+Java_co_oto_music_playback_audio_pass_PassNative_exclusiveOpen(JNIEnv *env, jobject, jint rate, jint channels, jint bits, jint device) {
     AAudioApi &a = api();
     if (!a.ready) {
         throwState(env, "aaudio isn't on this phone");
@@ -206,19 +206,19 @@ Java_co.oto.music_playback_audio_pass_PassNative_exclusiveOpen(JNIEnv *env, jobj
 }
 
 JNIEXPORT jint JNICALL
-Java_co.oto.music_playback_audio_pass_PassNative_exclusiveDevice(JNIEnv *, jobject, jlong handle) {
+Java_co_oto_music_playback_audio_pass_PassNative_exclusiveDevice(JNIEnv *, jobject, jlong handle) {
     AAudioApi &a = api();
     return a.deviceId ? a.deviceId(exclusiveOf(handle)->stream) : 0;
 }
 
 JNIEXPORT jint JNICALL
-Java_co.oto.music_playback_audio_pass_PassNative_exclusiveCapacity(JNIEnv *, jobject, jlong handle) {
+Java_co_oto_music_playback_audio_pass_PassNative_exclusiveCapacity(JNIEnv *, jobject, jlong handle) {
     Exclusive *e = exclusiveOf(handle);
     return static_cast<jint>(e->ring.size() / e->frameBytes);
 }
 
 JNIEXPORT jint JNICALL
-Java_co.oto.music_playback_audio_pass_PassNative_exclusiveWrite(JNIEnv *env, jobject, jlong handle, jobject buffer, jint offset, jint length) {
+Java_co_oto_music_playback_audio_pass_PassNative_exclusiveWrite(JNIEnv *env, jobject, jlong handle, jobject buffer, jint offset, jint length) {
     Exclusive *e = exclusiveOf(handle);
     if (e->lost) {
         throwState(env, "the output went away");
@@ -240,7 +240,7 @@ Java_co.oto.music_playback_audio_pass_PassNative_exclusiveWrite(JNIEnv *env, job
 }
 
 JNIEXPORT void JNICALL
-Java_co.oto.music_playback_audio_pass_PassNative_exclusivePlay(JNIEnv *env, jobject, jlong handle, jboolean playing) {
+Java_co_oto_music_playback_audio_pass_PassNative_exclusivePlay(JNIEnv *env, jobject, jlong handle, jboolean playing) {
     Exclusive *e = exclusiveOf(handle);
     if (e->lost) {
         throwState(env, "the output went away");
@@ -252,7 +252,7 @@ Java_co.oto.music_playback_audio_pass_PassNative_exclusivePlay(JNIEnv *env, jobj
 }
 
 JNIEXPORT void JNICALL
-Java_co.oto.music_playback_audio_pass_PassNative_exclusiveFlush(JNIEnv *, jobject, jlong handle) {
+Java_co_oto_music_playback_audio_pass_PassNative_exclusiveFlush(JNIEnv *, jobject, jlong handle) {
     Exclusive *e = exclusiveOf(handle);
     std::lock_guard<std::mutex> guard(e->lock);
     e->playing = false;
@@ -262,7 +262,7 @@ Java_co.oto.music_playback_audio_pass_PassNative_exclusiveFlush(JNIEnv *, jobjec
 }
 
 JNIEXPORT jlong JNICALL
-Java_co.oto.music_playback_audio_pass_PassNative_exclusivePlayed(JNIEnv *env, jobject, jlong handle) {
+Java_co_oto_music_playback_audio_pass_PassNative_exclusivePlayed(JNIEnv *env, jobject, jlong handle) {
     Exclusive *e = exclusiveOf(handle);
     if (e->lost) {
         throwState(env, "the output went away");
@@ -273,7 +273,7 @@ Java_co.oto.music_playback_audio_pass_PassNative_exclusivePlayed(JNIEnv *env, jo
 }
 
 JNIEXPORT void JNICALL
-Java_co.oto.music_playback_audio_pass_PassNative_exclusiveClose(JNIEnv *, jobject, jlong handle) {
+Java_co_oto_music_playback_audio_pass_PassNative_exclusiveClose(JNIEnv *, jobject, jlong handle) {
     Exclusive *e = exclusiveOf(handle);
     AAudioApi &a = api();
     a.stop(e->stream);
