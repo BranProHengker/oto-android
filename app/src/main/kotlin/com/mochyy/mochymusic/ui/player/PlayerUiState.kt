@@ -2,7 +2,6 @@ package com.mochyy.mochymusic.ui.player
 
 import androidx.compose.runtime.Stable
 import com.mochyy.mochymusic.playback.PlayerConnection
-import com.mochyy.mochymusic.playback.ShuffleMode
 import com.mochyy.mochymusic.ui.player.models.QueueState
 import com.mochyy.mochymusic.ui.player.models.TrackInfo
 import com.mochyy.mochymusic.ui.player.models.TransportState
@@ -26,8 +25,8 @@ class PlayerUiState(connection: PlayerConnection) {
     ) { isPlaying, shuffleMode, repeatMode, canSkipNext, canSkipPrevious ->
         TransportState(
             isPlaying = isPlaying,
+            shuffleModeEnabled = shuffleMode != com.mochyy.mochymusic.playback.ShuffleMode.OFF,
             shuffleMode = shuffleMode,
-            shuffleModeEnabled = shuffleMode != ShuffleMode.OFF,
             repeatMode = repeatMode,
             canSkipNext = canSkipNext,
             canSkipPrevious = canSkipPrevious,

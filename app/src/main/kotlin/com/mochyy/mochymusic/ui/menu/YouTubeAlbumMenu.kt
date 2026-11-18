@@ -93,8 +93,8 @@ fun YouTubeAlbumMenu(
     val database = LocalDatabase.current
     val downloadUtil = LocalDownloadUtil.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val album by database.albumWithSongs(albumItem.id).collectAsState(initial = null)
-    val isPinned by database.speedDialDao.isPinned(albumItem.id).collectAsState(initial = false)
+    val album by remember(database, albumItem.id) { database.albumWithSongs(albumItem.id) }.collectAsState(initial = null)
+    val isPinned by remember(database, albumItem.id) { database.speedDialDao.isPinned(albumItem.id) }.collectAsState(initial = false)
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -428,7 +428,7 @@ fun YouTubeAlbumMenu(
                     Material3MenuItemData(
                         title = {
                             Text(
-                                text = if (isPinned) "Unpin from library" else "Pin to library"
+                                text = stringResource(if (isPinned) R.string.unpin_from_speed_dial else R.string.pin_to_speed_dial)
                             )
                         },
                         icon = {

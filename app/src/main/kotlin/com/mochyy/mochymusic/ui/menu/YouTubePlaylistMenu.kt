@@ -158,8 +158,8 @@ fun YouTubePlaylistMenu(
     val database = LocalDatabase.current
     val downloadUtil = LocalDownloadUtil.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val dbPlaylist by database.playlistByBrowseId(playlist.id).collectAsState(initial = null)
-    val isPinned by database.speedDialDao.isPinned(playlist.id).collectAsState(initial = false)
+    val dbPlaylist by remember(database, playlist.id) { database.playlistByBrowseId(playlist.id) }.collectAsState(initial = null)
+    val isPinned by remember(database, playlist.id) { database.speedDialDao.isPinned(playlist.id) }.collectAsState(initial = false)
 
     var showChoosePlaylistDialog by rememberSaveable { mutableStateOf(false) }
     var showImportPlaylistDialog by rememberSaveable { mutableStateOf(false) }
@@ -502,7 +502,7 @@ fun YouTubePlaylistMenu(
                     Material3MenuItemData(
                         title = {
                             Text(
-                                text = if (isPinned) "Unpin from library" else "Pin to library"
+                                text = stringResource(if (isPinned) R.string.unpin_from_speed_dial else R.string.pin_to_speed_dial)
                             )
                         },
                         icon = {

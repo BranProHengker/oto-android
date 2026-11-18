@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -56,6 +57,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mochyy.mochymusic.R
@@ -77,9 +79,9 @@ private fun variantFade(column: Int, row: Int, studio: PlayerStudioState, e: Flo
 
 /** the selector's geometry at progress [e] (0 the full player, 1 cards) on a [w] x [h] screen */
 internal class CardGeometry(val e: Float, val w: Float, val h: Float, gapPx: Float) {
-    val scale = 1f + (CardScale - 1f) * e
+    val scale = 1f + (cardScaleFor(w, h) - 1f) * e
     val stride = w * scale + gapPx
-    val centerY = h / 2f + (CardCenterY * h - h / 2f) * e
+    val centerY = h / 2f + (cardCenterYFor(w, h) * h - h / 2f) * e
     val cardW = w * scale
     val cardH = h * scale
     // a column's variants sit one card and a gap apart, top to bottom
@@ -441,7 +443,7 @@ fun PlayerSelectorOverlay(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.arrow_back_ios),
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.back_button_desc),
                         tint = Color.White,
                         modifier = Modifier.size(15.dp).offset(x = 2.dp),
                     )
@@ -450,7 +452,7 @@ fun PlayerSelectorOverlay(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("Styles", color = Color.White, style = studioText(StudioType.Title, FontWeight.Bold))
+                    Text(stringResource(R.string.ps_studio_styles), color = Color.White, style = studioText(StudioType.Title, FontWeight.Bold))
                     AnimatedContent(
                         // the module style goes by the name its look gives it
                         targetState = styles.getOrNull(focused)?.let { style ->
@@ -503,14 +505,16 @@ fun PlayerSelectorOverlay(
                 val style = styles.getOrNull(focused)
                 Row(
                     modifier = Modifier
+                        // on its side they keep to about the card's width instead of stretching across the screen
+                        .then(if (w > h) Modifier.widthIn(max = 440.dp) else Modifier)
                         .fillMaxWidth()
                         .padding(horizontal = 30.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     // edit stays in its place, only dimmed where there's nothing to edit, so set never moves under the finger
                     val editable = style?.editable == true
-                    CardButton("Edit", enabled = active && editable, dimmed = !editable, onClick = { onEdit(focused) }, modifier = Modifier.weight(1f))
-                    CardButton("Set", enabled = active, onClick = { currentOnSet(focused, 0f) }, modifier = Modifier.weight(1f))
+                    CardButton(stringResource(R.string.ps_studio_edit), enabled = active && editable, dimmed = !editable, onClick = { onEdit(focused) }, modifier = Modifier.weight(1f))
+                    CardButton(stringResource(R.string.ps_studio_set), enabled = active, onClick = { currentOnSet(focused, 0f) }, modifier = Modifier.weight(1f))
                 }
             }
         }

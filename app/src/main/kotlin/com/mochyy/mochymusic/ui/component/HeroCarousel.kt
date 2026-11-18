@@ -8,6 +8,7 @@ import android.media.AudioAttributes
 import android.media.SoundPool
 import android.os.Build
 import android.os.SystemClock
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -94,6 +95,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.getSystemService
@@ -103,19 +105,15 @@ import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.mochyy.mochymusic.R
-import com.mochyy.mochymusic.applecanvas.AppleMusicCanvasProvider
 import com.mochyy.mochymusic.canvas.CanvasArtwork
-import com.mochyy.mochymusic.canvas.MonochromeApiCanvas
 import com.mochyy.mochymusic.constants.CanvasThumbnailAnimationKey
 import com.mochyy.mochymusic.constants.CanvasWifiOnlyKey
 import com.mochyy.mochymusic.constants.DisableBlurKey
 import com.mochyy.mochymusic.db.entities.LocalItem
-import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.models.MediaMetadata
 import com.mochyy.mochymusic.models.SimilarRecommendation
 import com.mochyy.mochymusic.models.toMediaMetadata
 import com.mochyy.mochymusic.playback.PlayerConnection
-import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.ui.player.CanvasArtworkPlaybackCache
 import com.mochyy.mochymusic.ui.player.CanvasArtworkPlayer
@@ -162,10 +160,13 @@ import kotlin.math.sin
 /** the hero takes this share of the screen height (527 of 874 in the Figma frame) */
 const val HeroHeightFraction = 0.6f
 
-// on its side the screen is short, so the hero takes a little more of it to keep room for the title and the pill
-private const val LandscapeHeroHeightFraction = 0.7f
+// on its side the hero is the whole screen, like the tv: only the first row's title and the tops of its cards show under it
+private const val LandscapeHeroHeightFraction = 0.86f
 
-// in the wide layout each card takes this share of the hero's width, the next one peeking in after a gap
+// on its side the title and the pill sit lower in the taller hero, just over the first row
+private val LandscapeHeroTextBottom = 46.dp
+
+// an upright tablet: each card takes this share of the hero's width, the next one peeking in after a gap
 private const val PeekPageShare = 0.8f
 
 // on a tv the hero is shorter, so the first row of music shows under it without scrolling
@@ -217,11 +218,14 @@ private const val HeroStillFrom = 0.08f
 /** the small line above a hero title: [text], then a tiny [coverUrl] and the [subject] it's about */
 @Immutable
 data class HeroLabel(
+    /** plain English fallback for screens that cannot resolve [textRes] */
     val text: String,
     val coverUrl: String? = null,
     val subject: String? = null,
     /** the subject is an artist: its tiny picture is round */
     val roundCover: Boolean = false,
+    /** what the phone UI shows, following the app language; 0 when [text] is already resolved */
+    @StringRes val textRes: Int = 0,
 )
 
 sealed interface HeroCarouselItem {
@@ -246,7 +250,12 @@ data class KeepListeningItem(val item: MediaMetadata, val isLastPlayed: Boolean 
             isPlaying -> "Now playing"
             isLastPlayed -> "Continue"
             else -> "Recently played"
-        }
+        },
+        textRes = when {
+            isPlaying -> R.string.pc_hero_now_playing
+            isLastPlayed -> R.string.pc_hero_continue
+            else -> R.string.pc_hero_recently_played
+        },
     )
     override val mainText: String = item.title
     override val subText: String = item.artists.joinToString(", ") { it.name }
@@ -259,8 +268,6 @@ data class KeepListeningItem(val item: MediaMetadata, val isLastPlayed: Boolean 
     override fun onPlay(playerConnection: PlayerConnection, navController: NavController) {
         if (isLastPlayed) {
             playerConnection.play()
-        } else if (item.localUri != null || item.id.startsWith("LOCAL_")) {
-            playerConnection.playQueue(ListQueue(title = item.title, items = listOf(item.toMediaItem())))
         } else {
             playerConnection.playQueue(YouTubeQueue(WatchEndpoint(videoId = item.id), item))
         }
@@ -276,19 +283,20 @@ data class DiscoverItem(
     val reason: DiscoverReason = DiscoverReason.YouMayAlsoLike,
 ) : HeroCarouselItem {
     override fun label(isPlaying: Boolean): HeroLabel {
-        if (isPlaying) return HeroLabel("Now playing")
+        if (isPlaying) return HeroLabel("Now playing", textRes = R.string.pc_hero_now_playing)
         val seed = item.seed
         val seedCover = seed.song.thumbnailUrl
         return when (reason) {
-            DiscoverReason.YouMayAlsoLike -> HeroLabel("You may also like")
-            DiscoverReason.BecauseYouLike -> HeroLabel("Because you like", seedCover, seed.song.title)
+            DiscoverReason.YouMayAlsoLike -> HeroLabel("You may also like", textRes = R.string.pc_hero_you_may_like)
+            DiscoverReason.BecauseYouLike -> HeroLabel("Because you like", seedCover, seed.song.title, textRes = R.string.pc_hero_because_like)
             DiscoverReason.MoreFrom -> HeroLabel(
                 "More from",
                 seedCover,
                 sharedArtist(item) ?: seed.artists.firstOrNull()?.name ?: seed.song.title,
+                textRes = R.string.pc_hero_more_from,
             )
-            DiscoverReason.BecauseYouPlayed -> HeroLabel("Because you played", seedCover, seed.song.title)
-            DiscoverReason.InspiredBy -> HeroLabel("Inspired by", seedCover, seed.song.title)
+            DiscoverReason.BecauseYouPlayed -> HeroLabel("Because you played", seedCover, seed.song.title, textRes = R.string.pc_hero_because_played)
+            DiscoverReason.InspiredBy -> HeroLabel("Inspired by", seedCover, seed.song.title, textRes = R.string.pc_hero_inspired_by)
         }
     }
     override val mainText: String = item.recommendation.title
@@ -327,7 +335,7 @@ data class RelatedPickItem(
     val recommendation: YTItem,
     val reason: HeroLabel,
 ) : HeroCarouselItem {
-    override fun label(isPlaying: Boolean): HeroLabel = if (isPlaying) HeroLabel("Now playing") else reason
+    override fun label(isPlaying: Boolean): HeroLabel = if (isPlaying) HeroLabel("Now playing", textRes = R.string.pc_hero_now_playing) else reason
     override val mainText: String = recommendation.title
     override val subText: String = (recommendation as? SongItem)?.artists?.joinToString(", ") { it.name } ?: ""
     override val thumbnailUrl: String? = recommendation.thumbnail
@@ -342,8 +350,9 @@ data class RelatedPickItem(
 }
 
 /** one of your own songs brought back with a reason of its own: "On repeat", "Back in rotation" */
-data class ListeningPickItem(val item: MediaMetadata, val reason: String) : HeroCarouselItem {
-    override fun label(isPlaying: Boolean): HeroLabel = HeroLabel(if (isPlaying) "Now playing" else reason)
+data class ListeningPickItem(val item: MediaMetadata, val reason: String, @StringRes val reasonRes: Int = 0) : HeroCarouselItem {
+    override fun label(isPlaying: Boolean): HeroLabel =
+        HeroLabel(if (isPlaying) "Now playing" else reason, textRes = if (isPlaying) R.string.pc_hero_now_playing else reasonRes)
     override val mainText: String = item.title
     override val subText: String = item.artists.joinToString(", ") { it.name }
     override val thumbnailUrl: String? = item.thumbnailUrl
@@ -420,17 +429,17 @@ internal fun extraHeroPicks(
             val seed = row.title
             val reason = when (seed) {
                 is com.mochyy.mochymusic.db.entities.Artist ->
-                    HeroLabel("Because you listen to", seed.thumbnailUrl, seed.title, roundCover = true)
-                is com.mochyy.mochymusic.db.entities.Album -> HeroLabel("Because you played", seed.thumbnailUrl, seed.title)
-                else -> HeroLabel("Similar to", seed.thumbnailUrl, seed.title)
+                    HeroLabel("Because you listen to", seed.thumbnailUrl, seed.title, roundCover = true, textRes = R.string.pc_hero_because_listen)
+                is com.mochyy.mochymusic.db.entities.Album -> HeroLabel("Because you played", seed.thumbnailUrl, seed.title, textRes = R.string.pc_hero_because_played)
+                else -> HeroLabel("Similar to", seed.thumbnailUrl, seed.title, textRes = R.string.pc_hero_similar_to)
             }
             add(RelatedPickItem(pick, reason))
         }
     onRepeat?.firstOrNull { !it.thumbnailUrl.isNullOrEmpty() }?.let {
-        add(ListeningPickItem(it.toMediaMetadata(), "On repeat"))
+        add(ListeningPickItem(it.toMediaMetadata(), "On repeat", R.string.pc_hero_on_repeat))
     }
     forgotten?.firstOrNull { !it.thumbnailUrl.isNullOrEmpty() }?.let {
-        add(ListeningPickItem(it.toMediaMetadata(), "Back in rotation"))
+        add(ListeningPickItem(it.toMediaMetadata(), "Back in rotation", R.string.pc_hero_back_in_rotation))
     }
 }
 
@@ -444,7 +453,7 @@ private fun <T> interleave(a: List<T>, b: List<T>): List<T> = buildList(a.size +
 
 /** the "Gacha here! / Random plays" card (Figma 25:1508): roll a reel of covers for a random song */
 data object GachaItem : HeroCarouselItem {
-    override fun label(isPlaying: Boolean): HeroLabel = HeroLabel("Gacha here!")
+    override fun label(isPlaying: Boolean): HeroLabel = HeroLabel("Gacha here!", textRes = R.string.pc_hero_gacha_here)
     override val mainText: String = "Random plays"
     override val subText: String = ""
     override val thumbnailUrl: String? = null
@@ -465,7 +474,7 @@ class PlaylistPickItem(
     override val thumbnailUrl: String?,
     private val play: () -> Unit,
 ) : HeroCarouselItem {
-    override fun label(isPlaying: Boolean): HeroLabel = HeroLabel("From your playlists")
+    override fun label(isPlaying: Boolean): HeroLabel = HeroLabel("From your playlists", textRes = R.string.pc_hero_from_playlists)
     override val mainText: String = name
     override val subText: String = ""
     override val mediaId: String? = null
@@ -493,7 +502,10 @@ data class StarterItem(
     enum class Kind { Playlist, Artist }
 
     override fun label(isPlaying: Boolean): HeroLabel =
-        HeroLabel(if (kind == Kind.Playlist) "From your import" else "Recommended from")
+        HeroLabel(
+            if (kind == Kind.Playlist) "From your import" else "Recommended from",
+            textRes = if (kind == Kind.Playlist) R.string.pc_hero_from_import else R.string.pc_hero_recommended_from,
+        )
     override val mainText: String = title
     override val subText: String = ""
     override val mediaId: String? = null
@@ -514,8 +526,8 @@ data class StarterSongItem(
     val pickedArtistThumbnail: String?,
 ) : HeroCarouselItem {
     override fun label(isPlaying: Boolean): HeroLabel =
-        if (isPlaying) HeroLabel("Now playing")
-        else HeroLabel("Recommended from", pickedArtistThumbnail, pickedArtist, roundCover = true)
+        if (isPlaying) HeroLabel("Now playing", textRes = R.string.pc_hero_now_playing)
+        else HeroLabel("Recommended from", pickedArtistThumbnail, pickedArtist, roundCover = true, textRes = R.string.pc_hero_recommended_from)
     override val mainText: String = song.title
     override val subText: String = song.artists.joinToString(", ") { it.name }
     override val thumbnailUrl: String? = song.thumbnail
@@ -722,11 +734,7 @@ private fun HeroPager(
                     gacha.burst.animateTo(1f, tween(1100, easing = CubicBezierEasing(0.2f, 0.7f, 0.3f, 1f)))
                     gacha.burst.snapTo(0f)
                 }
-                if (won.localUri != null || won.id.startsWith("LOCAL_")) {
-                    playerConnection.playQueue(ListQueue(title = won.title, items = listOf(won.toMediaItem())))
-                } else {
-                    playerConnection.playQueue(YouTubeQueue.radio(won))
-                }
+                playerConnection.playQueue(YouTubeQueue.radio(won))
             } finally {
                 if (gacha.phase == GachaPhase.Rolling) gacha.phase = GachaPhase.Idle
             }
@@ -807,8 +815,9 @@ private fun HeroPager(
     }
     val wipeCurve by animateFloatAsState(if (userSwipe) 1f else 0f, tween(260), label = "heroWipeCurve")
 
-    // the wide layout: cards side by side, the next one peeking in on the right
-    val peek = isWideLayout()
+    // an upright tablet: cards side by side, the next one peeking in on the right; on its side each card fills the screen and wipes like the phone's
+    // a single card has nothing to peek at, so it takes the whole width
+    val peek = isWideLayout() && !isLandscapeWindow() && !isSingleItem
 
     // the hero animates nearly all the time (video, gacha drift, the switch); bounded, that only
     // ever repaints the hero instead of the whole screen and every glass surface sampling it
@@ -950,12 +959,7 @@ private fun HeroMedia(
         if (song.isBlank() || artist.isBlank()) return@LaunchedEffect
 
         val storefront = Locale.getDefault().country.takeIf { it.length == 2 }?.lowercase(Locale.ROOT) ?: "us"
-        val fetched = withContext(Dispatchers.IO) {
-            MonochromeApiCanvas.getBySongArtist(song, artist, item.albumTitle)
-                ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                ?: AppleMusicCanvasProvider.getBySongArtist(song, artist, item.albumTitle, storefront)
-                    ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-        }
+        val fetched = com.mochyy.mochymusic.ui.player.findCanvas(context, song, artist, item.albumTitle, storefront)
         if (fetched != null) {
             canvasArtwork = fetched
             CanvasArtworkPlaybackCache.put(id, fetched)
@@ -1171,8 +1175,9 @@ private fun HeroText(
     modifier: Modifier = Modifier,
     pillEnabled: Boolean = true,
 ) {
+    val bottom = if (isWideLayout() && isLandscapeWindow() && !isTvLayout()) LandscapeHeroTextBottom else 64.dp
     Column(
-        modifier = modifier.padding(start = HomeContentInset, end = HomeContentInset, bottom = 64.dp)
+        modifier = modifier.padding(start = HomeContentInset, end = HomeContentInset, bottom = bottom)
     ) {
         HeroLabelLine(label)
         AnimatedContent(
@@ -1198,7 +1203,7 @@ private fun HeroText(
 private fun HeroLabelLine(label: HeroLabel) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = label.text,
+            text = if (label.textRes != 0) stringResource(label.textRes) else label.text,
             style = HomeLabelStyle,
             color = HeroLabelColor,
             maxLines = 1,
@@ -1289,11 +1294,11 @@ private fun HeroPill(
                 }
                 Text(
                     text = when (current) {
-                        HeroPillKind.Play -> "Play"
-                        HeroPillKind.Pause -> "Pause"
-                        HeroPillKind.View -> "View"
-                        HeroPillKind.Roll -> "roll!!"
-                        HeroPillKind.Rolling -> "rolling!!"
+                        HeroPillKind.Play -> stringResource(R.string.play)
+                        HeroPillKind.Pause -> stringResource(R.string.pause)
+                        HeroPillKind.View -> stringResource(R.string.pc_hero_view)
+                        HeroPillKind.Roll -> stringResource(R.string.pc_hero_roll)
+                        HeroPillKind.Rolling -> stringResource(R.string.pc_hero_rolling)
                     },
                     style = HomeLabelStyle,
                     color = HeroPillContent,
@@ -1361,9 +1366,9 @@ private fun QuietHero(modifier: Modifier = Modifier) {
                 .align(Alignment.BottomStart)
                 .padding(start = HomeContentInset, end = HomeContentInset, bottom = 64.dp)
         ) {
-            Text(text = "Nothing here yet", style = HomeLabelStyle, color = HeroLabelColor, maxLines = 1)
+            Text(text = stringResource(R.string.pc_hero_nothing_yet), style = HomeLabelStyle, color = HeroLabelColor, maxLines = 1)
             Text(
-                text = "Play something and it shows up here",
+                text = stringResource(R.string.pc_hero_play_something),
                 style = HomeTitleStyle,
                 color = Color.White,
                 maxLines = 2,
@@ -2105,14 +2110,16 @@ private fun GachaPage(
         ) {
             HeroText(
                 label = HeroLabel(
-                    when {
-                        result == null || rolling -> "Gacha here!"
-                        isResultPlaying -> "Now playing"
-                        else -> "You got"
-                    }
+                    stringResource(
+                        when {
+                            result == null || rolling -> R.string.pc_hero_gacha_here
+                            isResultPlaying -> R.string.pc_hero_now_playing
+                            else -> R.string.pc_hero_you_got
+                        },
+                    ),
                 ),
                 title = if (result == null || rolling) {
-                    "Random plays"
+                    stringResource(R.string.pc_hero_random_plays)
                 } else {
                     val artists = result.artists.joinToString(", ") { it.name }
                     if (artists.isNotEmpty()) "${result.title} - $artists" else result.title

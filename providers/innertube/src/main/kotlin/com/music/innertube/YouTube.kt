@@ -132,6 +132,9 @@ object YouTube {
         visitorData = it
     }
 
+    // a fresh visitor id for a client that mints its own, after youtube's bot check burned the old one
+    suspend fun refreshVisitorData(client: YouTubeClient): Result<String> = innerTube.mintVisitorId(client)
+
     fun clearGuestSession() {
         visitorData = null
         dataSyncId = null
@@ -1307,10 +1310,11 @@ object YouTube {
             continuation).body<NextResponse>()
         val playlistPanelRenderer = response.continuationContents?.playlistPanelContinuation
             ?: response.contents.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer
-                ?.watchNextTabbedResultsRenderer?.tabs?.get(0)?.tabRenderer?.content?.musicQueueRenderer
-                ?.content?.playlistPanelRenderer!!
+                ?.watchNextTabbedResultsRenderer?.tabs?.getOrNull(0)?.tabRenderer?.content?.musicQueueRenderer
+                ?.content?.playlistPanelRenderer
+            ?: error("Missing playlistPanelRenderer")
         val title = response.contents.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer
-            ?.watchNextTabbedResultsRenderer?.tabs?.get(0)?.tabRenderer?.content?.musicQueueRenderer
+            ?.watchNextTabbedResultsRenderer?.tabs?.getOrNull(0)?.tabRenderer?.content?.musicQueueRenderer
             ?.header?.musicQueueHeaderRenderer?.subtitle?.runs?.firstOrNull()?.text
         val items = playlistPanelRenderer.contents.mapNotNull { content ->
             content.playlistPanelVideoRenderer
@@ -1320,9 +1324,10 @@ object YouTube {
         val songs = items.map { it.first }
         val currentIndex = items.indexOfFirst { it.second }.takeIf { it != -1 }
 
+        // some hindi songs have an empty automix preview, so fall back to the song and its related tab instead of failing the whole queue
         playlistPanelRenderer.contents.lastOrNull()?.automixPreviewVideoRenderer?.content?.automixPlaylistVideoRenderer?.navigationEndpoint?.watchPlaylistEndpoint?.let { watchPlaylistEndpoint ->
-            return@runCatching next(watchPlaylistEndpoint).getOrThrow().let { result ->
-                result.copy(
+            next(watchPlaylistEndpoint).getOrNull()?.takeIf { it.items.isNotEmpty() || songs.isEmpty() }?.let { result ->
+                return@runCatching result.copy(
                     title = title,
                     // the automix usually opens with the song it was made from, which is already in songs
                     items = songs + result.items.filter { item -> songs.none { it.id == item.id } },

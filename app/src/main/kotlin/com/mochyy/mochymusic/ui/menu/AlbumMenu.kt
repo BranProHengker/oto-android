@@ -101,7 +101,7 @@ fun AlbumMenu(
     val downloadUtil = LocalDownloadUtil.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val scope = rememberCoroutineScope()
-    val libraryAlbum by database.album(originalAlbum.id).collectAsState(initial = originalAlbum)
+    val libraryAlbum by remember(database, originalAlbum.id) { database.album(originalAlbum.id) }.collectAsState(initial = originalAlbum)
     val album = libraryAlbum ?: originalAlbum
     var songs by remember {
         mutableStateOf(emptyList<Song>())
@@ -146,7 +146,7 @@ fun AlbumMenu(
         label = "",
     )
 
-    val isPinned by database.speedDialDao.isPinned(album.id).collectAsState(initial = false)
+    val isPinned by remember(database, album.id) { database.speedDialDao.isPinned(album.id) }.collectAsState(initial = false)
 
     var showChoosePlaylistDialog by rememberSaveable {
         mutableStateOf(false)
@@ -455,7 +455,7 @@ fun AlbumMenu(
                     Material3MenuItemData(
                         title = {
                             Text(
-                                text = if (isPinned) "Unpin from library" else "Pin to library"
+                                text = stringResource(if (isPinned) R.string.unpin_from_speed_dial else R.string.pin_to_speed_dial)
                             )
                         },
                         icon = {

@@ -55,7 +55,7 @@ val SwipeLeftActionKey = stringPreferencesKey("swipeLeftAction")
 
 // the top layout of the home tab, picked in customisation settings
 enum class HomeStyle(val displayName: String) {
-    MOCHYY("Mochyy"),
+    MOCHYY("Oto"),
     LISTEN_NOW("Listen now"),
     HOP_IN("Hop in"),
 }
@@ -260,7 +260,6 @@ val StreamFailureTimeoutKey = intPreferencesKey("streamFailureTimeout")
 val AutoSkipNextOnErrorKey = booleanPreferencesKey("autoSkipNextOnError")
 val StopMusicOnTaskClearKey = booleanPreferencesKey("stopMusicOnTaskClear")
 val ShufflePlaylistFirstKey = booleanPreferencesKey("shufflePlaylistFirst")
-val PreventDuplicateTracksInQueueKey = booleanPreferencesKey("preventDuplicateTracksInQueue")
 val CrossfadeEnabledKey = booleanPreferencesKey("crossfadeEnabled")
 val CrossfadeDurationKey = floatPreferencesKey("crossfadeDuration")
 val CrossfadeGaplessKey = booleanPreferencesKey("crossfadeGapless")
@@ -273,8 +272,6 @@ enum class CrossmixMode {
     MANUAL_CROSSFADE,
     CROSSMIX,
 }
-
-fun CrossmixMode.playable(): CrossmixMode = this
 
 // crossmix unless someone picked otherwise: the old default was a plain 5 s crossfade that never mixed anything
 val DefaultTransitionMode = CrossmixMode.CROSSMIX
@@ -492,7 +489,6 @@ val VideoModeReturnStyleKey = stringPreferencesKey("videoModeReturnStyle")
 
 // the full video mode shows the whole picture with room round it, instead of zooming it to fill the screen
 val VideoModeWholeVideoKey = booleanPreferencesKey("videoModeWholeVideo")
-val VideoModeUprightKey = booleanPreferencesKey("videoModeUpright")
 
 val LocalSongAutoMetadataKey = booleanPreferencesKey("local_song_auto_metadata")
 
@@ -849,6 +845,8 @@ enum class FlagshipTransportLayout {
     THREE,
     // ten seconds back and forward on the outside, play in a white circle
     TEN_SECONDS,
+    // queue and repeat on the outside, play in a white circle
+    QUEUE_REPEAT,
 }
 
 val FlagshipTransportLayoutKey = stringPreferencesKey("flagshipTransportLayout")
@@ -1014,6 +1012,20 @@ val SwipeThumbnailKey = booleanPreferencesKey("swipeThumbnail")
 val RotatingThumbnailKey = booleanPreferencesKey("rotatingThumbnail")
 val CanvasThumbnailAnimationKey = booleanPreferencesKey("canvasThumbnailAnimation")
 val CanvasWifiOnlyKey = booleanPreferencesKey("canvasWifiOnly")
+// which canvas sources get asked first; spotify only joins once it's turned on and signed in on its own page
+val CanvasOrderKey = stringPreferencesKey("canvasOrder")
+val SpotifyCanvasKey = booleanPreferencesKey("spotifyCanvas")
+
+enum class CanvasSource { APPLE_MUSIC, TIDAL, SPOTIFY }
+
+enum class CanvasOrder(val sources: List<CanvasSource>) {
+    APPLE_TIDAL_SPOTIFY(listOf(CanvasSource.APPLE_MUSIC, CanvasSource.TIDAL, CanvasSource.SPOTIFY)),
+    APPLE_SPOTIFY_TIDAL(listOf(CanvasSource.APPLE_MUSIC, CanvasSource.SPOTIFY, CanvasSource.TIDAL)),
+    TIDAL_APPLE_SPOTIFY(listOf(CanvasSource.TIDAL, CanvasSource.APPLE_MUSIC, CanvasSource.SPOTIFY)),
+    TIDAL_SPOTIFY_APPLE(listOf(CanvasSource.TIDAL, CanvasSource.SPOTIFY, CanvasSource.APPLE_MUSIC)),
+    SPOTIFY_APPLE_TIDAL(listOf(CanvasSource.SPOTIFY, CanvasSource.APPLE_MUSIC, CanvasSource.TIDAL)),
+    SPOTIFY_TIDAL_APPLE(listOf(CanvasSource.SPOTIFY, CanvasSource.TIDAL, CanvasSource.APPLE_MUSIC)),
+}
 /** The player's format badge beside the title (OPUS, AAC, FLAC...) */
 val ShowFormatBadgeKey = booleanPreferencesKey("showFormatBadge")
 /** The badge also says the stream's sample rate */
@@ -1364,6 +1376,7 @@ val ForceYtBackdropBlur1500Key = booleanPreferencesKey("forceYtBackdropBlur1500"
 val OfflineModeKey = booleanPreferencesKey("offlineMode")
 val DisableAiFilterKey = booleanPreferencesKey("disableAiFilter")
 val SetupImportCompletedKey = booleanPreferencesKey("setupImportCompleted")
+val HideLibraryImportBannerKey = booleanPreferencesKey("hideLibraryImportBanner")
 
 val LastKnownVersionNameKey = stringPreferencesKey("lastKnownVersionName")
 val LastDonateShownTimeKey = longPreferencesKey("lastDonateShownTime")

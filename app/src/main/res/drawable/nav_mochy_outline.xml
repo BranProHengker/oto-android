@@ -1,32 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- the unlit settings tab, the outline mark from icon new - transparent 2.svg -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="135.16"
-    android:viewportHeight="135.16">
-    <group
-        android:translateX="-55.67"
-        android:translateY="-50.42">
-        <path
-            android:pathData="M163.5 96.3493C180.167 105.972 180.167 130.028 163.5 139.651L108 171.694C91.3333 181.316 70.5 169.288 70.5 150.043V85.9569C70.5 66.7119 91.3333 54.6838 108 64.3063L163.5 96.3493Z"
-            android:fillColor="#00000000"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="19"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M97 112L108.5 98L120 112"
-            android:fillColor="#00000000"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="11"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M110.325 125C111.871 133.439 121.868 148.704 142.944 149.92"
-            android:fillColor="#00000000"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="11"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-    </group>
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M96,112C69.49,112 48,133.49 48,160C48,186.51 69.49,208 96,208C122.51,208 144,186.51 144,160L144,68C144,63.58 147.58,60 152,60C178,60 204,74 216,100C218,104.5 215,110 210,110C205.5,110 202.5,106.5 198,100C188,84 168,76 156,76L156,160C156,186.51 134.51,208 108,208C77.07,208 52,182.93 52,152C52,121.07 77.07,96 108,96C118,96 128,99 136,104L136,124C126,116.5 112,112 96,112ZM96,132C80.54,132 68,144.54 68,160C68,175.46 80.54,188 96,188C111.46,188 124,175.46 124,160C124,144.54 111.46,132 96,132Z" />
 </vector>

@@ -43,7 +43,7 @@ class DynamicResolvingMediaSource(
 
     private var innerMediaSource: MediaSource? = null
     private var timeline: Timeline? = null
-    @Volatile private var fetchError: IOException? = null
+    private var fetchError: IOException? = null
     private var fetchScope = CoroutineScope(Dispatchers.IO + Job())
 
     // The resolved stream's source is built and prepared on the playback thread this source was
@@ -52,7 +52,7 @@ class DynamicResolvingMediaSource(
     // never decrypted anything ("DefaultDrmSessionManager accessed on the wrong thread").
     @Volatile private var playbackHandler: Handler? = null
     /** bumped on every prepare and release, so a resolution that finishes late is dropped */
-    @Volatile private var generation = 0
+    private var generation = 0
 
     override fun prepareSourceInternal(mediaTransferListener: androidx.media3.datasource.TransferListener?) {
         super.prepareSourceInternal(mediaTransferListener)
@@ -68,30 +68,27 @@ class DynamicResolvingMediaSource(
 
         fetchScope.launch {
             val mediaId = originalMediaItem.mediaId
-            var resolutionError: IOException? = null
             val result = try {
                 fetcherAction(mediaId)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
             } catch (e: androidx.media3.common.PlaybackException) {
-                resolutionError = java.io.IOException(e)
+
+                fetchError = java.io.IOException(e)
                 null
             } catch (e: Exception) {
                 Timber.e(e, "Failed to fetch stream for mediaId: $mediaId")
-                resolutionError = if (e is java.io.IOException) e else java.io.IOException(e)
+                fetchError = if (e is java.io.IOException) e else java.io.IOException(e)
                 null
             }
 
-            if (gen != generation) return@launch
-            if (resolutionError != null) {
-                fetchError = resolutionError
-                return@launch
-            }
-
-            onSourceResolved(mediaId, result?.source ?: "YouTube Music")
+            // a failed lookup plays from nowhere: announcing YouTube for it would be wrong
+            if (fetchError == null) onSourceResolved(mediaId, result?.source ?: "YouTube Music")
 
             if (result == null) {
-                prepareChild(gen, mediaSourceFactoryProvider(null), originalMediaItem)
+                if (fetchError == null) {
+
+                    prepareChild(gen, mediaSourceFactoryProvider(null), originalMediaItem)
+                }
+
                 return@launch
             }
 

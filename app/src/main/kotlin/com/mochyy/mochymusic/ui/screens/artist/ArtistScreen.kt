@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.LocalAppContentObscured
@@ -218,9 +219,22 @@ fun ArtistScreen(
     SideEffect { accent.value = themeColor }
     DisposableEffect(Unit) { onDispose { accent.value = null } }
 
+    // the shelves are built outside composition, so their titles are read here first
+    val shelfTitles = ArtistShelfTitles(
+        topSongs = stringResource(R.string.artist_top_songs),
+        albums = stringResource(R.string.artist_albums),
+        singlesEps = stringResource(R.string.artist_singles_eps),
+        videos = stringResource(R.string.artist_videos),
+        concert = stringResource(R.string.artist_concert),
+        featuredOn = stringResource(R.string.artist_featured_on),
+        similar = stringResource(R.string.artist_similar),
+    )
     val lazyListState = rememberLazyListState()
     val revealSeen = rememberRevealSeenState()
-    val bannerHeight = playlistCoverHeight()
+    // on its side the banner is the whole screen, the name block sitting at its foot just over the bottom bar
+    val landscape = com.mochyy.mochymusic.ui.utils.isLandscapeLayout()
+    val bannerHeight = if (landscape) androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp else playlistCoverHeight()
+    val headerFoot = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding() + 6.dp
     val bannerHeightPx = with(LocalDensity.current) { bannerHeight.toPx() }
     val scrollProgress = remember(lazyListState, bannerHeightPx) {
         derivedStateOf {
@@ -338,10 +352,16 @@ fun ArtistScreen(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     item(key = "header", contentType = "header") {
+                        Box(
+                            contentAlignment = Alignment.BottomStart,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (landscape) Modifier.height(bannerHeight - headerFoot) else Modifier),
+                        ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = bannerHeight * ArtistAvatarAt)
+                                .padding(top = if (landscape) 0.dp else bannerHeight * ArtistAvatarAt)
                                 .padding(start = PlaylistInset - 3.dp, end = PlaylistInset)
                         ) {
                             ArtistAvatar(url = header?.avatarUrl ?: photo?.resize(544, 544))
@@ -372,6 +392,7 @@ fun ArtistScreen(
                                 onLike = viewModel::toggleLike,
                                 onSubscribe = viewModel::toggleSubscribe,
                             )
+                        }
                         }
                     }
 
@@ -429,6 +450,7 @@ fun ArtistScreen(
                     if (shelves != null) {
                         artistShelves(
                             shelves = shelves,
+                            shelfTitles = shelfTitles,
                             screenWidth = screenWidth,
                             artistId = viewModel.artistId,
                             mediaMetadataId = playingSongId,
@@ -443,22 +465,23 @@ fun ArtistScreen(
                             onSimilarTitle = { navController.navigate("artist/${viewModel.artistId}/similar") },
                             topSongsMenu = { dismiss ->
                                 page?.artist?.shuffleEndpoint?.let { endpoint ->
-                                    ArtistMenuItem(text = "Shuffle", icon = R.drawable.shuffle) {
+                                    ArtistMenuItem(text = stringResource(R.string.artist_menu_shuffle), icon = R.drawable.shuffle) {
                                         dismiss()
                                         playerConnection.playQueue(YouTubeQueue(endpoint))
                                     }
                                 }
                                 page?.artist?.radioEndpoint?.let { endpoint ->
-                                    ArtistMenuItem(text = "Start radio", icon = R.drawable.radio) {
+                                    ArtistMenuItem(text = stringResource(R.string.artist_menu_start_radio), icon = R.drawable.radio) {
                                         dismiss()
                                         playerConnection.playQueue(YouTubeQueue(endpoint))
                                     }
                                 }
                                 page?.artist?.shareLink?.let { link ->
-                                    ArtistMenuItem(text = "Copy link", icon = R.drawable.link) {
+                                    val linkLabel = stringResource(R.string.artist_link_label)
+                                    ArtistMenuItem(text = stringResource(R.string.artist_menu_copy_link), icon = R.drawable.link) {
                                         dismiss()
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("Artist Link", link))
+                                        clipboard.setPrimaryClip(ClipData.newPlainText(linkLabel, link))
                                         Toast.makeText(context, R.string.link_copied, Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -528,9 +551,20 @@ fun ArtistScreen(
     }
 }
 
+private data class ArtistShelfTitles(
+    val topSongs: String,
+    val albums: String,
+    val singlesEps: String,
+    val videos: String,
+    val concert: String,
+    val featuredOn: String,
+    val similar: String,
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 private fun LazyListScope.artistShelves(
     shelves: ArtistShelves,
+    shelfTitles: ArtistShelfTitles,
     screenWidth: Dp,
     artistId: String,
     mediaMetadataId: () -> String?,
@@ -549,7 +583,7 @@ private fun LazyListScope.artistShelves(
         val songs = section.items.filterIsInstance<SongItem>().distinctBy { it.id }
         item(key = "top_songs_title", contentType = "shelf_title") {
             ArtistShelfTitle(
-                title = "Top songs",
+                title = shelfTitles.topSongs,
                 onClick = section.moreEndpoint?.let { { onOpenMore(it) } },
                 menu = topSongsMenu,
                 modifier = Modifier
@@ -600,8 +634,8 @@ private fun LazyListScope.artistShelves(
         coverShelf(
             key = "albums_$index",
             title = when (index) {
-                0 -> "Albums"
-                1 -> "Singles & EPs"
+                0 -> shelfTitles.albums
+                1 -> shelfTitles.singlesEps
                 else -> section.title
             },
             items = section.items,
@@ -617,7 +651,7 @@ private fun LazyListScope.artistShelves(
 
     videoShelf(
         key = "videos",
-        title = "Videos",
+        title = shelfTitles.videos,
         videos = shelves.videos,
         moreEndpoint = shelves.videoShelf?.moreEndpoint,
         screenWidth = screenWidth,
@@ -632,7 +666,7 @@ private fun LazyListScope.artistShelves(
 
     videoShelf(
         key = "live",
-        title = "Concert",
+        title = shelfTitles.concert,
         videos = shelves.live,
         moreEndpoint = shelves.liveShelf?.moreEndpoint,
         screenWidth = screenWidth,
@@ -648,7 +682,7 @@ private fun LazyListScope.artistShelves(
     shelves.playlistShelves.forEachIndexed { index, section ->
         coverShelf(
             key = "playlists_$index",
-            title = if (index == 0) "Featured on" else section.title,
+            title = if (index == 0) shelfTitles.featuredOn else section.title,
             items = section.items,
             moreEndpoint = section.moreEndpoint,
             revealSeen = revealSeen,
@@ -668,7 +702,7 @@ private fun LazyListScope.artistShelves(
             FeaturedArtistsRow(
                 artists = artists,
                 onArtistClick = { artist -> onOpen(section.items.first { it.id == artist.id }) },
-                title = "Similar Artist",
+                title = shelfTitles.similar,
                 onTitleClick = onSimilarTitle,
                 modifier = Modifier
                     .padding(top = 30.dp)
@@ -819,7 +853,7 @@ private fun LazyListScope.librarySection(
 ) {
     item(key = "library_title", contentType = "shelf_title") {
         ArtistShelfTitle(
-            title = "In your library",
+            title = stringResource(R.string.artist_in_your_library),
             onClick = onSongsTitle,
             modifier = Modifier.padding(top = 30.dp, bottom = 2.dp),
         )
@@ -834,7 +868,8 @@ private fun LazyListScope.librarySection(
                 makeTimeString(song.song.duration * 1000L),
             ).joinToString(" · "),
             isActive = song.id == mediaMetadataId(),
-            isPlaying = isPlaying(),
+            // folded, so a play or pause only touches the row that's playing
+            isPlaying = song.id == mediaMetadataId() && isPlaying(),
             onClick = { onPlay(index) },
             onLongClick = { onSongMenu(song) },
             onMenuClick = { onSongMenu(song) },
@@ -843,7 +878,7 @@ private fun LazyListScope.librarySection(
     if (albums.isNotEmpty()) {
         item(key = "library_albums_title", contentType = "shelf_title") {
             ArtistShelfTitle(
-                title = "Albums of $artistName you saved",
+                title = stringResource(R.string.artist_saved_albums_of, artistName),
                 onClick = onAlbumsTitle,
                 modifier = Modifier.padding(top = 22.dp, bottom = 8.dp),
             )
@@ -882,7 +917,7 @@ private fun ArtistAbout(name: String, bio: String, modifier: Modifier = Modifier
             .padding(horizontal = PlaylistInset)
     ) {
         Text(
-            text = "About $name",
+            text = stringResource(R.string.artist_about, name),
             style = AboutTitleStyle,
             color = Color.White,
             maxLines = 2,
@@ -912,7 +947,7 @@ private fun ArtistRetry(onRetry: () -> Unit) {
             .padding(top = 40.dp)
     ) {
         Text(
-            text = "Couldn't load this artist. Tap to try again",
+            text = stringResource(R.string.artist_load_failed),
             style = PlaylistStatsStyle,
             color = Color.White.copy(alpha = 0.7f),
             modifier = Modifier

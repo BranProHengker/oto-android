@@ -108,11 +108,13 @@ private fun SongShareDialog(
                     started.pick = pick
                     started.lyrics = Fetched.Found(heldLyrics)
                 }
+                started.readingChoice = startingReadingChoice(context)
             }
         }
         val sheets = remember { PopupSheetState() }
 
         ReadLyricsLook(session)
+        ShareLyricReadings(session)
 
         LaunchedEffect(Unit) {
             if (pick != null) {
@@ -130,7 +132,7 @@ private fun SongShareDialog(
         }
         LaunchedEffect(session) {
             launch { loadShareArt(context, session) }
-            launch { loadAnimatedCover(session) }
+            launch { loadAnimatedCover(context, session) }
             launch { findMusicVideo(session) }
             if (heldLyrics == null) {
                 loadShareLyrics(session, database, playerConnection?.service?.lyricsHelper)

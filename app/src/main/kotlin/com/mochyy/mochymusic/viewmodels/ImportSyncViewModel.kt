@@ -14,7 +14,7 @@ import com.mochyy.mochymusic.importer.ImportProgress
 import com.mochyy.mochymusic.importer.LinkImportException
 import com.mochyy.mochymusic.importer.LinkImporter
 import com.mochyy.mochymusic.importer.MusicImportService
-import com.mochyy.mochymusic.importer.OtoCsvExporter
+import com.mochyy.mochymusic.importer.MochyCsvExporter
 import com.mochyy.mochymusic.importer.ParsedImport
 import com.mochyy.mochymusic.importer.YouTubeSyncManager
 import com.mochyy.mochymusic.importer.YtSyncState
@@ -75,7 +75,7 @@ class ImportSyncViewModel @Inject constructor(
         }
     }
 
-    /** [sourceLabel] is only for the review dialog ("Oto backup", "TuneMyMusic"). */
+    /** [sourceLabel] is only for the review dialog ("Mochy backup", "TuneMyMusic"). */
     fun loadFile(uri: Uri, sourceLabel: String) {
         loadJob?.cancel()
         _pending.value = PendingImport.Loading("Reading the file…")
@@ -131,7 +131,7 @@ class ImportSyncViewModel @Inject constructor(
         _exportMessage.value = "Exporting…"
         viewModelScope.launch(Dispatchers.IO) {
             _exportMessage.value = try {
-                val (csv, summary) = OtoCsvExporter.build(database)
+                val (csv, summary) = MochyCsvExporter.build(database)
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     // the BOM makes Excel read names in any script correctly; our reader skips it
                     out.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))

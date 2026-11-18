@@ -5,6 +5,7 @@ package com.mochyy.mochymusic.playback
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.exoplayer.offline.Download
@@ -16,6 +17,7 @@ import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.db.entities.LyricsEntity
 import com.mochyy.mochymusic.db.entities.Song
+import com.mochyy.mochymusic.songedit.LyricsFileReader
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.utils.DocumentTree
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -27,13 +29,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.io.IOException
+import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.OutputStream
+import java.io.SequenceInputStream
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 
 // the folder everything goes into, wherever the user points the export
-private const val RootFolder = "oto-preserve"
+private const val RootFolder = "mochy-preserve"
 
 private const val CoverPx = 1200
 
@@ -95,6 +100,7 @@ class DownloadExporter @Inject constructor(
         val folders = HashMap<List<String>, String>()
         val usedNames = HashMap<List<String>, MutableSet<String>>()
         val coveredFolders = HashSet<List<String>>()
+        val covers = CoverMemo()
         var skipped = 0
 
         entries.forEachIndexed { index, entry ->
@@ -108,18 +114,17 @@ class DownloadExporter @Inject constructor(
                 return@forEachIndexed
             }
             val base = uniqueName(usedNames.getOrPut(entry.path) { HashSet() }, baseName(entry.song))
-            documents.write(folder, "$base.${audio.extension}") { out -> audio.copyTo(out) }
+            val lyrics = if (choice.lyrics) lyricsOf(entry.song.id) else null
+            val cover = if (choice.covers) (entry.folderCover ?: entry.song.song.thumbnailUrl)?.let { covers.get(it) } else null
+            writeAudio(documents, folder, base, audio, tagsOf(entry.song, lyrics?.first, cover))
 
-            if (choice.lyrics) lyricsOf(entry.song.id)?.let { (text, ext) ->
+            lyrics?.let { (text, ext) ->
                 documents.write(folder, "$base.$ext") { it.write(text.toByteArray()) }
             }
-            if (choice.covers) {
-                // an album folder shares one cover.jpg, a mixed folder gets a picture per song
-                if (entry.folderCover != null) {
-                    if (coveredFolders.add(entry.path)) writeCover(documents, folder, "cover.jpg", entry.folderCover)
-                } else {
-                    entry.song.song.thumbnailUrl?.let { writeCover(documents, folder, "$base.jpg", it) }
-                }
+            if (cover != null) {
+                // an album folder shares one cover.jpg, a mixed folder gets a picture per song; a missing cover never stops the songs
+                val name = if (entry.folderCover != null) "cover.jpg".takeIf { coveredFolders.add(entry.path) } else "$base.jpg"
+                if (name != null) runCatching { documents.write(folder, name) { it.write(cover.jpeg) } }
             }
         }
         return ExportStep.Done(songs = entries.size - skipped, skipped = skipped)
@@ -190,10 +195,54 @@ class DownloadExporter @Inject constructor(
         return candidate
     }
 
-    // a downloaded song's bytes, straight from the pieces in the download cache, and what kind of file they make
-    private class CachedAudio(private val spans: List<java.io.File>, val extension: String) {
-        fun copyTo(out: OutputStream) = spans.forEach { span -> span.inputStream().use { it.copyTo(out, 256 * 1024) } }
+    // the song's own audio, only youtube's webm opus moves into an .opus file since players skip .webm; opus and flac carry the song's tags
+    private fun writeAudio(documents: DocumentTree, folder: String, base: String, audio: CachedAudio, tags: ExportTags) {
+        if (audio.extension == "webm" && Build.VERSION.SDK_INT >= 29) {
+            val temp = File.createTempFile("export", ".opus", context.cacheDir)
+            try {
+                if (OggOpusRemux.remux(audio.spans, temp)) {
+                    documents.write(folder, "$base.opus") { out -> temp.inputStream().buffered(256 * 1024).use { ExportTagWriter.copyOpus(it, out, tags) } }
+                    return
+                }
+            } finally {
+                temp.delete()
+            }
+        }
+        // lossless sources often send flac inside an mp4, which goes out as a real .flac instead of an .m4a
+        if (audio.extension == "m4a") {
+            Mp4FlacRemux.flacHeader(audio.spans)?.let { header ->
+                val tagged = ExportTagWriter.retagFlacHeader(header, tags) ?: header
+                documents.write(folder, "$base.flac") { out -> Mp4FlacRemux.write(audio.spans, tagged, out) }
+                return
+            }
+        }
+        documents.write(folder, "$base.${audio.extension}") { out ->
+            when (audio.extension) {
+                "opus" -> audio.open().use { ExportTagWriter.copyOpus(it, out, tags) }
+                "flac" -> audio.open().use { ExportTagWriter.copyFlac(it, out, tags) }
+                else -> audio.copyTo(out)
+            }
+        }
     }
+
+    // a downloaded song's bytes, straight from the pieces in the download cache, and what kind of file they make
+    private class CachedAudio(val spans: List<File>, val extension: String) {
+        fun copyTo(out: OutputStream) = spans.forEach { span -> span.inputStream().use { it.copyTo(out, 256 * 1024) } }
+
+        fun open() = SequenceInputStream(Collections.enumeration(spans.map { it.inputStream() })).buffered(256 * 1024)
+    }
+
+    // what goes into the file's own tags; ttml lyrics go in as lrc so other players can read them too
+    private fun tagsOf(song: Song, lyrics: String?, cover: ExportCover?) = ExportTags(
+        title = song.song.title,
+        artist = song.artists.joinToString(", ") { it.name }.ifBlank { null },
+        album = albumTitle(song),
+        // an album sorts under its lead artist, so a guest on one song doesn't split it when it comes back in
+        albumArtist = albumTitle(song)?.let { song.artists.firstOrNull()?.name },
+        year = song.song.year ?: song.album?.year,
+        lyrics = lyrics?.let { LyricsFileReader.parse(it.toByteArray()) ?: it },
+        cover = cover,
+    )
 
     // null when the download isn't whole, so a broken song is skipped rather than written out short
     private fun audioOf(mediaId: String): CachedAudio? {
@@ -212,14 +261,15 @@ class DownloadExporter @Inject constructor(
     }
 
     // read off the file's first bytes rather than the saved format, since a module download can carry any container
-    private fun extensionOf(first: java.io.File): String {
-        val head = ByteArray(12)
+    private fun extensionOf(first: File): String {
+        val head = ByteArray(64)
         val read = runCatching { first.inputStream().use { it.read(head) } }.getOrDefault(0)
         if (read < 4) return "m4a"
         fun at(offset: Int, text: String) = text.indices.all { head[offset + it] == text[it].code.toByte() }
         return when {
             at(0, "fLaC") -> "flac"
-            at(0, "OggS") -> "ogg"
+            // ogg holding opus is an .opus file, anything else in ogg stays .ogg
+            at(0, "OggS") -> if (read >= 36 && (28..read - 8).any { at(it, "OpusHead") }) "opus" else "ogg"
             at(0, "ID3") || (head[0] == 0xFF.toByte() && (head[1].toInt() and 0xE0) == 0xE0) -> "mp3"
             at(0, "RIFF") -> "wav"
             head[0] == 0x1A.toByte() && head[1] == 0x45.toByte() && head[2] == 0xDF.toByte() && head[3] == 0xA3.toByte() -> "webm"
@@ -241,17 +291,28 @@ class DownloadExporter @Inject constructor(
         return text to ext
     }
 
-    private suspend fun writeCover(documents: DocumentTree, folder: String, name: String, url: String) {
-        val request = ImageRequest.Builder(context)
-            .data(url.resize(CoverPx, CoverPx))
-            .allowHardware(false)
-            .build()
-        val bitmap = runCatching { context.imageLoader.execute(request).image?.toBitmap() }.getOrNull() ?: return
-        // a missing cover never stops the songs
-        runCatching {
-            documents.write(folder, name) { out ->
-                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) throw IOException("couldn't save $name")
+    // an album's songs share one cover, so the last one loaded is kept instead of compressed again for every song
+    private inner class CoverMemo {
+        private var url: String? = null
+        private var cover: ExportCover? = null
+
+        suspend fun get(url: String): ExportCover? {
+            if (url != this.url) {
+                this.url = url
+                cover = load(url)
             }
+            return cover
+        }
+
+        private suspend fun load(url: String): ExportCover? {
+            val request = ImageRequest.Builder(context)
+                .data(url.resize(CoverPx, CoverPx))
+                .allowHardware(false)
+                .build()
+            val bitmap = runCatching { context.imageLoader.execute(request).image?.toBitmap() }.getOrNull() ?: return null
+            val out = ByteArrayOutputStream()
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) return null
+            return ExportCover(out.toByteArray(), bitmap.width, bitmap.height)
         }
     }
 }

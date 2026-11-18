@@ -8,8 +8,8 @@ import com.mochyy.mochymusic.playback.ShuffleMode
 @Immutable
 data class TransportState(
     val isPlaying: Boolean = false,
-    val shuffleMode: ShuffleMode = ShuffleMode.OFF,
     val shuffleModeEnabled: Boolean = false,
+    val shuffleMode: ShuffleMode = ShuffleMode.OFF,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val canSkipNext: Boolean = true,
     val canSkipPrevious: Boolean = true,
@@ -37,6 +37,8 @@ data class QueueItemData(
     val duration: Long = 0L,
     /** Lined up by the infinite queue rather than by the user - the queue's Autoplay section. */
     val isAutoplay: Boolean = false,
+    /** Queued by the user with "Add to Queue" / "Play next" - the queue's Next in Queue section. */
+    val isManual: Boolean = false,
 )
 
 @Immutable

@@ -74,6 +74,48 @@ fun PopupSheetState.showFindModulesSheet(viewModel: ModulesViewModel, onAdded: (
     }
 }
 
+/** a module that's already been fetched and checked, from the module browser: the same last yes a pasted link gets */
+fun PopupSheetState.showAddCheckedSheet(ready: LinkCheck.Ready, viewModel: ModulesViewModel, onAdded: (String) -> Unit) {
+    var sheet: PopupSheetHandle? = null
+    sheet = showWithHandle {
+        AddCheckedContent(
+            ready = ready,
+            viewModel = viewModel,
+            onAdded = { id ->
+                sheet?.dismiss()
+                onAdded(id)
+            },
+            onCancel = { sheet?.dismiss() },
+        )
+    }
+}
+
+@Composable
+private fun AddCheckedContent(ready: LinkCheck.Ready, viewModel: ModulesViewModel, onAdded: (String) -> Unit, onCancel: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var adding by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        ConfirmAdd(
+            ready = ready,
+            adding = adding,
+            onAdd = {
+                adding = true
+                scope.launch {
+                    val id = viewModel.install(ready)
+                    if (id != null) return@launch onAdded(id)
+                    // only a zip's own code can fail here
+                    adding = false
+                    problem = context.getString(R.string.modules_code_broken)
+                }
+            },
+            onCancel = onCancel,
+        )
+        problem?.let { ProblemText(it) }
+    }
+}
+
 @Composable
 private fun FindModulesContent(viewModel: ModulesViewModel, onAdded: (String) -> Unit) {
     val context = LocalContext.current
@@ -90,18 +132,7 @@ private fun FindModulesContent(viewModel: ModulesViewModel, onAdded: (String) ->
     LaunchedEffect(Unit) { catalog = viewModel.catalog() }
 
     fun show(result: LinkCheck) {
-        when (result) {
-            is LinkCheck.Ready -> ready = result
-            LinkCheck.NotALink -> problem = context.getString(R.string.modules_link_not_a_link)
-            LinkCheck.Unreachable -> problem = context.getString(R.string.modules_link_unreachable)
-            LinkCheck.NotAModule -> problem = context.getString(R.string.modules_link_not_a_module)
-            LinkCheck.Website -> problem = context.getString(R.string.modules_link_website)
-            LinkCheck.NotAZip -> problem = context.getString(R.string.modules_file_not_a_zip)
-            LinkCheck.NeedsUrl -> problem = context.getString(R.string.modules_file_needs_url)
-            LinkCheck.NotSigned -> problem = context.getString(R.string.modules_file_not_signed)
-            LinkCheck.NoRelease -> problem = context.getString(R.string.modules_github_no_release)
-            LinkCheck.NoModuleInRelease -> problem = context.getString(R.string.modules_github_no_module)
-        }
+        if (result is LinkCheck.Ready) ready = result else problem = linkProblem(context, result)
     }
 
     fun check(target: String) {
@@ -201,6 +232,20 @@ private fun FindModulesContent(viewModel: ModulesViewModel, onAdded: (String) ->
         Spacer(Modifier.height(10.dp))
         CatalogList(catalog, busy = checking, onPick = { check(it.url) })
     }
+}
+
+/** why a link or a zip didn't turn into a module, in words people can act on; null when it did */
+internal fun linkProblem(context: android.content.Context, result: LinkCheck): String? = when (result) {
+    is LinkCheck.Ready -> null
+    LinkCheck.NotALink -> context.getString(R.string.modules_link_not_a_link)
+    LinkCheck.Unreachable -> context.getString(R.string.modules_link_unreachable)
+    LinkCheck.NotAModule -> context.getString(R.string.modules_link_not_a_module)
+    LinkCheck.Website -> context.getString(R.string.modules_link_website)
+    LinkCheck.NotAZip -> context.getString(R.string.modules_file_not_a_zip)
+    LinkCheck.NeedsUrl -> context.getString(R.string.modules_file_needs_url)
+    LinkCheck.NotSigned -> context.getString(R.string.modules_file_not_signed)
+    LinkCheck.NoRelease -> context.getString(R.string.modules_github_no_release)
+    LinkCheck.NoModuleInRelease -> context.getString(R.string.modules_github_no_module)
 }
 
 @Composable

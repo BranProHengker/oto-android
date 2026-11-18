@@ -1,6 +1,5 @@
 package com.mochyy.mochymusic.ui.player.video
 
-import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
 import android.os.SystemClock
 import android.view.TextureView
@@ -126,6 +125,8 @@ fun YouTubeVideoSurface(
     modifier: Modifier = Modifier,
     // 0 zooms the picture to fill the view, 1 shows all of it with room round it; anything between eases from one to the other
     fit: () -> Float = { 0f },
+    // the most of the picture filling may cut away; a picture that would lose more (upright, square, 4:3) sits whole-ish with room round it instead
+    fillMaxLoss: Float = 1f,
     glassState: GlassState? = null,
     glassActive: () -> Boolean = { true },
     keepScreenOn: Boolean = false,
@@ -165,7 +166,7 @@ fun YouTubeVideoSurface(
 
     LaunchedEffect(session) {
         snapshotFlow { session.hasFrame }.first { it }
-        val sample = Bitmap.createBitmap(SampleSize, SampleSize, Bitmap.Config.ARGB_8888)
+        val sampler = VideoFrameSampler(SampleSize)
         val pixels = IntArray(SampleSize * SampleSize)
         val vertical = LetterboxStabilizer()
         val horizontal = LetterboxStabilizer()
@@ -175,18 +176,22 @@ fun YouTubeVideoSurface(
             delay(SampleIntervalMs)
             // a paused frame never changes, so it's read once and then left alone
             if ((read && !playing) || !textureView.isAvailable) continue
-            if (runCatching { textureView.getBitmap(sample) }.isFailure) continue
-            sample.getPixels(pixels, 0, SampleSize, 0, 0, SampleSize, SampleSize)
+            if (!sampler.read(session.frameSurface, textureView)) continue
             read = true
 
-            val reading = VideoLetterbox.analyze(pixels, SampleSize, SampleSize)
+            // analyse the frame off the main thread so scanning 20k pixels every 300ms never stalls a 120hz frame
+            val (reading, edges, tones) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                sampler.bitmap.getPixels(pixels, 0, SampleSize, 0, 0, SampleSize, SampleSize)
+                val r = VideoLetterbox.analyze(pixels, SampleSize, SampleSize)
+                val e = edgeColors(pixels, SampleSize, horizontal.inset, vertical.inset)
+                val t = com.mochyy.mochymusic.ui.player.flagship.ambientTones(pixels, SampleSize, SampleSize, horizontal.inset, vertical.inset)
+                Triple(r, e, t)
+            }
             val now = SystemClock.uptimeMillis()
             if (vertical.offer(reading.vertical, now)) launch { barInsetY.animateTo(vertical.inset, zoomSpec) }
             if (horizontal.offer(reading.horizontal, now)) launch { barInsetX.animateTo(horizontal.inset, zoomSpec) }
-            currentOnAmbient?.invoke(edgeColors(pixels, SampleSize, horizontal.inset, vertical.inset))
-            currentOnFrameColors?.invoke(
-                com.mochyy.mochymusic.ui.player.flagship.ambientTones(pixels, SampleSize, SampleSize, horizontal.inset, vertical.inset)
-            )
+            currentOnAmbient?.invoke(edges)
+            currentOnFrameColors?.invoke(tones)
         }
     }
 
@@ -202,7 +207,7 @@ fun YouTubeVideoSurface(
                 insetY = barInsetY.value,
                 maxLoss = maxLoss,
             )
-            val filled = transform(1f)
+            val filled = transform(fillMaxLoss)
             if (t == 0f) filled else filled.lerpTo(transform(0f), t)
         }.collect { transform ->
             textureView.scaleX = transform.scaleX

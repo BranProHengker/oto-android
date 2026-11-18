@@ -2,6 +2,7 @@
 
 package com.mochyy.mochymusic.ui.tv
 
+import android.net.Uri
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.media3.common.MediaItem
@@ -24,7 +25,6 @@ import com.mochyy.mochymusic.models.toMediaMetadata
 import com.mochyy.mochymusic.playback.PlayerConnection
 import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
-import java.net.URLEncoder
 
 // a song as the tv's menu needs it, whether it came from the library or from youtube
 @Immutable
@@ -71,21 +71,27 @@ internal class TvActions(
         when (item) {
             is SongItem -> player()?.playQueue(YouTubeQueue(WatchEndpoint(videoId = item.id), item.toMediaMetadata()))
             is AlbumItem -> navController.navigate("album/${item.browseId}")
-            is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
+            // speed dial wraps local playlists into playlist items so both kinds sit in one row
+            is PlaylistItem -> when {
+                item.id == "liked" -> navController.navigate("${TvRoutes.Songs}/liked")
+                item.author?.name == "Local Playlist" -> navController.navigate("local_playlist/${item.id}")
+                else -> navController.navigate("online_playlist/${item.id}")
+            }
             is ArtistItem -> navController.navigate("artist/${item.id}")
         }
     }
 
     fun open(item: LocalItem) {
         when (item) {
-            is Song -> if (item.song.isLocal) {
-                player()?.playQueue(ListQueue(title = item.song.title, items = listOf(item.toMediaItem())))
-            } else {
-                player()?.playQueue(YouTubeQueue(WatchEndpoint(videoId = item.id), item.toMediaMetadata()))
-            }
+            is Song -> player()?.playQueue(YouTubeQueue(WatchEndpoint(videoId = item.id), item.toMediaMetadata()))
             is Album -> navController.navigate("album/${item.id}")
             is Artist -> navController.navigate("artist/${item.id}")
-            is Playlist -> navController.navigate("local_playlist/${item.id}")
+            // recently played makes a fake playlist row for liked songs, which lives under tv_songs on a tv
+            is Playlist -> if (item.id == "liked") {
+                navController.navigate("${TvRoutes.Songs}/liked")
+            } else {
+                navController.navigate("local_playlist/${item.id}")
+            }
         }
     }
 
@@ -120,7 +126,7 @@ internal class TvActions(
 
     fun search(query: String) {
         if (query.isBlank()) return
-        navController.navigate("${TvRoutes.Search}?q=${URLEncoder.encode(query, "UTF-8")}") { launchSingleTop = true }
+        navController.navigate("${TvRoutes.Search}?q=${Uri.encode(query)}") { launchSingleTop = true }
     }
 }
 

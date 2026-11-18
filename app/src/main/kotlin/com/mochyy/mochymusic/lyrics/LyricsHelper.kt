@@ -86,74 +86,49 @@ constructor(
             bestCache.get(mediaMetadata.id)?.let { return it }
         }
 
-        val isOffline = com.mochyy.mochymusic.utils.OfflineMode.isOn
-
-        // When user enables Offline Mode: prioritize local sidecar .lrc file in the same folder first,
-        // then embedded audio tags, then LYRICS_NOT_FOUND if neither exists.
-        if (isOffline) {
-            mediaMetadata.localUri?.let { uriStr ->
-                val uri = android.net.Uri.parse(uriStr)
-                // 1. Prioritize sidecar .lrc file in the same folder
-                withContext(Dispatchers.IO) { SidecarLyrics.find(context, uri) }?.let { lyrics ->
-                    return LyricsWithProvider(lyrics, SidecarLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
-                }
-                // 2. Fallback to embedded audio tags
-                withContext(Dispatchers.IO) { readEmbeddedLyrics(context, uri) }?.let { lyrics ->
-                    return LyricsWithProvider(lyrics, EmbeddedLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
-                }
-            }
-            return LyricsWithProvider(LYRICS_NOT_FOUND, NoConnectionProvider)
-        }
-
-        // When offline mode is NOT enabled: query online providers first.
-        val isNetworkAvailable = try {
-            networkConnectivity.isCurrentlyConnected()
-        } catch (e: Exception) {
-            true
-        }
-
-        var best: ProviderCandidate? = null
-        if (isNetworkAvailable) {
-            val providers = resolveLyricsProviders()
-            // YouTube's auto captions only count when nothing else has lyrics (see [eligible]), so
-            // they're only asked for then: asked every time, they cost every song YouTube requests
-            // whose answer was nearly always thrown away.
-            val (lastResort, regular) = providers.withIndex()
-                .partition { it.value.name == YouTubeCaptionsLyricsProvider.name }
-            var candidates = fetchIndexed(mediaMetadata, regular)
-            // picking parses every candidate's lyrics, so it runs off the main thread the player calls from
-            best = withContext(Dispatchers.Default) { pickBest(mediaMetadata, candidates, providers.size) }
-            if (best == null && lastResort.isNotEmpty()) {
-                candidates = candidates + fetchIndexed(mediaMetadata, lastResort)
-                best = withContext(Dispatchers.Default) { pickBest(mediaMetadata, candidates, providers.size) }
-            }
-        }
-
-        // If online provider returned lyrics, use it:
-        if (best != null && best.lyrics != LYRICS_NOT_FOUND) {
-            val result = LyricsWithProvider(best.lyrics, best.providerName)
-            bestCache.put(mediaMetadata.id, result)
-            return result
-        }
-
-        // Fallback when online providers did not find lyrics (or network is unavailable):
-        // 1. Check sidecar .lrc file in the same folder as fallback
+        // An imported file's own lyrics, from its tags: they're the file's, and they're there
+        // offline. Read before anything goes online, so offline mode still has them.
+        // Off the caller's thread: the player asks from the main one, and this reads the file.
         mediaMetadata.localUri?.let { uriStr ->
-            val uri = android.net.Uri.parse(uriStr)
-            withContext(Dispatchers.IO) { SidecarLyrics.find(context, uri) }?.let { lyrics ->
+            val parsedUri = android.net.Uri.parse(uriStr)
+            withContext(Dispatchers.IO) { SidecarLyrics.find(context, parsedUri) }?.let { lyrics ->
                 return LyricsWithProvider(lyrics, SidecarLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
             }
-            // 2. Fallback to embedded audio tags
-            withContext(Dispatchers.IO) { readEmbeddedLyrics(context, uri) }?.let { lyrics ->
+            withContext(Dispatchers.IO) { readEmbeddedLyrics(context, parsedUri) }?.let { lyrics ->
                 return LyricsWithProvider(lyrics, EmbeddedLyrics.Provider).also { bestCache.put(mediaMetadata.id, it) }
             }
         }
 
+        // offline mode counts as no network: lyrics already saved for the song still show
+        val isNetworkAvailable = !com.mochyy.mochymusic.utils.OfflineMode.isOn && try {
+            networkConnectivity.isCurrentlyConnected()
+        } catch (e: Exception) {
+
+            true
+        }
+
         if (!isNetworkAvailable) {
+            // not "not found": nothing was asked, and saying so would be saved as the answer
             return LyricsWithProvider(LYRICS_NOT_FOUND, NoConnectionProvider)
         }
 
-        return LyricsWithProvider(LYRICS_NOT_FOUND, "Unknown")
+        val providers = resolveLyricsProviders()
+        // YouTube's auto captions only count when nothing else has lyrics (see [eligible]), so
+        // they're only asked for then: asked every time, they cost every song YouTube requests
+        // whose answer was nearly always thrown away.
+        val (lastResort, regular) = providers.withIndex()
+            .partition { it.value.name == YouTubeCaptionsLyricsProvider.name }
+        var candidates = fetchIndexed(mediaMetadata, regular)
+        // picking parses every candidate's lyrics, so it runs off the main thread the player calls from
+        var best = withContext(Dispatchers.Default) { pickBest(mediaMetadata, candidates, providers.size) }
+        if (best == null && lastResort.isNotEmpty()) {
+            candidates = candidates + fetchIndexed(mediaMetadata, lastResort)
+            best = withContext(Dispatchers.Default) { pickBest(mediaMetadata, candidates, providers.size) }
+        }
+        if (best == null) return LyricsWithProvider(LYRICS_NOT_FOUND, "Unknown")
+        val result = LyricsWithProvider(best.lyrics, best.providerName)
+        bestCache.put(mediaMetadata.id, result)
+        return result
     }
 
     /**
@@ -299,6 +274,8 @@ constructor(
         }
 
         val chineseSong = isChineseSong(referenceScript, candidates)
+        val hindiSong = referenceScript == LyricsUtils.Script.DEVANAGARI ||
+            candidates.any { it.script == LyricsUtils.Script.DEVANAGARI || it.language == "hi-Latn" }
         val songLanguage = songLanguage(referenceScript, candidates)
         val pool = eligible(candidates, chineseSong, songLanguage)
         if (pool.isEmpty()) return null
@@ -321,7 +298,14 @@ constructor(
         }
 
         return pool.withIndex().maxByOrNull { (index, c) ->
+            // hindi songs come back in devanagari from youtube and in romanised hindi from apple and musixmatch; both are the real song
+            val hindiMatch = hindiSong && (
+                c.script == LyricsUtils.Script.DEVANAGARI ||
+                    c.language == "hi-Latn" ||
+                    (c.script == LyricsUtils.Script.LATIN && c.language == null)
+                )
             val scriptScore = when {
+                hindiMatch -> 3
                 referenceScript != null -> when {
                     c.script == referenceScript -> 3
                     sameLanguageFamily(c.script, referenceScript) -> 2
@@ -363,6 +347,9 @@ constructor(
                 else -> 0
             }
 
+            // for hindi songs betterlyrics and lyricsplus beat youtube music whenever they have the song
+            val preferredBonus = if (hindiMatch && c.providerName in PreferredHindiProviders) SyncWeight * 3 else 0
+
             // The Chinese services are the strongest sources for Chinese songs, so for one they win
             // a tie outright, and among themselves the user's order decides
             val orderScore = if (chineseSong && c.providerName in ChineseSources) {
@@ -372,6 +359,7 @@ constructor(
             }
 
             scriptScore * ScriptWeight +
+                preferredBonus +
                 syncScore * SyncWeight +
                 duetScore * DuetWeight +
                 orderScore
@@ -585,6 +573,7 @@ constructor(
          * language is the song's language.
          */
         private val LanguageReferenceProviders = setOf("YouTubeMusic", "YouTubeSubtitle")
+        private val PreferredHindiProviders = setOf("BetterLyrics", "YouLyPlus")
 
         /** Chinese services: trusted first-hand only for Chinese songs; see [eligible]. */
         private val ChineseSources = setOf(

@@ -1,4 +1,4 @@
-// the look module that's on right now, which the player's module style, the app's font and the bottom bar's glass follow
+// the looks that are on right now: the player's module style, the app's font and the bottom bar's glass each follow the highest one that brings them
 
 package com.mochyy.mochymusic.modules.skin
 
@@ -29,15 +29,34 @@ internal interface SkinSource {
     val glass: SkinGlass? get() = skin?.glass
 }
 
-/** a look's glass, compiled and ready for the bars: the shader is shared, each bar builds its own effect from it */
+/** a look's glass, compiled and ready for the bars: the shader is shared, each bar builds its own effect from it; [drawsPill] when it draws the lit tab itself */
 @Immutable
-class ActiveGlass(val moduleId: String, val shader: Any, val blurDp: Float, val marginDp: Float, val uniforms: Map<String, Float>)
+class ActiveGlass(
+    val moduleId: String,
+    val shader: Any,
+    val blurDp: Float,
+    val marginDp: Float,
+    val uniforms: Map<String, Float>,
+    val outline: Boolean = true,
+    val shadow: Boolean = true,
+    val drawsPill: Boolean = false,
+)
 
 /** one of the player's shaders, compiled, with the uniform names its source declares so a frame only sets those */
 @Immutable
 class SkinProgram(val shader: Any, val declared: Set<String>)
 
+/** which look each part comes from, each can be a different module or none: the player with its settings, the app's font, the glass */
+internal data class SkinParts(
+    val player: ModuleSkin? = null,
+    val playerValues: Map<String, String> = emptyMap(),
+    val font: ModuleSkin? = null,
+    val glassSkin: ModuleSkin? = null,
+    val glass: SkinGlass? = null,
+)
+
 object ActiveSkin {
+    /** the look whose player the module style draws */
     var current: ModuleSkin? by mutableStateOf(null)
         private set
 
@@ -49,7 +68,7 @@ object ActiveSkin {
     var glassProblem: Pair<String, String>? by mutableStateOf(null)
         private set
 
-    /** what each of the look's own settings is set to, for the player's conditions and setting colours */
+    /** what each of the player look's own settings is set to, for the player's conditions and setting colours */
     var values: Map<String, String> by mutableStateOf(emptyMap())
         private set
 
@@ -57,51 +76,60 @@ object ActiveSkin {
     var shaderProblem: Pair<String, String>? by mutableStateOf(null)
         private set
 
+    /** the look's font for its own player, whether or not it also covers the rest of the app */
+    var playerFont: FontFamily? by mutableStateOf(null)
+        private set
+
     /** the player's shaders by file name, the ones that compiled; empty below android 13 */
     var shaders: Map<String, SkinProgram> by mutableStateOf(emptyMap())
         private set
 
     @Volatile
-    private var requested: Triple<ModuleSkin?, SkinGlass?, Map<String, String>>? = null
+    private var requested: SkinParts? = null
 
-    // the font and the compiled shader last loaded, so a settings change that only moves a uniform reloads neither
-    private var fontFor: ModuleSkin? = null
-    private var family: FontFamily? = null
+    // the fonts and the compiled shader last loaded, so a settings change that only moves a uniform reloads neither
+    private var fonts: Map<ModuleSkin, FontFamily?> = emptyMap()
     private var shaderKey: String? = null
+    private var shaderDrawsPill = false
     private var shader: Any? = null
     private val programs = mutableMapOf<String, SkinProgram>()
 
     /** called on every refresh of the switches; the font and the shaders load off the main thread, then everything changes on it together */
-    internal fun publish(skin: ModuleSkin?, look: SkinGlass?, settings: Map<String, String>, scope: CoroutineScope) {
-        val asked = Triple(skin, look, settings)
-        if (asked == requested) return
-        requested = asked
+    internal fun publish(parts: SkinParts, scope: CoroutineScope) {
+        if (parts == requested) return
+        requested = parts
+        val glassSkin = parts.glassSkin
+        val player = parts.player
         scope.launch(Dispatchers.IO) {
             val loaded = synchronized(this@ActiveSkin) {
-                if (fontFor !== skin) {
-                    family = skin?.font?.let { fontFamily(skin, it) }
-                    fontFor = skin
+                // the app's font and the player's own font, each loaded once and kept while its look stays
+                fonts = listOfNotNull(parts.font, player?.takeIf { it.font != null }).distinct().associateWith { skin ->
+                    if (skin in fonts) fonts[skin] else skin.font?.let { fontFamily(skin, it) }
                 }
-                val compiled = if (skin != null && look != null) compile(skin, look) else Compiled(null, null)
-                val programs = skin?.let(::compilePlayer).orEmpty()
-                Loaded(family, compiled, look, programs, playerProblem)
+                val compiled = if (glassSkin != null && parts.glass != null) compile(glassSkin, parts.glass) else Compiled(null, null)
+                val programs = player?.let(::compilePlayer).orEmpty()
+                Loaded(parts.font?.let { fonts[it] }, player?.let { fonts[it] }, compiled, programs, playerProblem)
             }
             withContext(Dispatchers.Main) {
-                if (requested != asked) return@withContext
-                current = skin
-                LookFont.family = loaded.fonts
-                glass = if (skin != null && loaded.wanted != null && loaded.compiled.shader != null) {
-                    ActiveGlass(skin.moduleId, loaded.compiled.shader, loaded.wanted.blurDp, loaded.wanted.marginDp, loaded.wanted.uniforms)
+                if (requested != parts) return@withContext
+                current = player
+                LookFont.family = loaded.appFonts
+                playerFont = loaded.playerFonts
+                glass = if (glassSkin != null && parts.glass != null && loaded.compiled.shader != null) {
+                    ActiveGlass(
+                        glassSkin.moduleId, loaded.compiled.shader, parts.glass.blurDp, parts.glass.marginDp, parts.glass.uniforms,
+                        outline = parts.glass.outline, shadow = parts.glass.shadow, drawsPill = loaded.compiled.drawsPill,
+                    )
                 } else null
-                glassProblem = loaded.compiled.problem?.let { skin?.moduleId.orEmpty() to it }
-                shaderProblem = loaded.playerProblem?.let { skin?.moduleId.orEmpty() to it }
+                glassProblem = loaded.compiled.problem?.let { glassSkin?.moduleId.orEmpty() to it }
+                shaderProblem = loaded.playerProblem?.let { player?.moduleId.orEmpty() to it }
                 if (shaders != loaded.programs) shaders = loaded.programs
-                if (values != settings) values = settings
+                if (values != parts.playerValues) values = parts.playerValues
             }
         }
     }
 
-    private class Loaded(val fonts: FontFamily?, val compiled: Compiled, val wanted: SkinGlass?, val programs: Map<String, SkinProgram>, val playerProblem: String?)
+    private class Loaded(val appFonts: FontFamily?, val playerFonts: FontFamily?, val compiled: Compiled, val programs: Map<String, SkinProgram>, val playerProblem: String?)
 
     // why a player shader didn't compile on the last load, written and read under the lock
     private var playerProblem: String? = null
@@ -131,7 +159,7 @@ object ActiveSkin {
         }.toMap()
     }
 
-    private class Compiled(val shader: Any?, val problem: String?)
+    private class Compiled(val shader: Any?, val problem: String?, val drawsPill: Boolean = false)
 
     // the shader's text, compiled once per file; a broken one gives the compiler's first line back for the module's page
     private fun compile(skin: ModuleSkin, look: SkinGlass): Compiled {
@@ -140,12 +168,15 @@ object ActiveSkin {
         val file = skin.fontFile(look.shader)?.takeIf { it.isFile } ?: return Compiled(null, "its shader file ${look.shader} isn't in the module")
         if (file.length() > MaxShaderBytes) return Compiled(null, "its shader is bigger than ${MaxShaderBytes / 1024} KB")
         val key = "${file.path}:${file.lastModified()}:${file.length()}"
-        if (key == shaderKey && shader != null) return Compiled(shader, null)
+        if (key == shaderKey && shader != null) return Compiled(shader, null, shaderDrawsPill)
         return try {
-            val made = createAgslShader(file.readText())
+            val source = file.readText()
+            val made = createAgslShader(source)
             shaderKey = key
             shader = made
-            Compiled(made, null)
+            // a glass that takes the lit tab's place draws it itself, and mochy leaves its own highlight out
+            shaderDrawsPill = DeclaredUniform.findAll(source).any { it.groupValues[1] == "pill" }
+            Compiled(made, null, shaderDrawsPill)
         } catch (e: Exception) {
             Timber.tag("ActiveSkin").w(e, "Couldn't compile the look's glass")
             shaderKey = null
@@ -169,7 +200,7 @@ object ActiveSkin {
 
     private const val MaxShaderBytes = 64 * 1024
     // "uniform float time;" or "layout(color) uniform half4 played;", the name is what a frame may set
-    private val DeclaredUniform = Regex("""\buniform\s+\w+\s+(\w+)\s*[;\[]""")
+    internal val DeclaredUniform = Regex("""\buniform\s+\w+\s+(\w+)\s*[;\[]""")
 }
 
 /** the look as it's applied: a module with its own player or glass switches to it, and a fixed accent turns the cover-coloured theme off */

@@ -142,7 +142,7 @@ fun AutoPlaylistScreen(
         "liked" -> stringResource(R.string.liked)
         "uploaded" -> stringResource(R.string.uploaded_playlist)
         "downloaded" -> stringResource(R.string.offline)
-        "local" -> "Local"
+        "local" -> stringResource(R.string.library_tab_local)
         "local_liked" -> "Local liked songs"
         "cached" -> "Cached"
         "cached_liked" -> "Cached liked songs"
@@ -528,13 +528,14 @@ fun AutoPlaylistScreen(
                 library = { librarySwipeAction(song.song) },
                 queue = { queueSwipeAction { song.toMediaItem() } },
             ) {
+                val active = song.song.id == mediaMetadata?.id
                 PlaylistTrackRow(
                     thumbnailUrl = song.song.thumbnailUrl,
                     songId = song.id,
                     title = song.song.title,
                     subtitle = "${song.artists.joinToString { it.name }} • ${makeTimeString(song.song.duration * 1000L)}",
-                    isActive = song.song.id == mediaMetadata?.id,
-                    isPlaying = isPlaying,
+                    isActive = active,
+                    isPlaying = active && isPlaying,
                     modifier = Modifier.revealOnAppear(
                         key = "track_${song.id}",
                         seenState = revealSeen,
@@ -641,7 +642,7 @@ private fun LikedSourceSeparator(source: ImportSource?, modifier: Modifier = Mod
                     .background(colorResource(R.color.ic_launcher_background)),
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_oto_mark),
+                    painter = painterResource(R.drawable.ic_mochy_mark),
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(9.dp),

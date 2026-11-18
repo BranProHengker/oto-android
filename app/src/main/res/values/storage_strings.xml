@@ -50,7 +50,7 @@
     <string name="storage_place_note_cache">The cache starts fresh in the new place. Oto restarts once to finish.</string>
     <string name="storage_place_card_note">On a memory card, Oto saves into its own folder, which Android clears if Oto is uninstalled.</string>
     <string name="storage_place_choose_folder">Choose a folder</string>
-    <string name="storage_place_folder_note">Oto saves into an Oto folder inside the one you pick, so nothing else in there is touched.</string>
+    <string name="storage_place_folder_note">Oto saves into a Oto folder inside the one you pick, so nothing else in there is touched.</string>
     <string name="storage_place_access_needed">To save in %1$s, Oto needs All files access. Android asks for it in Settings.</string>
     <string name="storage_place_allow_access">Allow access</string>
     <string name="storage_place_no_access">Oto didn\'t get access, so it can\'t save there. Allow it, or pick another folder.</string>
@@ -66,7 +66,7 @@
     <string name="storage_place_move_action">Move and restart</string>
 
     <string name="storage_export_sheet_title">Export downloaded songs</string>
-    <string name="storage_export_note">They\'re copied into an oto-preserve folder wherever you pick. Your downloads stay where they are.</string>
+    <string name="storage_export_note">They\'re copied into a oto-preserve folder wherever you pick. Your downloads stay where they are.</string>
     <string name="storage_export_layout_playlists">Music and playlists</string>
     <string name="storage_export_layout_playlists_detail">A folder for each playlist and your liked songs, the rest go in Music</string>
     <string name="storage_export_layout_albums">Albums</string>

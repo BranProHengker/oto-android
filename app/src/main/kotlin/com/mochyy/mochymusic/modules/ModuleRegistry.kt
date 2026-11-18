@@ -34,7 +34,10 @@ import com.mochyy.mochymusic.modules.code.CodeModules
 import com.mochyy.mochymusic.modules.local.LocalModule
 import com.mochyy.mochymusic.modules.skin.ActiveSkin
 import com.mochyy.mochymusic.modules.skin.ModuleMenu
+import com.mochyy.mochymusic.modules.skin.ModuleSkin
 import com.mochyy.mochymusic.modules.skin.SkinFiles
+import com.mochyy.mochymusic.modules.skin.SkinGlass
+import com.mochyy.mochymusic.modules.skin.SkinParts
 import com.mochyy.mochymusic.modules.skin.SkinSource
 import com.mochyy.mochymusic.modules.web.WebModule
 import com.mochyy.mochymusic.modules.web.WebModuleManifest
@@ -88,6 +91,14 @@ data class ModuleEntry(
     val values: Map<String, String> = emptyMap(),
     /** when it was added, null for built-in ones and ones added before mochy kept the date */
     val addedAt: Long? = null,
+    /** the github project or link it can update from, null for one added from a file */
+    val source: ModuleSource? = null,
+    /** a newer copy waiting at [source] */
+    val update: ModuleUpdate? = null,
+    /** when [source] was last asked for a newer copy */
+    val checkedAt: Long? = null,
+    /** the name of a look above this one that takes some of what it brings, null when nothing of it is covered */
+    val coveredBy: String? = null,
 ) {
     val id: String get() = module.info.id
 
@@ -109,6 +120,7 @@ class ModuleRegistry @Inject constructor(
     private val prefs = context.getSharedPreferences("source_modules", Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val looks = ModuleLooks(context)
+    private val updates by lazy { ModuleUpdates(prefs, client) }
 
     private val client by lazy {
         OkHttpClient.Builder()
@@ -143,27 +155,14 @@ class ModuleRegistry @Inject constructor(
     fun setEnabled(id: String, on: Boolean) {
         val module = module(id)
         prefs.edit { putBoolean("enabled_$id", on) }
-        if (module is LookModule && restyles(module)) {
-            scope.launch {
-                if (on) {
-                    // one look at a time: the one already on gives the user's settings back first
-                    modules.map { it.first }
-                        .filter { it.info.id != id && restyles(it) && isEnabled(it.info.id) }
-                        .forEach { other ->
-                            prefs.edit { putBoolean("enabled_${other.info.id}", false) }
-                            looks.restore(other.info.id, (other as LookModule).look)
-                        }
-                    looks.apply(id, module.look)
-                } else {
-                    looks.restore(id, module.look)
-                }
-                refresh()
-            }
-        }
-        refresh()
+        // a look turned on goes to the top of the looks, so what it brings shows over the others straight away
+        if (on && module != null && restyles(module)) raise(id) else refresh()
     }
 
-    // a look that changes settings, the player or the font; only one of those is on at a time, a module with only pages doesn't count
+    /** puts a look above the others, so its settings, player, font and glass win where they meet */
+    fun raise(id: String) = setOrder(listOf(id))
+
+    // a look that changes settings, the player, the font or the glass; several can be on, the higher one wins where they meet, a module with only pages doesn't count
     private fun restyles(module: MochyModule): Boolean =
         module is LookModule && ModuleFeature.Look in module.adds && (module.look.isNotEmpty() || (module as? SkinSource)?.skin?.restyles == true)
 
@@ -193,19 +192,11 @@ class ModuleRegistry @Inject constructor(
         runCatching { (module as? ModuleFields)?.onFields(values) }
     }
 
-    /** keeps one of a module's settings; a look that's on swaps over to what the new value brings, giving the old values back first */
+    /** keeps one of a module's settings; a look that's on changes over to what the new value brings on the refresh */
     fun setField(id: String, fieldId: String, value: String) {
         val module = module(id) ?: return
-        val before = (module as? LookModule)?.look
         prefs.edit { putString("field_${id}_$fieldId", value) }
         handValues(module)
-        val after = (module as? LookModule)?.look
-        if (before != null && after != null && before != after && isEnabled(id) && restyles(module)) {
-            scope.launch {
-                looks.restore(id, before)
-                looks.apply(id, after)
-            }
-        }
         refresh()
     }
 
@@ -232,18 +223,63 @@ class ModuleRegistry @Inject constructor(
                 fields = runCatching { (module as? ModuleFields)?.fields }.getOrNull().orEmpty(),
                 values = valuesFor(module),
                 addedAt = prefs.getLong("added_$id", 0L).takeIf { it > 0L },
+                source = updates.source(id),
+                update = updates.update(id),
+                checkedAt = updates.checkedAt(id),
             )
         }.sortedBy { entry -> order.indexOf(entry.id).let { if (it < 0) Int.MAX_VALUE else it } }
-        _entries.value = list
-        // the look that's on now, for the player's module style and the app's font
-        val restylingEntry = list.firstOrNull { it.active && (it.module as? SkinSource)?.skin?.restyles == true }
-        val restyling = restylingEntry?.module as? SkinSource
-        ActiveSkin.publish(restyling?.skin, restyling?.glass, restylingEntry?.values.orEmpty(), scope)
+        // the looks that are on, highest first: where two bring the same setting, player, font or glass, the higher one wins
+        val looks = list.filter { it.active && restyles(it.module) }
+        _entries.value = list.map { entry -> coveredBy(entry, looks)?.let { entry.copy(coveredBy = it) } ?: entry }
+        val player = looks.firstOrNull { it.skin?.player != null }
+        val glass = looks.firstOrNull { it.glass != null }
+        ActiveSkin.publish(
+            SkinParts(
+                player = player?.skin,
+                playerValues = player?.values.orEmpty(),
+                font = looks.firstOrNull { it.skin?.font?.wholeApp == true }?.skin,
+                glassSkin = glass?.skin,
+                glass = glass?.glass,
+            ),
+            scope,
+        )
+        syncLooks(looks)
         LyricsProviderRegistry.setModuleProviders(
             list.filter { it.active && it.adds(ModuleFeature.Lyrics) }.mapNotNull { (it.module as? LyricsModule)?.let(::ModuleLyricsProvider) },
         )
         ModuleMetadata.sources = list.filter { it.active && it.adds(ModuleFeature.Metadata) }.mapNotNull { it.module as? MetadataModule }
         ModuleMenu.publish(list.filter { it.active }.mapNotNull { (it.module as? SkinSource)?.skin })
+    }
+
+    private val ModuleEntry.skin: ModuleSkin? get() = (module as? SkinSource)?.skin
+
+    private val ModuleEntry.glass: SkinGlass? get() = (module as? SkinSource)?.glass
+
+    // what a look brings that another could also bring: its settings by name, and its player, font and glass
+    private fun partsOf(entry: ModuleEntry): Set<String> = buildSet {
+        (entry.module as? LookModule)?.look?.keys?.let(::addAll)
+        if (entry.skin?.player != null) add("player")
+        if (entry.skin?.font?.wholeApp == true) add("font")
+        if (entry.glass != null) add("glass")
+    }
+
+    // the first look above [entry] that takes something [entry] also brings, for its page to say so
+    private fun coveredBy(entry: ModuleEntry, looks: List<ModuleEntry>): String? {
+        val index = looks.indexOfFirst { it.id == entry.id }.takeIf { it > 0 } ?: return null
+        val mine = partsOf(entry)
+        return looks.take(index).firstOrNull { higher -> partsOf(higher).any { it in mine } }?.module?.info?.name
+    }
+
+    // the looks' settings as last handed over, so a refresh that changes nothing about them leaves the settings alone
+    @Volatile
+    private var syncedLooks: List<Map<String, String>>? = null
+
+    private fun syncLooks(on: List<ModuleEntry>) {
+        val wanted = on.mapNotNull { (it.module as? LookModule)?.look }
+        if (wanted == syncedLooks) return
+        syncedLooks = wanted
+        // whichever sync runs last reads the newest looks, so two quick refreshes can't leave an old one on
+        scope.launch { syncedLooks?.let { looks.sync(it) } }
     }
 
     // ---- modules added from a link ------------------------------------------------------------
@@ -263,6 +299,8 @@ class ModuleRegistry @Inject constructor(
             val zipRoot: String = "",
             // the zip's own code, already checked to be signed like mochy, waiting in the cache to be installed
             val code: File? = null,
+            // where a newer copy can be found later: the github project or the link it came from
+            val source: ModuleSource? = null,
         ) : LinkCheck
         data object NotALink : LinkCheck
         data object Unreachable : LinkCheck
@@ -292,20 +330,25 @@ class ModuleRegistry @Inject constructor(
         val manifest = WebModuleManifest.parse(text) ?: return@withContext LinkCheck.NotAModule
         val found = WebModule(base, manifest, context.resources)
         if (found.adds.isEmpty()) return@withContext LinkCheck.NotAModule
-        LinkCheck.Ready(base, text, found.info.name, found.adds, alreadyAdded = module(found.info.id) != null, from = base.substringAfter("://"))
+        LinkCheck.Ready(
+            base, text, found.info.name, found.adds, alreadyAdded = module(found.info.id) != null, from = base.substringAfter("://"),
+            source = ModuleSource.Link(base, ModuleUpdates.fingerprint(text)),
+        )
     }
 
     // the release's zip lands in the cache, then it's read exactly like a zip picked from the phone
     private suspend fun checkGitHub(link: GitHubReleases.Link): LinkCheck {
-        val found = GitHubReleases.download(client, context.cacheDir, link, preferDebug = com.mochyy.mochymusic.BuildConfig.BUILD_TYPE != "release")
+        val found = GitHubReleases.download(client, context.cacheDir, link, preferDebug = PreferDebugZips)
         val zip = when (found) {
             is GitHubReleases.Found.Zip -> found
+            is GitHubReleases.Found.Newest -> return LinkCheck.Unreachable
             GitHubReleases.Found.NoRelease -> return LinkCheck.NoRelease
             GitHubReleases.Found.NoModule -> return LinkCheck.NoModuleInRelease
             GitHubReleases.Found.Unreachable -> return LinkCheck.Unreachable
         }
         val result = checkZip(Uri.fromFile(zip.file))
-        return (result as? LinkCheck.Ready)?.copy(from = zip.from) ?: result
+        val source = ModuleSource.GitHub(link.owner, link.repo, zip.release.tag, zip.release.stamp)
+        return (result as? LinkCheck.Ready)?.copy(from = zip.from, source = source) ?: result
     }
 
     /** reads a module's zip without adding anything: its manifest.json, and the service it names when it plays songs or lyrics */
@@ -409,6 +452,7 @@ class ModuleRegistry @Inject constructor(
             handValues(module)
             loaded = modules.filter { it.first.info.id != id } + (module to origin)
         }
+        updates.installed(id, ready.source)
         refresh()
         return id
     }
@@ -430,8 +474,36 @@ class ModuleRegistry @Inject constructor(
             handValues(fresh)
             loaded = modules.filter { it.first.info.id != id } + (fresh to ModuleOrigin.Code(ready.from))
         }
+        updates.installed(id, ready.source)
         refresh()
         return id
+    }
+
+    // ---- updates --------------------------------------------------------------------------------
+
+    /** asks every module's github project or link whether a newer copy is out; [force] skips the wait between checks, [only] checks one */
+    suspend fun checkUpdates(force: Boolean, only: String? = null) = withContext(Dispatchers.IO) {
+        modules.map { it.first }.filter { only == null || it.info.id == only }.forEach { module ->
+            runCatching { updates.check(module.info.id, module.info.version, force, preferDebug = PreferDebugZips) }
+        }
+        refresh()
+    }
+
+    /** fetches the newer copy from where the module came from and puts it in place; its switch and settings stay */
+    suspend fun update(id: String): LinkCheck {
+        val source = updates.source(id) ?: return LinkCheck.NotALink
+        val check = check(source.link)
+        if (check !is LinkCheck.Ready) return check
+        // a link the author moved to another module can't replace this one
+        if (check.code == null && idOf(check) != id) return LinkCheck.NotAModule
+        withContext(Dispatchers.IO) { install(check) } ?: return LinkCheck.NotAModule
+        return check
+    }
+
+    // the id a checked link or zip turns into once it's added
+    private fun idOf(ready: LinkCheck.Ready): String? {
+        val manifest = WebModuleManifest.parse(ready.manifestText) ?: return null
+        return ready.base?.let { WebModuleManifest.idFor(it, manifest) } ?: LocalModule.idFor(manifest)
     }
 
     /** takes a module added from a link or a zip away for good, its look, lyrics and files go with it */
@@ -440,13 +512,13 @@ class ModuleRegistry @Inject constructor(
         if (origin !is ModuleOrigin.Web && origin !is ModuleOrigin.File && origin !is ModuleOrigin.Code) return
         val codeFolder = savedCodeModules().firstOrNull { it.optString("id") == id }?.optString("folder")
         scope.launch {
-            if (module is LookModule) looks.restore(id, module.look)
             SkinFiles.delete(context, id)
             folderFor(id).deleteRecursively()
             codeFolder?.let { CodeModules.delete(context, it) }
         }
         module.signOut()
         (module as? BridgedModule)?.close()
+        updates.forget(id)
         synchronized(this) {
             prefs.edit {
                 when (origin) {
@@ -587,6 +659,8 @@ class ModuleRegistry @Inject constructor(
         private const val MaxZipEntries = 200
         private const val MaxManifestBytes = 256 * 1024
         private val ServiceResources = setOf("search", "stream", "lyrics", "metadata")
+        // a release with a debug and a release zip: debug, fast and profileable builds are signed with the debug key
+        private val PreferDebugZips = com.mochyy.mochymusic.BuildConfig.BUILD_TYPE != "release"
         const val ModuleAction = "com.mochyy.mochymusic.SOURCE_MODULE"
         const val EntryMetaKey = "com.mochyy.mochymusic.module.entry"
     }

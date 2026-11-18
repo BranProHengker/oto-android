@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -53,8 +52,10 @@ import com.mochyy.mochymusic.core.updater.InstagramUrl
 import com.mochyy.mochymusic.core.updater.ThreadsUrl
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
 import com.mochyy.mochymusic.ui.component.pressBounce
+import com.mochyy.mochymusic.ui.screens.donate.showDonateSheet
 import com.mochyy.mochymusic.ui.utils.SoftBlurTransformation
 import com.mochyy.mochymusic.ui.component.RemoteFocus
+import com.mochyy.mochymusic.ui.component.rememberResourcePainter
 
 internal data class DevSocial(val label: String, val url: String)
 
@@ -62,6 +63,8 @@ internal data class DevPerson(
     val name: String,
     val bio: String,
     @DrawableRes val avatar: Int,
+    /** the main dev takes donations, the donate section only shows for them */
+    val takesDonations: Boolean = false,
     val socials: List<DevSocial> = emptyList(),
 )
 
@@ -70,6 +73,7 @@ internal val DevPeople = listOf(
         name = "idkroo",
         bio = "ui ux guy here uhh idk what to write here, pls star the repo",
         avatar = R.drawable.frame_51_3,
+        takesDonations = true,
         socials = listOf(
             DevSocial("Instagram", InstagramUrl),
             DevSocial("Discord", DiscordUrl),
@@ -87,7 +91,7 @@ internal val DevPeople = listOf(
 @Composable
 internal fun DevAvatar(person: DevPerson, modifier: Modifier = Modifier) {
     Image(
-        painter = painterResource(person.avatar),
+        painter = rememberResourcePainter(person.avatar),
         contentDescription = person.name,
         contentScale = ContentScale.Crop,
         modifier = modifier.clip(CircleShape).background(Color(0xFFD9D9D9)),

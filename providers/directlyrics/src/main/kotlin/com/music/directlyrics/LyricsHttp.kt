@@ -16,7 +16,7 @@ internal val LyricsJson = Json {
     isLenient = true
 }
 
-// one client for netease, qq music and deezer, some label their json as plain text or html so those are read as json too
+// one client for netease, qq music, deezer and lrc.red, some label their json as plain text or html so those are read as json too
 internal val lyricsHttp by lazy {
     HttpClient(OkHttp) {
         expectSuccess = true
@@ -25,7 +25,7 @@ internal val lyricsHttp by lazy {
             requestTimeoutMillis = 10_000
         }
         // says who's asking so the server owner can reach us instead of blocking us
-        install(UserAgent) { agent = "Oto (+https://github.com/BranProHengker/oto-android)" }
+        install(UserAgent) { agent = "Mochy (+https://github.com/realidkroo/Mochy-Music)" }
         install(ContentNegotiation) {
             json(LyricsJson)
             json(LyricsJson, ContentType.Text.Plain)

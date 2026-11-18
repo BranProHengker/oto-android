@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,13 +55,14 @@ import com.mochyy.mochymusic.ui.screens.audiolab.LabColors
 import com.mochyy.mochymusic.ui.screens.settings.devspace.openDevUrl
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.viewmodels.ModulesViewModel
+import kotlinx.coroutines.launch
 
 const val ModulesRoute = "modules"
 const val ModuleRoutePattern = "module/{id}"
 fun moduleRoute(id: String) = "module/$id"
 
-/** how to make a module, repo docs */
-const val ModuleDocsUrl = "https://github.com/BranProHengker/oto-android"
+/** how to make a module, the guide on mochy's wiki */
+const val ModuleDocsUrl = "https://realidkroo.github.io/Mochy-Music/wiki/#modules-types"
 
 private val CardShape = RoundedCornerShape(26.dp)
 
@@ -74,6 +76,9 @@ fun ModulesScreen(navController: NavController, viewModel: ModulesViewModel = hi
     val sources = entries.filter { !it.isLookOnly }
     val open: (ModuleEntry) -> Unit = { navController.navigate(moduleRoute(it.id)) }
     val findMore = { overlay.showFindModulesSheet(viewModel) { id -> navController.navigate(moduleRoute(id)) } }
+    val updating by viewModel.updating.collectAsState()
+    val scope = rememberCoroutineScope()
+    val update: (ModuleEntry) -> Unit = { entry -> scope.launch { context.updateModule(viewModel, entry) } }
 
     SubSettingsScaffold(
         title = stringResource(R.string.settings_modules_category),
@@ -81,20 +86,31 @@ fun ModulesScreen(navController: NavController, viewModel: ModulesViewModel = hi
         titleBadge = { BetaBadge() },
     ) {
         ThirdPartyCard { context.openDevUrl(ModuleDocsUrl) }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(14.dp))
+        // mochy's bar is where people share modules, so its browser sits right up top
+        ModulesBarBanner { navController.navigate(ModuleBrowserRoute) }
+        Spacer(Modifier.height(22.dp))
+        Box(Modifier.fillMaxWidth().padding(horizontal = 2.dp).height(1.dp).background(Color.White.copy(alpha = 0.28f)))
+        Spacer(Modifier.height(28.dp))
 
         ModuleSectionTitle(stringResource(R.string.modules_looks))
         if (looks.isEmpty()) {
             DashedSlot(stringResource(R.string.modules_looks_empty), onClick = findMore)
         } else {
-            ModuleList(looks, onOpen = open, onRemove = { removing = it }, onReorder = { viewModel.reorder(it, looks = true) })
+            ModuleList(
+                looks, onOpen = open, onRemove = { removing = it }, onReorder = { viewModel.reorder(it, looks = true) },
+                updating = updating, onUpdate = update,
+            )
             Spacer(Modifier.height(12.dp))
             DashedSlot(stringResource(R.string.modules_add_more), onClick = findMore, compact = true)
         }
 
         Spacer(Modifier.height(34.dp))
         ModuleSectionTitle(stringResource(R.string.modules_sources), stringResource(R.string.modules_swipe_to_delete))
-        ModuleList(sources, onOpen = open, onRemove = { removing = it }, onReorder = { viewModel.reorder(it, looks = false) })
+        ModuleList(
+            sources, onOpen = open, onRemove = { removing = it }, onReorder = { viewModel.reorder(it, looks = false) },
+            updating = updating, onUpdate = update,
+        )
         Spacer(Modifier.height(12.dp))
         DashedSlot(stringResource(R.string.modules_add_more), onClick = findMore, compact = true)
         Spacer(Modifier.height(120.dp))
@@ -163,5 +179,32 @@ private fun TwoPhones(modifier: Modifier) {
             drawRoundRect(color = Color(0xFF161618), topLeft = Offset(left, 0f), size = phone, cornerRadius = corner)
             drawRoundRect(color = Color.White.copy(alpha = 0.16f), topLeft = Offset(left, 0f), size = phone, cornerRadius = corner, style = outline)
         }
+    }
+}
+
+@Composable
+private fun ModulesBarBanner(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(84.dp)
+            .clip(CardShape)
+            .background(LabColors.Card)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_oto_mark),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(36.dp),
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            stringResource(R.string.modules_bar),
+            fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 19.sp, lineHeight = 23.sp,
+            letterSpacing = (-0.5).sp, color = Color.White, modifier = Modifier.weight(1f),
+        )
     }
 }

@@ -82,7 +82,7 @@ fun UpdatePromptSheet(
         } else {
             needsPermission = true
             readyToInstall = true
-            error = "Allow \"Install unknown apps\" for Oto, then tap Install here again."
+            error = "Allow \"Install unknown apps\" for mochy, then tap Install here again."
         }
     }
 
@@ -112,7 +112,7 @@ fun UpdatePromptSheet(
                     .background(CardSurface)
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_oto_mark),
+                    painter = painterResource(R.drawable.ic_mochy_mark),
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(52.dp),
@@ -176,7 +176,7 @@ fun UpdatePromptSheet(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = release.apkName ?: "oto-update.apk",
+                        text = release.apkName ?: "mochy.apk",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,

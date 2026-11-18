@@ -162,7 +162,11 @@ constructor(
     }
 
     /** Applies a local lyrics file (.lrc / embedded) to the song. */
-    fun useLocalLyrics(mediaMetadata: MediaMetadata, lyricsText: String, provider: String = com.mochyy.mochymusic.lyrics.SidecarLyrics.Provider) {
+    fun useLocalLyrics(
+        mediaMetadata: MediaMetadata,
+        lyricsText: String,
+        provider: String = com.mochyy.mochymusic.lyrics.SidecarLyrics.Provider,
+    ) {
         val choice = LyricsWithProvider(lyricsText, provider)
         lyricsHelper.rememberChoice(mediaMetadata.id, choice)
         viewModelScope.launch(Dispatchers.IO) {

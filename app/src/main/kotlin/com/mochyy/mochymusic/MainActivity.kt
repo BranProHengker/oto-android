@@ -72,9 +72,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import com.mochyy.mochymusic.ui.component.WideBarPillGap
 import com.mochyy.mochymusic.ui.utils.isWideLayout
 import com.mochyy.mochymusic.link.isTelevision
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 import com.mochyy.mochymusic.ui.utils.stableSystemBars
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
@@ -199,6 +199,7 @@ import com.mochyy.mochymusic.ui.menu.YouTubeSongMenu
 import com.mochyy.mochymusic.ui.player.BottomSheetPlayer
 import com.mochyy.mochymusic.ui.screens.Screens
 import com.mochyy.mochymusic.ui.screens.search.requestSearchFocus
+import com.mochyy.mochymusic.ui.screens.search.searchRoute
 import com.mochyy.mochymusic.ui.screens.navigationBuilder
 import com.mochyy.mochymusic.ui.screens.DarkMode
 import com.mochyy.mochymusic.ui.screens.NavigationTab
@@ -234,8 +235,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.net.URLDecoder
-import java.net.URLEncoder
 import javax.inject.Inject
 
 private const val BackgroundZoomOnExpand = true
@@ -287,6 +286,10 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var syncUtils: SyncUtils
 
+    // made only when first used, so a phone with nothing paired never builds it on the way in
+    @Inject
+    lateinit var phoneLink: dagger.Lazy<com.mochyy.mochymusic.link.phone.PhoneLinkHost>
+
     private lateinit var navController: NavHostController
     private var pendingIntent: Intent? = null
 
@@ -327,6 +330,7 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            com.mochyy.mochymusic.link.LinkPlayer.release(playerConnection)
             playerConnection?.dispose()
             playerConnection = null
         }
@@ -338,28 +342,22 @@ class MainActivity : ComponentActivity() {
         playerConnection = PlayerConnection(this, binder, database, lifecycleScope).also {
             // the retry above can land after onStop, so it starts resting if the app is already hidden
             it.isUiVisible.value = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+            // another phone steering this one plays through it
+            com.mochyy.mochymusic.link.LinkPlayer.connection = it
         }
+        com.mochyy.mochymusic.link.LinkPlayer.release(previous)
         previous?.dispose()
     }
 
     override fun onStart() {
         super.onStart()
         playerConnection?.isUiVisible?.value = true
+        // paired phones are checked on, and a steered device asked what it plays, only while mochy is on screen
+        if (!isTelevision()) phoneLink.get().appShown()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permissions = mutableListOf<String>()
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                permissions += Manifest.permission.POST_NOTIFICATIONS
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                permissions += Manifest.permission.READ_MEDIA_AUDIO
-            }
-            if (permissions.isNotEmpty()) {
-                ActivityCompat.requestPermissions(this, permissions.toTypedArray(), 1000)
-            }
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 1000)
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1000)
             }
         }
 
@@ -372,6 +370,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         playerConnection?.isUiVisible?.value = false
+        if (!isTelevision()) phoneLink.get().appHidden()
         unbindService(serviceConnection)
         super.onStop()
     }
@@ -388,6 +387,7 @@ class MainActivity : ComponentActivity() {
             unbindService(serviceConnection)
         }
         // the service outlives us, so take our listener off its player or a recreate leaves the old one firing
+        com.mochyy.mochymusic.link.LinkPlayer.release(playerConnection)
         playerConnection?.dispose()
         playerConnection = null
         // closed for good while the music plays on: the covers decoded for this screen have nothing left to show on
@@ -435,6 +435,10 @@ class MainActivity : ComponentActivity() {
 
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_LTR
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // upright unless landscape is unlocked in Experimental; set before the first frame, so it never opens sideways and then turns
+        if (!isTelevision()) {
+            com.mochyy.mochymusic.ui.utils.WindowTurning.setUnlocked(this, dataStore[com.mochyy.mochymusic.constants.LandscapeUnlockedKey] == true)
+        }
         systemScaleObserver = com.mochyy.mochymusic.ui.utils.AppMotion.followSystemScale(this)
         moveOffOldLyricsShaderSwitch()
         followLookSettings()
@@ -632,6 +636,11 @@ class MainActivity : ComponentActivity() {
                         Screens.MainScreens
                 }
                 val (slimNav) = rememberPreference(SlimNavBarKey, defaultValue = false)
+                // flipped in Experimental while the app is open: it starts (or stops) turning right away
+                val (landscapeUnlocked) = rememberPreference(com.mochyy.mochymusic.constants.LandscapeUnlockedKey, defaultValue = false)
+                LaunchedEffect(landscapeUnlocked) {
+                    if (!isTelevision()) com.mochyy.mochymusic.ui.utils.WindowTurning.setUnlocked(this@MainActivity, landscapeUnlocked)
+                }
 
                 val defaultOpenTab = remember {
                     dataStore[DefaultOpenTabKey].toEnum<NavigationTab>(defaultValue = NavigationTab.HOME)
@@ -661,14 +670,16 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                val (query, onQueryChange) = rememberSaveable(stateSaver = TextFieldValue.Saver) {
+                // the state itself, never read here: the sideways search pane writes it on every keystroke, and a read at this level recomposed the whole app per key
+                val queryState = rememberSaveable(stateSaver = TextFieldValue.Saver) {
                     mutableStateOf(TextFieldValue())
                 }
+                val onQueryChange: (TextFieldValue) -> Unit = remember(queryState) { { queryState.value = it } }
 
                 val onSearch: (String) -> Unit = remember {
                     { searchQuery ->
                         if (searchQuery.isNotEmpty()) {
-                            navController.navigate("search/${URLEncoder.encode(searchQuery, "UTF-8")}")
+                            navController.navigate(searchRoute(searchQuery))
 
                             if (dataStore[PauseSearchHistoryKey] != true) {
                                 lifecycleScope.launch(Dispatchers.IO) {
@@ -726,7 +737,7 @@ class MainActivity : ComponentActivity() {
 
                 // a phone on its side or a tablet: the mini player and the tabs share one pill along the bottom
                 val wideBar = if (isWideLayout()) {
-                    com.mochyy.mochymusic.ui.component.rememberWideBar(maxWidth, navigationItems.size)
+                    com.mochyy.mochymusic.ui.component.rememberWideBar(maxWidth, maxHeight, navigationItems.size)
                 } else null
                 val miniPill = when {
                     wideBar == null -> com.mochyy.mochymusic.ui.component.PhoneMiniPill
@@ -734,14 +745,16 @@ class MainActivity : ComponentActivity() {
                     else -> wideBar.miniAloneFrame
                 }
 
+                // the row the tabs take along the bottom: the wide bar's shrinks with a short screen
+                val navRowHeight = wideBar?.rowHeight ?: NavigationBarHeight
                 val navPadding = if (shouldShowNavigationBar) {
-                    if (slimNav && wideBar == null) SlimNavBarHeight else NavigationBarHeight
+                    if (slimNav && wideBar == null) SlimNavBarHeight else navRowHeight
                 } else {
                     0.dp
                 }
 
                 val navigationBarHeight by animateDpAsState(
-                    targetValue = if (shouldShowNavigationBar) NavigationBarHeight else 0.dp,
+                    targetValue = if (shouldShowNavigationBar) navRowHeight else 0.dp,
                     animationSpec = NavigationBarAnimationSpec,
                     label = "navBarHeight",
                 )
@@ -750,7 +763,7 @@ class MainActivity : ComponentActivity() {
                     dismissedBound = 0.dp,
                     collapsedBound = when {
                         // level with the tabs, in the same pill
-                        wideBar != null && shouldShowNavigationBar -> bottomInset + navPadding - WideBarPillGap
+                        wideBar != null && shouldShowNavigationBar -> bottomInset + navPadding - wideBar.pillGap
                         shouldShowNavigationBar -> bottomInset + navPadding + MiniPlayerHeight
                         else -> bottomInset + MiniPlayerHeight
                     },
@@ -762,13 +775,14 @@ class MainActivity : ComponentActivity() {
                 val sharedBarRow = wideBar != null && shouldShowNavigationBar
                 val playerAwareWindowInsets = remember(
                     bottomInset,
+                    navRowHeight,
                     shouldShowNavigationBar,
                     playerBottomSheetState.isDismissed,
                     sharedBarRow,
                 ) {
                     var bottom = bottomInset
                     if (shouldShowNavigationBar) {
-                        bottom += NavigationBarHeight
+                        bottom += navRowHeight
                     }
                     // in the wide bar the mini player shares the tabs' row, so it takes no room of its own
                     if (!playerBottomSheetState.isDismissed && !sharedBarRow) bottom += MiniPlayerHeight
@@ -785,18 +799,8 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(navBackStackEntry) {
                     if (inSearchScreen) {
-                        val searchQuery = withContext(Dispatchers.IO) {
-                            val rawQuery = navBackStackEntry?.arguments?.getString("query")
-                            if (!rawQuery.isNullOrEmpty()) {
-                                try {
-                                    URLDecoder.decode(rawQuery, "UTF-8")
-                                } catch (e: IllegalArgumentException) {
-                                    rawQuery
-                                }
-                            } else {
-                                ""
-                            }
-                        }
+                        // navigation already decoded it, see searchRoute
+                        val searchQuery = navBackStackEntry?.arguments?.getString("query").orEmpty()
                         onQueryChange(
                             TextFieldValue(
                                 searchQuery,
@@ -898,9 +902,10 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val pauseListenHistory by rememberPreference(PauseListenHistoryKey, defaultValue = false)
-                val eventCount by remember(database) { database.eventCount() }.collectAsState(initial = 0)
-                val showHistoryButton = remember(pauseListenHistory, eventCount) {
-                    !(pauseListenHistory && eventCount == 0)
+                // only whether there's any history at all: the count itself grows with every song played, and collecting it here recomposed the whole app on each song change
+                val hasEvents by remember(database) { database.eventCount().map { it > 0 }.distinctUntilChanged() }.collectAsState(initial = true)
+                val showHistoryButton = remember(pauseListenHistory, hasEvents) {
+                    !(pauseListenHistory && !hasEvents)
                 }
 
                 val baseBg = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer
@@ -949,8 +954,17 @@ class MainActivity : ComponentActivity() {
                         ),
                     ) {
                     com.mochyy.mochymusic.ui.screens.devices.DeviceIntegrationOpener(requests = openDevicesRequests)
+                    // a phone paired before android 17 can't reach its devices until it's allowed on the wi-fi again
+                    val linkPaired = remember { !isTelevision() && com.mochyy.mochymusic.link.phone.PhoneLinkHost.hasPairedDevices(this@MainActivity) }
+                    com.mochyy.mochymusic.link.AskForLocalNetwork(wanted = linkPaired, onGranted = { phoneLink.get().advertiseAgain() })
                     com.mochyy.mochymusic.ui.screens.update.UpdateNotificationOpener(
                         requests = openUpdateRequests,
+                        onOpenDevSpace = { personIndex ->
+                            navController.navigate("developer_space?person=$personIndex")
+                        },
+                    )
+                    com.mochyy.mochymusic.ui.screens.donate.DonatePromptScheduler(
+                        enabled = setupCompleted && onboardedHere && !forceShowSetup,
                     )
                         SetupWizardContainer(
                             isVisible = !setupCompleted || !onboardedHere || forceShowSetup,
@@ -1050,7 +1064,7 @@ class MainActivity : ComponentActivity() {
                                     { navController.requestSearchFocus() }
                                 }
 
-                                val navBarTotalHeight = bottomInset + NavigationBarHeight
+                                val navBarTotalHeight = bottomInset + navRowHeight
 
                                 if (currentRoute != "wrapped" && currentRoute != "update") {
 
@@ -1093,7 +1107,7 @@ class MainActivity : ComponentActivity() {
                                                     } else {
                                                         val progress = playerBottomSheetState.progress.coerceIn(0f, 1f)
                                                         val slideOffset = totalHeightPx * progress
-                                                        val hideOffset = totalHeightPx * (1 - navBarHeightPx / NavigationBarHeight.toPx())
+                                                        val hideOffset = totalHeightPx * (1 - navBarHeightPx / navRowHeight.toPx())
                                                         slideOffset + hideOffset
                                                     }
                                                 }
@@ -1117,7 +1131,7 @@ class MainActivity : ComponentActivity() {
                                                     totalHeightPx
                                                 } else {
                                                     val slideOffset = totalHeightPx * progress
-                                                    val hideOffset = totalHeightPx * (1 - navBarHeightPx / NavigationBarHeight.toPx())
+                                                    val hideOffset = totalHeightPx * (1 - navBarHeightPx / navRowHeight.toPx())
                                                     slideOffset + hideOffset
                                                 }
 
@@ -1157,6 +1171,12 @@ class MainActivity : ComponentActivity() {
                                                 selectedTabRoute = selectedTabRoute,
                                                 onItemClick = onNavItemClick,
                                                 onSearchDoubleTap = onSearchDoubleTap,
+                                                modifier = barMotion.fillMaxWidth(),
+                                            )
+                                            com.mochyy.mochymusic.ui.component.WideBarExtras(
+                                                bar = wideBar,
+                                                withPlayer = withPlayerNow,
+                                                shown = !playerBottomSheetState.isDismissed,
                                                 modifier = barMotion.fillMaxWidth(),
                                             )
                                         } else {
@@ -1239,6 +1259,18 @@ class MainActivity : ComponentActivity() {
                                             selectedRoute = com.mochyy.mochymusic.ui.screens.settings.settingsPaneSelection(backStack),
                                         )
                                     }
+                                    // on its side the search field and its history stay at the left while the categories or results change beside it
+                                    if (com.mochyy.mochymusic.ui.utils.isLandscapeLayout() &&
+                                        com.mochyy.mochymusic.ui.screens.search.showsSearchPane(currentRoute)
+                                    ) {
+                                        com.mochyy.mochymusic.ui.screens.search.SearchSidePane(
+                                            navController = navController,
+                                            currentRoute = currentRoute,
+                                            query = queryState,
+                                            onQueryChange = onQueryChange,
+                                            pureBlack = pureBlack,
+                                        )
+                                    }
                                     NavHost(
                                         navController = navController,
                                         startDestination = when (tabOpenedFromShortcut ?: defaultOpenTab) {
@@ -1316,6 +1348,19 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    }
+
+                    // "controlling living room tv" sits over the app at the top left, and steps aside while the player is open
+                    val playerOpen by remember { derivedStateOf { playerBottomSheetState.progress > 0.2f } }
+                    if (!playerOpen) {
+                        Box(Modifier.fillMaxSize()) {
+                            com.mochyy.mochymusic.ui.screens.devices.ControllingPill(
+                                Modifier
+                                    .align(Alignment.TopStart)
+                                    .windowInsetsPadding(WindowInsets.stableStatusBars)
+                                    .padding(start = 12.dp, top = 4.dp),
+                            )
+                        }
                     }
 
                     // action feedback ("Added to Queue", "Undo"...) drops in over the sheets too
@@ -1427,9 +1472,9 @@ class MainActivity : ComponentActivity() {
                 controller.show(WindowInsetsCompat.Type.statusBars())
             }
         }
-        // set before the bar ever hides and left alone after, so hiding it never moves the window off the camera strip
+        // set before the bar ever hides and left alone after, so hiding it never moves the window off the camera strip; on its side the app always fills the strip, android left it a black bar
         LaunchedEffect(hideStatusBar, portrait) {
-            window.drawUnderCutout(hideStatusBar && portrait)
+            window.drawUnderCutout(!portrait || hideStatusBar)
         }
         // A bar a swipe brought back while the player stays open (Samsung's swipe-from-
         // bottom gestures) goes away again after a moment, as the transient one does.
@@ -1561,7 +1606,7 @@ class MainActivity : ComponentActivity() {
 
             "search" -> {
                 uri.getQueryParameter("q")?.let {
-                    navController.navigate("search/${URLEncoder.encode(it, "UTF-8")}")
+                    navController.navigate(searchRoute(it))
                 }
             }
 

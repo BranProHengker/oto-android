@@ -2,6 +2,7 @@
 
 package com.mochyy.mochymusic.ui.menu
 
+import androidx.compose.ui.res.pluralStringResource
 import com.mochyy.mochymusic.ui.component.SheetHeaderGap
 import com.mochyy.mochymusic.ui.component.SheetHeaderButton
 import com.mochyy.mochymusic.ui.component.SheetHeader
@@ -22,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -57,14 +59,14 @@ fun ArtistMenu(
     val context = LocalContext.current
     val database = LocalDatabase.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val artistState = database.artist(originalArtist.id).collectAsState(initial = originalArtist)
+    val artistState = remember(database, originalArtist.id) { database.artist(originalArtist.id) }.collectAsState(initial = originalArtist)
     val artist = artistState.value ?: originalArtist
-    val isPinned by database.speedDialDao.isPinned(artist.id).collectAsState(initial = false)
+    val isPinned by remember(database, artist.id) { database.speedDialDao.isPinned(artist.id) }.collectAsState(initial = false)
 
     SheetHeader(
         thumbnailUrl = artist.artist.thumbnailUrl,
         title = artist.artist.name,
-        subtitle = if (artist.songCount == 1) "1 song in your library" else "${artist.songCount} songs in your library",
+        subtitle = pluralStringResource(R.plurals.pc_artist_songs_in_library, artist.songCount, artist.songCount),
     )
 
     Spacer(Modifier.height(SheetHeaderGap))
@@ -160,7 +162,7 @@ fun ArtistMenu(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             },
-                            text = if (isPinned) "Unpin" else "Pin",
+                            text = stringResource(if (isPinned) R.string.pc_unpin else R.string.pc_pin),
                             onClick = {
                                 coroutineScope.launch(Dispatchers.IO) {
                                     if (isPinned) {

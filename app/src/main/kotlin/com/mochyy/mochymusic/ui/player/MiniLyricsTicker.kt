@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -61,6 +62,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mochyy.mochymusic.LocalPlayerConnection
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.LyricsHighBloomKey
 import com.mochyy.mochymusic.constants.LyricsMotionStyle
 import com.mochyy.mochymusic.constants.LyricsMotionStyleKey
@@ -310,7 +312,8 @@ internal fun MiniLyricsTicker(
                             startMs = startMs,
                             endMs = endMs,
                             positionProvider = positionProvider,
-                            accentColor = Color.White,
+                            bloom = waveEnabled,
+                            highBloom = highBloom,
                             alignment = LyricsAlignment.START,
                             modifier = Modifier.graphicsLayer {
                                 scaleX = DotsScale
@@ -324,7 +327,7 @@ internal fun MiniLyricsTicker(
                     TickerSlot.LOADING -> LyricsLoadingDots(alignStart = true)
 
                     else -> Text(
-                        text = "No lyrics for this song",
+                        text = stringResource(R.string.video_mode_no_lyrics),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White.copy(alpha = 0.55f),
@@ -434,15 +437,11 @@ private fun TickerReadings(
     onHeight: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val romanized by entry.romanizedTextFlow.collectAsState()
-    val ruby by entry.rubyFlow.collectAsState()
-    val translated by entry.translatedTextFlow.collectAsState()
-    // Japanese and Chinese carry their reading word by word over the text; in one line it's those
-    // readings in order
-    val reading = romanized ?: ruby?.takeIf { it.isNotEmpty() }?.let { rubyReading(entry.text, it) }
+    // the reading under the line, or the original when the romanisation is the line itself
+    val shown = rememberShownLyric(entry)
     CardExtraLines(growthProvider, modifier.onSizeChanged { onHeight(it.height) }) {
-        reading?.let { SettlingLine(it, alpha = 0.62f, italic = true) }
-        translated?.takeIf { it.isNotBlank() }?.let { SettlingLine(it, alpha = 0.82f) }
+        shown.subLine?.let { SettlingLine(it, alpha = 0.62f, italic = true) }
+        shown.translation?.let { SettlingLine(it, alpha = 0.82f) }
     }
 }
 
@@ -481,18 +480,6 @@ private fun UpcomingLine(text: String, alpha: Float, blur: Dp) {
     )
 }
 
-/** [text] read out: each run with a reading replaced by it, the rest (Latin words, say) kept as it is. */
-private fun rubyReading(text: String, ruby: List<RubyToken>): String = buildString {
-    var at = 0
-    ruby.sortedBy { it.start }.forEach { token ->
-        if (token.start > at) append(text, at, token.start.coerceAtMost(text.length))
-        if (isNotEmpty() && !last().isWhitespace()) append(' ')
-        append(token.text)
-        at = maxOf(at, token.end)
-    }
-    if (at < text.length) append(text, at, text.length)
-}.trim()
-
 @Composable
 private fun TickerLine(
     entry: LyricsEntry,
@@ -504,8 +491,10 @@ private fun TickerLine(
     highBloom: Boolean,
     morph: CardMorphState,
 ) {
-    val parts = remember(entry.text, entry.words) { splitBackingVocal(entry.text, entry.words) }
-    val text = parts.lead.ifBlank { entry.text }
+    // the romanisation as the line when that's set, with its own timed pieces, so the sweep runs over it the same way
+    val line = rememberShownLyric(entry).entry
+    val parts = remember(line.text, line.words) { splitBackingVocal(line.text, line.words) }
+    val text = parts.lead.ifBlank { line.text }
     val words = parts.leadWords
     val karaoke = !dim && !words.isNullOrEmpty() && text.isNotEmpty()
 
@@ -601,10 +590,11 @@ private fun TickerLine(
             } else {
                 Text(
                     text = text,
+                    // the same letter features as the sung line, so the words keep their width when the line goes dim
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontSize = TickerFontSize,
                         lineHeight = TickerLineHeight,
-                    ),
+                    ).withLetterMotionFeatures(motionStyle.risesWords),
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = if (dim) 0.55f else 1f),
                     maxLines = 1,

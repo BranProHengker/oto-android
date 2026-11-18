@@ -35,19 +35,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.mochyy.mochymusic.LocalPlayerConnection
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.AudioNormalizationKey
 import com.mochyy.mochymusic.constants.CrossmixMode
 import com.mochyy.mochymusic.constants.CrossmixModeKey
 import com.mochyy.mochymusic.constants.HiResOutputKey
 import com.mochyy.mochymusic.constants.MusicHapticsEnabledKey
 import com.mochyy.mochymusic.constants.SkipSilenceKey
-import com.mochyy.mochymusic.constants.playable
+import com.mochyy.mochymusic.constants.DefaultTransitionMode
 import com.mochyy.mochymusic.playback.MusicService
 import com.mochyy.mochymusic.playback.PlayingFrom
 import com.mochyy.mochymusic.playback.StreamDetails
@@ -86,15 +88,15 @@ fun StreamInfoSheet(onDismiss: () -> Unit) {
                     .navigationBarsPadding(),
             ) {
                 InfoColumn(modifier = Modifier.widthIn(max = 600.dp)) {
-                    InfoSheetTitle("Stream Info")
+                    InfoSheetTitle(stringResource(R.string.ps_details_stream_info))
                     Spacer(Modifier.height(16.dp))
                     SongHeader(song)
                     InfoDivider()
-                    InfoSectionTitle("Provider")
+                    InfoSectionTitle(stringResource(R.string.pc_info_provider))
                     Spacer(Modifier.height(12.dp))
                     ProviderRow(service, from, onForce = { showForce = true })
                     NerdsDivider()
-                    InfoSectionTitle("Format & about")
+                    InfoSectionTitle(stringResource(R.string.pc_info_format_about))
                     Spacer(Modifier.height(14.dp))
                     cards.forEachIndexed { index, card ->
                         if (index > 0) CardConnector()
@@ -150,11 +152,11 @@ private fun ProviderRow(service: MusicService, from: PlayingFrom?, onForce: () -
                 // only a module that publishes its code gets the star; others say nothing rather than a dead button
                 val sourceUrl = service.sourceModules.module(from.providerId)?.info?.sourceUrl
                 if (sourceUrl != null) {
-                    InfoPill(text = "Star on GitHub", filled = false, onClick = { runCatching { uriHandler.openUri(sourceUrl) } })
+                    InfoPill(text = stringResource(R.string.pc_star_github), filled = false, onClick = { runCatching { uriHandler.openUri(sourceUrl) } })
                 }
                 // a file on the phone has nowhere else to come from
                 if (from.providerId != PlayingFrom.Device) {
-                    InfoPill(text = "Force change", filled = true, onClick = onForce)
+                    InfoPill(text = stringResource(R.string.pc_info_force_change), filled = true, onClick = onForce)
                 }
             }
         }
@@ -204,7 +206,7 @@ private fun rememberStatCards(service: MusicService, mediaId: String, durationMs
     val (skipSilence) = rememberPreference(SkipSilenceKey, false)
     val (haptics) = rememberPreference(MusicHapticsEnabledKey, false)
     val (hiRes) = rememberPreference(HiResOutputKey, false)
-    val (crossmixMode) = rememberPreference(CrossmixModeKey, CrossmixMode.AUTO_CROSSFADE.name)
+    val (crossmixMode) = rememberPreference(CrossmixModeKey, DefaultTransitionMode.name)
     val systemMixerRate = remember {
         (context.getSystemService(Context.AUDIO_SERVICE) as AudioManager).getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
     }
@@ -212,11 +214,13 @@ private fun rememberStatCards(service: MusicService, mediaId: String, durationMs
         value = details.decoderName?.let { name -> withContext(Dispatchers.Default) { isHardwareDecoder(name) } }
     }
 
-    val transitions = when (runCatching { CrossmixMode.valueOf(crossmixMode) }.getOrNull()?.playable()) {
-        CrossmixMode.CROSSMIX -> "Crossmix"
-        CrossmixMode.AUTO_CROSSFADE, CrossmixMode.MANUAL_CROSSFADE -> "Crossfade"
+    val transitions = when (runCatching { CrossmixMode.valueOf(crossmixMode) }.getOrNull()) {
+        CrossmixMode.CROSSMIX -> stringResource(R.string.pc_stat_crossmix)
+        CrossmixMode.AUTO_CROSSFADE, CrossmixMode.MANUAL_CROSSFADE -> stringResource(R.string.pc_stat_crossfade)
         else -> null
     }
+    val activeDevice = devices.firstOrNull { it.isActive }
+    val passthrough = rememberPassthroughStat(service, activeDevice)
     val input = StatsInput(
         mediaId = mediaId,
         details = details.takeIf { it.mediaId == null || it.mediaId == mediaId } ?: StreamDetails(mediaId = mediaId),
@@ -227,7 +231,7 @@ private fun rememberStatCards(service: MusicService, mediaId: String, durationMs
         durationMs = durationMs,
         playerVolume = volume,
         decoderHardware = hardware,
-        device = devices.firstOrNull { it.isActive },
+        device = activeDevice,
         mixer = mixer,
         systemMixerRate = systemMixerRate,
         castingTo = castName.takeIf { casting },
@@ -247,8 +251,9 @@ private fun rememberStatCards(service: MusicService, mediaId: String, durationMs
             hiResWanted = hiRes,
             floatAllowed = service.audioOutputs.floatAllowed,
         ),
+        passthrough = passthrough,
     )
-    val cards = remember(input) { buildStatCards(input) }
+    val cards = remember(input) { buildStatCards(context, input) }
     // larping, the nerds get the level's gear story instead
     val larp = com.mochyy.mochymusic.ui.player.rememberLarpMode()
     return if (larp != null) com.mochyy.mochymusic.ui.player.larpStatCards(larp) else cards

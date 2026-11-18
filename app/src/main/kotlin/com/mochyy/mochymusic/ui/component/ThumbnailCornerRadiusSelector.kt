@@ -13,7 +13,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
@@ -100,7 +99,7 @@ fun ThumbnailCornerRadiusModal(
                             contentAlignment = Alignment.Center
                         ) {
                             Image(
-                                painter = painterResource(R.drawable.weeknd),
+                                painter = rememberResourcePainter(R.drawable.weeknd),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -153,7 +152,7 @@ fun ThumbnailCornerRadiusModal(
                             },
                             label = {
                                 Text(
-                                    text = "Custom",
+                                    text = stringResource(R.string.pc_corner_custom),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             },
@@ -183,7 +182,7 @@ fun ThumbnailCornerRadiusModal(
                             enabled = isCustomSelected,
                             label = {
                                 Text(
-                                    text = "Value",
+                                    text = stringResource(R.string.pc_corner_value),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             },
@@ -203,7 +202,7 @@ fun ThumbnailCornerRadiusModal(
                     Spacer(modifier = Modifier.height(24.dp))
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Or adjust Radius",
+                            text = stringResource(R.string.pc_corner_adjust),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -246,7 +245,7 @@ fun ThumbnailCornerRadiusModal(
                         }
 
                         Text(
-                            text = "Corner Radius: ${thumbnailCornerRadius.roundToInt()}dp",
+                            text = stringResource(R.string.pc_corner_radius, thumbnailCornerRadius.roundToInt()),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
                                 .fillMaxWidth()

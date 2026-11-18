@@ -8,6 +8,66 @@ import kotlin.random.Random
 
 object SmartShuffle {
 
+    fun smartOrderIndices(
+        items: List<MediaItem>,
+        currentIndex: Int,
+    ): IntArray {
+        val total = items.size
+        if (total == 0) return IntArray(0)
+        val safeCurrent = currentIndex.coerceIn(0, total - 1)
+        val currentTrack = items[safeCurrent]
+
+        val curTags = extractTags(currentTrack)
+        val curArtists = extractArtists(currentTrack)
+        val curAlbum = currentTrack.mediaMetadata.albumTitle?.toString()?.trim()?.lowercase().orEmpty()
+        val (curFolder, curParent) = extractFolderAndParent(currentTrack)
+        val curDurationSec = extractDurationSec(currentTrack)
+
+        val scored = ArrayList<Pair<Double, Int>>(total - 1)
+        for (i in 0 until total) {
+            if (i == safeCurrent) continue
+            val candidate = items[i]
+            var weight = 1.0
+
+            if (curTags.isNotEmpty()) {
+                val candTags = extractTags(candidate)
+                for (tag in candTags) {
+                    if (tag in curTags) weight += 15.0
+                }
+            }
+            if (curArtists.isNotEmpty()) {
+                val candArtists = extractArtists(candidate)
+                if (curArtists.any { it in candArtists }) weight += 12.0
+            }
+            if (curAlbum.isNotEmpty()) {
+                val candAlbum = candidate.mediaMetadata.albumTitle?.toString()?.trim()?.lowercase().orEmpty()
+                if (curAlbum == candAlbum) weight += 8.0
+            }
+            if (curFolder != null) {
+                val (candFolder, candParent) = extractFolderAndParent(candidate)
+                if (candFolder != null) {
+                    if (curFolder == candFolder) weight += 10.0
+                    else if (curParent != null && curParent == candParent) weight += 5.0
+                }
+            }
+            if (curDurationSec > 0.0) {
+                val candDurationSec = extractDurationSec(candidate)
+                if (candDurationSec > 0.0 && abs(candDurationSec - curDurationSec) < 35.0) weight += 3.0
+            }
+
+            val r = Random.nextDouble().coerceIn(1e-6, 1.0 - 1e-6)
+            scored += Pair(Math.pow(r, 1.0 / weight), i)
+        }
+
+        scored.sortByDescending { it.first }
+        val result = IntArray(total)
+        result[0] = safeCurrent
+        for (k in scored.indices) {
+            result[k + 1] = scored[k].second
+        }
+        return result
+    }
+
     fun smartScramble(
         candidates: List<MediaItem>,
         sourceList: List<MediaItem>,

@@ -25,9 +25,13 @@ import com.mochyy.mochymusic.lyrics.VideoLyricsSync
 import com.mochyy.mochymusic.extensions.getCurrentQueueIndex
 import com.mochyy.mochymusic.extensions.getQueueWindows
 import com.mochyy.mochymusic.extensions.isAutoplay
+import com.mochyy.mochymusic.extensions.isManualQueued
 import com.mochyy.mochymusic.extensions.withAutoplay
 import com.mochyy.mochymusic.extensions.metadata
+import com.mochyy.mochymusic.models.MediaMetadata
+import com.mochyy.mochymusic.songedit.SongEdits
 import com.mochyy.mochymusic.playback.MusicService.MusicBinder
+import com.mochyy.mochymusic.link.isTelevision
 import com.mochyy.mochymusic.playback.queues.Queue
 import com.mochyy.mochymusic.utils.NotRecommended
 import com.mochyy.mochymusic.utils.reportException
@@ -99,7 +103,7 @@ class PlayerConnection(
         val initialState = try {
             val initialPlayer = getPlayerSafe()
             Triple(initialPlayer.playbackState, initialPlayer.playWhenReady,
-                   initialPlayer.playWhenReady && initialPlayer.playbackState != STATE_ENDED && initialPlayer.playbackState != Player.STATE_IDLE)
+                   initialPlayer.playWhenReady && initialPlayer.playbackState != STATE_ENDED)
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error during PlayerConnection initialization, using defaults")
             Triple(Player.STATE_IDLE, false, false)
@@ -109,7 +113,7 @@ class PlayerConnection(
         playWhenReady = MutableStateFlow(initialState.second)
         // a pause or play fade shows what you pressed straight away, not when the player catches up
         isPlaying = combine(playbackState, playWhenReady, service.transport.playIntent) { state, ready, intent ->
-            (intent ?: ready) && state != STATE_ENDED && state != Player.STATE_IDLE
+            (intent ?: ready) && state != STATE_ENDED
         }.stateIn(
             scope,
             SharingStarted.Lazily,
@@ -137,10 +141,23 @@ class PlayerConnection(
     }.stateIn(
         scope,
         SharingStarted.Lazily,
-        player.playbackState != STATE_ENDED && player.playbackState != Player.STATE_IDLE && player.playWhenReady
+        player.playbackState != STATE_ENDED && player.playWhenReady
     )
 
-    val mediaMetadata = MutableStateFlow(player.currentMetadata)
+    // the queue's own copy of the playing song, before the hand edits from its edit sheet go over it
+    @Volatile private var queueMetadata: MediaMetadata? = player.currentMetadata
+    val mediaMetadata = MutableStateFlow(queueMetadata?.let(SongEdits::applyTo))
+
+    init {
+        // a song edited while it's already in the queue shows the edit straight away
+        scope.launch { SongEdits.all.collect { mediaMetadata.value = queueMetadata?.let(SongEdits::applyTo) } }
+    }
+
+    private fun showMetadata(metadata: MediaMetadata?) {
+        queueMetadata = metadata
+        mediaMetadata.value = metadata?.let(SongEdits::applyTo)
+    }
+
     val currentSong =
         mediaMetadata.flatMapLatest {
             database.song(it?.id)
@@ -233,6 +250,7 @@ class PlayerConnection(
             artworkUri = mediaItem.mediaMetadata.artworkUri,
             duration = window.durationMs,
             isAutoplay = mediaItem.isAutoplay,
+            isManual = mediaItem.isManualQueued,
         )
     }
 
@@ -279,8 +297,8 @@ class PlayerConnection(
             com.mochyy.mochymusic.ui.player.models.ProgressState(),
         )
 
-    val shuffleMode: StateFlow<ShuffleMode> get() = service.shuffleModeState
     val shuffleModeEnabled = MutableStateFlow(false)
+    val shuffleMode: StateFlow<ShuffleMode> get() = service.shuffleModeState
     val repeatMode = MutableStateFlow(REPEAT_MODE_OFF)
 
     val canSkipPrevious = MutableStateFlow(true)
@@ -344,7 +362,7 @@ class PlayerConnection(
 
         playbackState.value = newPlayer.playbackState
         playWhenReady.value = newPlayer.playWhenReady
-        mediaMetadata.value = newPlayer.currentMetadata
+        showMetadata(newPlayer.currentMetadata)
         queueTitle.value = service.queueTitle
         queueWindows.value = newPlayer.getQueueWindows()
         currentWindowIndex.value = newPlayer.getCurrentQueueIndex()
@@ -356,7 +374,17 @@ class PlayerConnection(
         Timber.tag(TAG).d("Attached to new player instance: $newPlayer")
     }
 
+    // a device this phone steers takes the songs picked here; never on a tv, which steers nothing
+    private val remote: com.mochyy.mochymusic.link.remote.RemoteControl? by lazy {
+        if (context.isTelevision()) null
+        else dagger.hilt.android.EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            com.mochyy.mochymusic.link.remote.RemoteControlEntryPoint::class.java,
+        ).remoteControl()
+    }
+
     fun playQueue(queue: Queue) {
+        if (remote?.takeQueue(queue) == true) return
         if (!playerReadinessFlow.value) {
             Timber.tag(TAG).w("playQueue called before player ready; delegating to service")
         }
@@ -386,7 +414,7 @@ class PlayerConnection(
     fun playNext(item: MediaItem) = playNext(listOf(item))
 
     fun playNext(items: List<MediaItem>) {
-
+        if (remote?.takeNext(items) == true) return
         try {
             service.playNext(items)
         } catch (e: Exception) {
@@ -398,7 +426,7 @@ class PlayerConnection(
     fun addToQueue(item: MediaItem) = addToQueue(listOf(item))
 
     fun addToQueue(items: List<MediaItem>) {
-
+        if (remote?.takeQueueEnd(items) == true) return
         try {
             service.addToQueue(items)
         } catch (e: Exception) {
@@ -426,6 +454,14 @@ class PlayerConnection(
         return C.INDEX_UNSET
     }
 
+    fun cycleShuffleMode() {
+        service.cycleShuffleMode()
+    }
+
+    fun setShuffleMode(mode: ShuffleMode) {
+        service.setShuffleMode(mode)
+    }
+
     /** Media item indices in the order they will play, shuffle included. */
     private fun playOrder(): MutableList<Int> {
         val timeline = player.currentTimeline
@@ -440,48 +476,35 @@ class PlayerConnection(
         return order
     }
 
+    // a tap in the queue is picked like a song from a list, or blended in; the uid is looked up again when the song really changes
     fun playQueueItem(uid: Int) {
-        val index = mediaIndexOf(uid)
-        if (index == C.INDEX_UNSET) return
+        if (mediaIndexOf(uid) == C.INDEX_UNSET) return
         try {
-            player.seekToDefaultPosition(index)
-            if (player.playbackState == Player.STATE_IDLE || player.playbackState == STATE_ENDED) {
-                player.prepare()
-            }
-            player.playWhenReady = true
+            service.transport.pickFromQueue { mediaIndexOf(uid) }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error in playQueueItem")
         }
     }
 
-    fun toggleShuffle() {
-        service.toggleShuffle()
-    }
-
-    fun setShuffleMode(mode: ShuffleMode) {
-        service.setShuffleMode(mode)
-    }
-
     /** Moves a song to play straight after [afterUid]. */
-    fun moveQueueItem(fromUid: Int, afterUid: Int) {
-        val from = mediaIndexOf(fromUid)
+    fun moveQueueItem(uid: Int, afterUid: Int) {
+        val from = mediaIndexOf(uid)
         val after = mediaIndexOf(afterUid)
         if (from == C.INDEX_UNSET || after == C.INDEX_UNSET || from == after) return
         try {
-            val to = if (from < after) after else after + 1
-            if (to != from) {
-                player.moveMediaItem(from, to)
-                ensureIdentityShuffleOrder()
+            if (!player.shuffleModeEnabled) {
+                // moveMediaItem takes the final index, counted once the song is out of the way.
+                val to = if (from < after) after else after + 1
+                if (to != from) player.moveMediaItem(from, to)
+            } else {
+                // Shuffled, the play order is the shuffle order, not the item order: reorder that.
+                val order = playOrder()
+                order.remove(from)
+                order.add(order.indexOf(after) + 1, from)
+                player.setShuffleOrder(DefaultShuffleOrder(order.toIntArray(), System.currentTimeMillis()))
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error in moveQueueItem")
-        }
-    }
-
-    private fun ensureIdentityShuffleOrder() {
-        val count = player.mediaItemCount
-        if (count > 0) {
-            player.setShuffleOrder(androidx.media3.exoplayer.source.ShuffleOrder.UnshuffledShuffleOrder(count))
         }
     }
 
@@ -650,6 +673,20 @@ class PlayerConnection(
 
     var onRestartSong: (() -> Unit)? = null
 
+    // a swipe back: always the song before, never a restart, faded or blended like a skip
+    fun skipToPreviousSong() {
+        try {
+            val castHandler = service.castConnectionHandler
+            if (castHandler?.isCasting?.value == true) {
+                castHandler.skipToPrevious()
+                return
+            }
+            service.transport.jumpTo { player.previousMediaItemIndex }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error in skipToPreviousSong")
+        }
+    }
+
     fun seekToPrevious() {
         try {
 
@@ -683,7 +720,7 @@ class PlayerConnection(
         mediaItem: MediaItem?,
         reason: Int,
     ) {
-        mediaMetadata.value = mediaItem?.metadata
+        showMetadata(mediaItem?.metadata)
         currentMediaItemIndex.value = player.currentMediaItemIndex
         currentWindowIndex.value = player.getCurrentQueueIndex()
         publishQueueSnapshot()
@@ -741,9 +778,9 @@ class PlayerConnection(
                     }
                     Timber.tag(TAG).d("Extracted local artwork to $newThumbnailUrl")
 
-                    val currentMetadata = this@PlayerConnection.mediaMetadata.value
+                    val currentMetadata = queueMetadata
                     if (currentMetadata?.id == mediaItem.mediaId) {
-                        this@PlayerConnection.mediaMetadata.value = currentMetadata.copy(thumbnailUrl = newThumbnailUrl)
+                        showMetadata(currentMetadata.copy(thumbnailUrl = newThumbnailUrl))
                     }
                 }
             } catch (e: Exception) {

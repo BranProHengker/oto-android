@@ -1,4 +1,4 @@
-// OtoCarAppService.kt
+// MochyCarAppService.kt
 
 package com.mochyy.mochymusic.car
 
@@ -15,10 +15,10 @@ import com.mochyy.mochymusic.lyrics.LyricsHelper
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
-// oto's own android auto screens, drawn by the car from google's media templates so they look and size like every other car app
+// mochy's own android auto screens, drawn by the car from google's media templates so they look and size like every other car app
 @UnstableApi
 @AndroidEntryPoint
-open class OtoCarAppService : CarAppService() {
+class MochyCarAppService : CarAppService() {
     @Inject lateinit var database: MusicDatabase
     @Inject lateinit var lyricsHelper: LyricsHelper
     @Inject lateinit var pairing: PhonePairing
@@ -35,7 +35,3 @@ open class OtoCarAppService : CarAppService() {
     override fun onCreateSession(sessionInfo: SessionInfo): Session =
         CarSession(database, lyricsHelper, pairing, link)
 }
-
-@UnstableApi
-@AndroidEntryPoint
-class MochyCarAppService : OtoCarAppService()

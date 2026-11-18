@@ -20,14 +20,14 @@ plugins {
 
 extensions.configure<ApplicationExtension> {
     namespace = "com.mochyy.mochymusic"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "co.oto.music"
         minSdk = 24
-        targetSdk = 36
-        versionCode = 13
+        targetSdk = 37
+        versionCode = 14
         versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -444,6 +444,7 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.json)
+    implementation(libs.innertubex)
 
     // Protobuf for message serialization (lite version for Android)
     implementation(libs.protobuf.javalite)
@@ -459,4 +460,7 @@ dependencies {
     implementation(libs.androidx.webkit)
 
     testImplementation(libs.junit)
+    androidTestImplementation(libs.junit)
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

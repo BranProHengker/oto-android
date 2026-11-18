@@ -2,6 +2,7 @@
 
 package com.mochyy.mochymusic.ui.menu
 
+import androidx.compose.ui.res.pluralStringResource
 import com.mochyy.mochymusic.ui.component.SheetHeaderGap
 import com.mochyy.mochymusic.ui.component.SheetHeaderButton
 import com.mochyy.mochymusic.ui.component.SheetHeader
@@ -89,7 +90,7 @@ fun PlaylistMenu(
     val database = LocalDatabase.current
     val downloadUtil = LocalDownloadUtil.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val dbPlaylist by database.playlist(playlist.id).collectAsState(initial = playlist)
+    val dbPlaylist by remember(database, playlist.id) { database.playlist(playlist.id) }.collectAsState(initial = playlist)
     var songs by remember {
         mutableStateOf(emptyList<Song>())
     }
@@ -112,7 +113,7 @@ fun PlaylistMenu(
 
     val editable: Boolean = playlist.playlist.isEditable == true
 
-    val isPinned by database.speedDialDao.isPinned(playlist.id).collectAsState(initial = false)
+    val isPinned by remember(database, playlist.id) { database.speedDialDao.isPinned(playlist.id) }.collectAsState(initial = false)
     val resync = rememberPlaylistResync(playlist.id, playlist.playlist.browseId, navController, onDismiss)
 
     LaunchedEffect(songs) {
@@ -235,7 +236,7 @@ fun PlaylistMenu(
     SheetHeader(
         thumbnailUrl = playlist.thumbnails.firstOrNull(),
         title = playlist.playlist.name,
-        subtitle = if (playlist.songCount == 1) "1 song" else "${playlist.songCount} songs",
+        subtitle = pluralStringResource(R.plurals.pc_detail_songs, playlist.songCount, playlist.songCount),
         trailing = if (playlist.playlist.isEditable != true) {
             {
                 SheetHeaderButton(
@@ -423,7 +424,7 @@ fun PlaylistMenu(
                         Material3MenuItemData(
                             title = {
                                 Text(
-                                    text = if (isPinned) "Unpin from library" else "Pin to library"
+                                    text = stringResource(if (isPinned) R.string.unpin_from_speed_dial else R.string.pin_to_speed_dial)
                                 )
                             },
                             icon = {

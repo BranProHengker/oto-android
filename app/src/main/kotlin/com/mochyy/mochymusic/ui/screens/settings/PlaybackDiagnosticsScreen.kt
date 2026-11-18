@@ -164,7 +164,7 @@ private fun DiagnosticsRow(label: String, value: String) {
 private fun copyLogs(context: Context, logs: List<PlaybackLogEntry>) {
     val sb = StringBuilder()
     sb.append("=== Oto Diagnostics Report ===\n")
-    sb.append("App: Oto v1.1.0 (Code 13)\n")
+    sb.append("App: Oto v${com.mochyy.mochymusic.BuildConfig.VERSION_NAME} (Code ${com.mochyy.mochymusic.BuildConfig.VERSION_CODE})\n")
     sb.append("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE}, SDK ${android.os.Build.VERSION.SDK_INT})\n")
     sb.append("Entries Count: ${logs.size}\n")
     sb.append("----------------------------------------\n")

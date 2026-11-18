@@ -140,13 +140,14 @@ fun HistoryScreen(
                     library = { librarySwipeAction(song.song) },
                     queue = { queueSwipeAction { song.toMediaItem() } },
                 ) {
+                    val active = song.id == mediaMetadata?.id
                     PlaylistTrackRow(
                         thumbnailUrl = song.song.thumbnailUrl,
                         songId = song.id,
                         title = song.song.title,
                         subtitle = "${song.artists.joinToString { it.name }} • ${makeTimeString(song.song.duration * 1000L)}",
-                        isActive = song.id == mediaMetadata?.id,
-                        isPlaying = isPlaying,
+                        isActive = active,
+                        isPlaying = active && isPlaying,
                         modifier = Modifier.revealOnAppear(key = "event_${eventWithSong.event.id}", seenState = revealSeen),
                         onClick = {
                             if (song.id == mediaMetadata?.id) playerConnection.togglePlayPause() else playFrom(song)
@@ -154,12 +155,12 @@ fun HistoryScreen(
                         onLongClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             menuState.show {
-                                SongMenu(originalSong = song, navController = navController, onDismiss = menuState::dismiss)
+                                SongMenu(originalSong = song, event = eventWithSong.event, navController = navController, onDismiss = menuState::dismiss)
                             }
                         },
                         onMenuClick = {
                             menuState.show {
-                                SongMenu(originalSong = song, navController = navController, onDismiss = menuState::dismiss)
+                                SongMenu(originalSong = song, event = eventWithSong.event, navController = navController, onDismiss = menuState::dismiss)
                             }
                         },
                     )

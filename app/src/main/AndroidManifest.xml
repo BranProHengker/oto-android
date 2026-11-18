@@ -7,7 +7,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- lets android auto draw oto's own player from the media session -->
+    <!-- the floating lyrics pill, only asked for when someone turns it on -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- lets android auto draw mochy's own player from the media session -->
     <uses-permission android:name="androidx.car.app.MEDIA_TEMPLATES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -15,6 +17,8 @@
     <!-- the tv link: a quiet background service so a paired tv can reach the phone, and the wi-fi discovery it needs -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- android 17 asks before an app reaches other devices on the wi-fi; without it the tv and phone link can't find or reach anything -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- lets the player ask a usb dac to run at the song's own rate, or bit-perfect, on android 14+ -->
@@ -1042,6 +1046,25 @@
             </intent-filter>
         </activity>
 
+        <!-- the module feed's discord sign-in sends the browser back here with a session -->
+        <activity
+            android:name=".modules.browser.ModuleBrowserLoginActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="mochy-modules" android:host="signed-in" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:exported="false"
@@ -1057,7 +1080,39 @@
                 <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
+            <!-- vivo's music card on originos (lock screen, atomic island) looks for this before it offers the heart, the loop
+                 button, lyrics and its lists; it still connects with the browser action above (playback/OriginCard.kt) -->
+            <intent-filter>
+                <action android:name="com.vivo.musicwidgetmix.support.service" />
+            </intent-filter>
         </service>
+
+        <!-- mochy's own android auto screens: tabs, lists, the player and lyrics, all from google's car templates -->
+        <service
+            android:name=".car.MochyCarAppService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.MEDIA" />
+            </intent-filter>
+        </service>
+
+        <!-- "hey google, play … on mochy" on the phone: the assistant only offers apps that take this intent with no data, and the phone is often locked in the car -->
+        <activity
+            android:name=".playback.voice.VoicePlayActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            tools:targetApi="27">
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <!-- keeps a paired tv able to reach this phone while mochy is closed -->
         <service
@@ -1099,33 +1154,6 @@
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="8" />
-
-        <!-- oto's own android auto screens: tabs, lists, the player and lyrics, all from google's car templates -->
-        <service
-            android:name=".car.MochyCarAppService"
-            android:exported="true"
-            tools:ignore="ExportedService">
-            <intent-filter>
-                <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.MEDIA" />
-            </intent-filter>
-        </service>
-
-        <!-- "hey google, play … on oto" on the phone: the assistant only offers apps that take this intent with no data, and the phone is often locked in the car -->
-        <activity
-            android:name=".playback.voice.VoicePlayActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:showWhenLocked="true"
-            android:taskAffinity=""
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            tools:targetApi="27">
-            <intent-filter>
-                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
         <!-- Music Widget -->
         <receiver
             android:name=".widget.MusicWidgetReceiver"

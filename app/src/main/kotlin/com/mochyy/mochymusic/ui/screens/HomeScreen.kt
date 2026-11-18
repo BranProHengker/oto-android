@@ -529,8 +529,8 @@ private fun HomeShell() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_oto_mark),
-                contentDescription = "Oto",
+                painter = painterResource(R.drawable.ic_mochy_mark),
+                contentDescription = "Mochy",
                 tint = Color.White,
                 modifier = Modifier
                     .launchMarkTarget()
@@ -834,8 +834,6 @@ fun HomeScreen(
     val playSong: (Song) -> Unit = { song ->
         if (song.id == mediaMetadataState.value?.id) {
             playerConnection.togglePlayPause()
-        } else if (song.song.isLocal) {
-            playerConnection.playQueue(ListQueue(title = song.song.title, items = listOf(song.toMediaItem())))
         } else {
             playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
         }
@@ -1807,8 +1805,8 @@ fun HomeScreen(
                     // it's also where the launch intro lands the splash mark
                     Box(contentAlignment = Alignment.CenterStart) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_oto_mark),
-                            contentDescription = "Oto",
+                            painter = painterResource(R.drawable.ic_mochy_mark),
+                            contentDescription = "Mochy",
                             tint = Color.White,
                             modifier = Modifier
                                 .launchMarkTarget()

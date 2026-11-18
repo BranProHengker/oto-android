@@ -1,4 +1,4 @@
-// a look module's own glass for the nav bar and the mini player: what's under the bar, blurred, then the module's agsl over it (docs/notes/module-glass.md)
+// a look module's own glass for the nav bar, the wide bar and the mini player: what's under the bar, blurred, then the module's agsl over it (docs/notes/module-glass.md)
 
 package com.mochyy.mochymusic.ui.component
 
@@ -39,6 +39,10 @@ private class GlassEffectCache {
     var margin = -1
     var low = false
     var chrome = 0
+    var accent = 0
+    var pillRect: androidx.compose.ui.geometry.Rect? = null
+    var pillShown = 0f
+    var pillLift = 0f
     var effect: RenderEffect? = null
 }
 
@@ -49,9 +53,12 @@ internal fun ModuleChromeGlass(
     glass: ActiveGlass,
     pureBlack: Boolean,
     accentWash: (() -> Color)?,
+    surface: ChromeSurface,
     modifier: Modifier = Modifier,
+    pill: ((Size) -> ChromePill?)? = null,
 ) {
     val density = LocalDensity.current
+    val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary.toArgb()
     val low = LocalBlurQuality.current == BlurQuality.LOW
     // low quality blurs a little less, the shader hears the quality and can skip its own extras
     val blurPx = with(density) { glass.blurDp.dp.toPx() } * (if (low) 0.7f else 1f)
@@ -71,16 +78,23 @@ internal fun ModuleChromeGlass(
                 .fillMaxSize()
                 .graphicsLayer {
                     clip = true
+                    // read here, so the pill's slide and lift only rebuild the effect while they move and never recompose
+                    val lit = if (glass.drawsPill) pill?.invoke(Size(size.width - margin * 2f, size.height - margin * 2f)) else null
                     if (cache.effect == null || cache.glass !== glass || cache.width != size.width || cache.height != size.height ||
-                        cache.margin != margin || cache.low != low || cache.chrome != chrome
+                        cache.margin != margin || cache.low != low || cache.chrome != chrome || cache.accent != accent ||
+                        cache.pillRect != lit?.rect || cache.pillShown != (lit?.shown ?: 0f) || cache.pillLift != (lit?.lift ?: 0f)
                     ) {
-                        cache.effect = glassEffect(glass, size, margin.toFloat(), density.density, low, chrome, blurPx)
+                        cache.effect = glassEffect(glass, size, margin.toFloat(), density.density, low, chrome, accent, surface.kind, blurPx, lit)
+                        cache.pillRect = lit?.rect
+                        cache.pillShown = lit?.shown ?: 0f
+                        cache.pillLift = lit?.lift ?: 0f
                         cache.glass = glass
                         cache.width = size.width
                         cache.height = size.height
                         cache.margin = margin
                         cache.low = low
                         cache.chrome = chrome
+                        cache.accent = accent
                     }
                     renderEffect = cache.effect
                 },
@@ -99,7 +113,18 @@ internal fun ModuleChromeGlass(
 
 // mochy's uniforms first, then the module's own; a name the shader doesn't declare is skipped, so a shader only takes what it uses
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-private fun glassEffect(glass: ActiveGlass, size: Size, margin: Float, density: Float, low: Boolean, chrome: Int, blur: Float): RenderEffect {
+private fun glassEffect(
+    glass: ActiveGlass,
+    size: Size,
+    margin: Float,
+    density: Float,
+    low: Boolean,
+    chrome: Int,
+    accent: Int,
+    kind: Float,
+    blur: Float,
+    pill: ChromePill?,
+): RenderEffect {
     val shader = glass.shader
     fun set(block: () -> Unit) = runCatching(block)
     set { shader.setAgslUniform("size", size.width, size.height) }
@@ -108,6 +133,13 @@ private fun glassEffect(glass: ActiveGlass, size: Size, margin: Float, density: 
     set { shader.setAgslUniform("density", density) }
     set { shader.setAgslUniform("quality", if (low) 0f else 1f) }
     set { shader.setAgslColorUniform("chrome", chrome) }
+    set { shader.setAgslColorUniform("accent", accent) }
+    set { shader.setAgslUniform("kind", kind) }
+    // the lit tab's pill in the picture's pixels, all zero on a bar without one so another bar's pill never shows through the shared shader
+    val rect = pill?.rect?.translate(margin, margin)
+    set { shader.setAgslUniform("pill", rect?.left ?: 0f, rect?.top ?: 0f, rect?.right ?: 0f, rect?.bottom ?: 0f) }
+    set { shader.setAgslUniform("pillShown", pill?.shown ?: 0f) }
+    set { shader.setAgslUniform("pillLift", pill?.lift ?: 0f) }
     glass.uniforms.forEach { (name, value) -> set { shader.setAgslUniform(name, value) } }
     val lens = agslRenderEffect(shader, "content")
     // the blur goes first, then the shader works on the blurred picture
