@@ -311,9 +311,9 @@
     <string name="wrapped_playlist_saved">Lista de reproducción guardada</string>
     <string name="casting_to">Transmitiendo a %s</string>
     <string name="progress_percent">Progreso %s%%</string>
-    <string name="listening_to_mochy">Escuchando oto</string>
+    <string name="listening_to_oto">Escuchando oto</string>
     <string name="listen_on_youtube_music">Escuchar en YouTube Music</string>
-    <string name="visit_mochy">Visita oto</string>
+    <string name="visit_oto">Visita oto</string>
     <string name="open">Abrir</string>
     <string name="failed_to_create_image">No se pudo crear la imagen: %s</string>
     <string name="copied_title">Título copiado</string>
@@ -632,9 +632,9 @@
     <string name="discord_button_text_variables">Variables: {song_name}, {artist_name}, {album_name}</string>
     <string name="discord_rpc_preview">Vista previa de Rich Presence</string>
     <string name="discord_connect_description">Inicia sesión con Discord para compartir lo que estás escuchando</string>
-    <string name="discord_playing_mochy">Reproduciendo oto</string>
-    <string name="discord_watching_mochy">Viendo oto</string>
-    <string name="discord_competing_mochy">Compitiendo en oto</string>
+    <string name="discord_playing_oto">Reproduciendo oto</string>
+    <string name="discord_watching_oto">Viendo oto</string>
+    <string name="discord_competing_oto">Compitiendo en oto</string>
     <string name="discord_activity_name">Nombre de la actividad</string>
     <string name="discord_activity_name_description">Nombre personalizado para la actividad (dejar vacío para el valor predeterminado)</string>
     <string name="discord_advanced_mode">Modo avanzado</string>

@@ -96,8 +96,8 @@
     <string name="thumbnail_corner_radius_desc">Change the corner radius of the album cover thumbnail</string>
     <string name="crop_album_art">裁剪专辑封面</string>
     <string name="crop_album_art_desc">通过裁剪视频缩略图强制使用正方形宽高比</string>
-    <string name="mochy_canvas">Canvas</string>
-    <string name="mochy_canvas_desc">Show animated album covers when available</string>
+    <string name="oto_canvas">Canvas</string>
+    <string name="oto_canvas_desc">Show animated album covers when available</string>
     <string name="show_album_canvas">Show Album Canvas</string>
     <string name="show_album_canvas_desc">Display animated canvas in album</string>
     <string name="rotating_thumbnail">Rotating thumbnail</string>
@@ -367,7 +367,7 @@
     <string name="enable_scrobbling">启用记录</string>
     <string name="lastfm_now_playing">发送正在播放的歌曲</string>
     <string name="last_fm_send_likes">发送点赞/取消点赞</string>
-    <string name="last_fm_send_likes_description">Last.fm上的歌曲在mochy上被点赞/取消点赞时,也会被标记为喜欢/不喜欢</string>
+    <string name="last_fm_send_likes_description">Last.fm上的歌曲在oto上被点赞/取消点赞时,也会被标记为喜欢/不喜欢</string>
     <string name="logging_in">正在登录…</string>
     <string name="scrobbling_configuration">Scrobbling记录设置</string>
     <string name="scrobble_min_track_duration">记录比…长的歌曲</string>
@@ -405,7 +405,7 @@
     <string name="karaoke">卡拉OK</string>
     <string name="apple_music_style">Apple Music</string>
     <string name="apple_music_style_letter">Apple Music V2 (Letter by Letter)</string>
-    <string name="mochy_1">oto (Fluid)</string>
+    <string name="oto_1">oto (Fluid)</string>
     <string name="apple_music_lyrics_blur">Apple Music Lyrics Blur</string>
     <string name="apple_music_lyrics_blur_desc">Apply blur to inactive lyrics lines for a premium focus effect</string>
     <string name="lyrics_v2_fluid">Lyrics V2 (Fluid)</string>
@@ -471,16 +471,16 @@
     <string name="import_error_title">导入错误</string>
     <string name="error_title">错误</string>
     <string name="error_eq_apply_failed">无法应用均衡器配置：%1$s</string>
-    <!-- mochyEqualizer Strings -->
-    <string name="mochy_equalizer">otoEqualizer</string>
-    <string name="mochy_equalizer_desc">Pro-grade acoustic tuning &amp; effects</string>
+    <!-- otoEqualizer Strings -->
+    <string name="oto_equalizer">otoEqualizer</string>
+    <string name="oto_equalizer_desc">Pro-grade acoustic tuning &amp; effects</string>
     <string name="eq_simple">Simple</string>
     <string name="eq_advanced">Advanced</string>
     <string name="eq_label_bass">Bass</string>
     <string name="eq_label_mid">Mids</string>
     <string name="eq_label_treble">Treble</string>
     <string name="eq_preset_flat">Flat</string>
-    <string name="eq_preset_mochy_signature">oto Signature</string>
+    <string name="eq_preset_oto_signature">oto Signature</string>
     <string name="eq_preset_acoustic">Acoustic</string>
     <string name="eq_preset_spatial">3D Stage</string>
     <string name="eq_preset_bass_boost">Bass Boost</string>
@@ -499,7 +499,7 @@
     <string name="eq_preset_dirac_game">Dirac Game</string>
     <string name="eq_enable_title">otoEqualizer</string>
     <string name="eq_enable_summary">Toggle professional audio processing</string>
-    <string name="eq_label_mochy">oto Signature</string>
+    <string name="eq_label_oto">oto Signature</string>
     <string name="eq_label_dolby">Dolby Atmos</string>
     <string name="eq_label_dirac">Dirac Audio</string>
     <string name="eq_reset">Reset</string>
@@ -516,9 +516,9 @@
     <string name="plays">plays</string>
     <string name="casting_to">转换为 %s</string>
     <string name="progress_percent">进度 %s%%</string>
-    <string name="listening_to_mochy">收听 oto</string>
+    <string name="listening_to_oto">收听 oto</string>
     <string name="listen_on_youtube_music">在 YouTube Music 上收听</string>
-    <string name="visit_mochy">访问 oto</string>
+    <string name="visit_oto">访问 oto</string>
     <string name="open">打开</string>
     <string name="failed_to_create_image">无法创建图片：%s</string>
     <string name="copied_title">已复制标题</string>
@@ -779,9 +779,9 @@
     <string name="discord_rpc_preview">Rich Presence 预览</string>
     <string name="discord_presence">在场</string>
     <string name="discord_connect_description">使用 Discord 登录来分享你正在收听的内容</string>
-    <string name="discord_playing_mochy">播放 oto</string>
-    <string name="discord_watching_mochy">观看mochy</string>
-    <string name="discord_competing_mochy">参与mochy评选</string>
+    <string name="discord_playing_oto">播放 oto</string>
+    <string name="discord_watching_oto">观看oto</string>
+    <string name="discord_competing_oto">参与oto评选</string>
     <string name="discord_activity_name">活动名称</string>
     <string name="discord_activity_name_description">自定义活动名称（留空则使用默认值）</string>
     <string name="discord_advanced_mode">高级模式</string>

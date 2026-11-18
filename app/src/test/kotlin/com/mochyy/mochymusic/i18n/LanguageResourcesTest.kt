@@ -1,4 +1,4 @@
-package com.mochyy.mochymusic.i18n
+package co.oto.music.i18n
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

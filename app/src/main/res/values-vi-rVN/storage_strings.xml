@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="storage_overall">Tổng quan</string>
-    <string name="storage_legend_mochy">Oto</string>
+    <string name="storage_legend_oto">Oto</string>
     <string name="storage_legend_yours">Bộ nhớ của bạn</string>
     <string name="storage_free">Còn trống %1$s</string>
     <string name="storage_measuring">Đang tính dung lượng Oto chiếm…</string>

@@ -1,5 +1,5 @@
 // CastOptionsProvider.kt
 
-package com.mochyy.mochymusic.cast
+package co.oto.music.cast
 
 class CastOptionsProvider

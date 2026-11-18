@@ -1,6 +1,6 @@
 // ChromecastRenderer.kt
 
-package com.mochyy.mochymusic.cast
+package co.oto.music.cast
 
 import android.annotation.SuppressLint
 import android.os.SystemClock

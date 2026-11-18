@@ -1,15 +1,15 @@
-package com.mochyy.mochymusic.module.monochrome
+package co.oto.music.module.monochrome
 
-import com.mochyy.mochymusic.module.AccountState
-import com.mochyy.mochymusic.module.HttpRequest
-import com.mochyy.mochymusic.module.HttpResponse
-import com.mochyy.mochymusic.module.ModuleHost
-import com.mochyy.mochymusic.module.ModuleServer
-import com.mochyy.mochymusic.module.ModuleStorage
-import com.mochyy.mochymusic.module.ResolveResult
-import com.mochyy.mochymusic.module.ServerProblem
-import com.mochyy.mochymusic.module.StreamFormat
-import com.mochyy.mochymusic.module.TrackQuery
+import co.oto.music.module.AccountState
+import co.oto.music.module.HttpRequest
+import co.oto.music.module.HttpResponse
+import co.oto.music.module.ModuleHost
+import co.oto.music.module.ModuleServer
+import co.oto.music.module.ModuleStorage
+import co.oto.music.module.ResolveResult
+import co.oto.music.module.ServerProblem
+import co.oto.music.module.StreamFormat
+import co.oto.music.module.TrackQuery
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

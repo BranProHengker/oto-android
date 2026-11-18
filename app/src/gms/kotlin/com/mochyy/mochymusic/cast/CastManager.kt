@@ -1,6 +1,6 @@
 // CastManager.kt
 
-package com.mochyy.mochymusic.cast
+package co.oto.music.cast
 
 import android.content.Context
 import androidx.media3.cast.CastPlayer

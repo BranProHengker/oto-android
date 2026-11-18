@@ -1,6 +1,6 @@
-package com.mochyy.mochymusic.songedit
+package co.oto.music.songedit
 
-import com.mochyy.mochymusic.lyrics.LyricsUtils
+import co.oto.music.lyrics.LyricsUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

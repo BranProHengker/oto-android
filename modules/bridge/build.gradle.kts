@@ -1,4 +1,4 @@
-// the bridge to a module that brings its own code in a zip: mochy and the module both build it, but only its shared package crosses at runtime
+// the bridge to a module that brings its own code in a zip: oto and the module both build it, but only its shared package crosses at runtime
 plugins {
     id("kotlin")
 }

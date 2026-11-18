@@ -1,4 +1,4 @@
-package com.mochyy.mochymusic.playback.audio
+package co.oto.music.playback.audio
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

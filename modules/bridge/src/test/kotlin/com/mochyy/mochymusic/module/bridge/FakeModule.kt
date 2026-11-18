@@ -1,35 +1,35 @@
-package com.mochyy.mochymusic.module.bridge
+package co.oto.music.module.bridge
 
-import com.mochyy.mochymusic.module.AccountState
-import com.mochyy.mochymusic.module.DiagnosticStep
-import com.mochyy.mochymusic.module.FieldKind
-import com.mochyy.mochymusic.module.HttpRequest
-import com.mochyy.mochymusic.module.ItemListModule
-import com.mochyy.mochymusic.module.ItemProblem
-import com.mochyy.mochymusic.module.ItemsAdded
-import com.mochyy.mochymusic.module.LicenseServer
-import com.mochyy.mochymusic.module.MatchedTrack
-import com.mochyy.mochymusic.module.MetadataModule
-import com.mochyy.mochymusic.module.ModuleArt
-import com.mochyy.mochymusic.module.ModuleChoice
-import com.mochyy.mochymusic.module.ModuleFeature
-import com.mochyy.mochymusic.module.ModuleField
-import com.mochyy.mochymusic.module.ModuleFields
-import com.mochyy.mochymusic.module.ModuleHost
-import com.mochyy.mochymusic.module.ModuleInfo
-import com.mochyy.mochymusic.module.ModuleItem
-import com.mochyy.mochymusic.module.ResolveResult
-import com.mochyy.mochymusic.module.SourceModule
-import com.mochyy.mochymusic.module.SourceStream
-import com.mochyy.mochymusic.module.StreamDrm
-import com.mochyy.mochymusic.module.StreamFormat
-import com.mochyy.mochymusic.module.StreamOption
-import com.mochyy.mochymusic.module.TrackMetadata
-import com.mochyy.mochymusic.module.TrackQuery
+import co.oto.music.module.AccountState
+import co.oto.music.module.DiagnosticStep
+import co.oto.music.module.FieldKind
+import co.oto.music.module.HttpRequest
+import co.oto.music.module.ItemListModule
+import co.oto.music.module.ItemProblem
+import co.oto.music.module.ItemsAdded
+import co.oto.music.module.LicenseServer
+import co.oto.music.module.MatchedTrack
+import co.oto.music.module.MetadataModule
+import co.oto.music.module.ModuleArt
+import co.oto.music.module.ModuleChoice
+import co.oto.music.module.ModuleFeature
+import co.oto.music.module.ModuleField
+import co.oto.music.module.ModuleFields
+import co.oto.music.module.ModuleHost
+import co.oto.music.module.ModuleInfo
+import co.oto.music.module.ModuleItem
+import co.oto.music.module.ResolveResult
+import co.oto.music.module.SourceModule
+import co.oto.music.module.SourceStream
+import co.oto.music.module.StreamDrm
+import co.oto.music.module.StreamFormat
+import co.oto.music.module.StreamOption
+import co.oto.music.module.TrackMetadata
+import co.oto.music.module.TrackQuery
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 
-// a module the bridge test loads on its own class loader, it reports back only through mochy's host
+// a module the bridge test loads on its own class loader, it reports back only through oto's host
 class FakeModule : SourceModule, ItemListModule {
 
     override val info = ModuleInfo("fake", "Fake", "1.0", "Answers the bridge test")
@@ -97,7 +97,7 @@ class FakeModule : SourceModule, ItemListModule {
     }
 }
 
-// a module built against an older api, which mochy has to turn away
+// a module built against an older api, which oto has to turn away
 class OldModule : SourceModule {
     override val info = ModuleInfo("old", "Old", "1.0", "Too old", apiVersion = 2)
     override fun attach(host: ModuleHost) = Unit

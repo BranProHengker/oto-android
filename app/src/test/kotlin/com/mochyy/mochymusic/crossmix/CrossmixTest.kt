@@ -1,8 +1,8 @@
-package com.mochyy.mochymusic.crossmix
+package co.oto.music.crossmix
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
-import com.mochyy.mochymusic.playback.audio.CrossmixTransitionAudioProcessor
+import co.oto.music.playback.audio.CrossmixTransitionAudioProcessor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -653,7 +653,7 @@ class CrossmixTest {
         val off = CrossmixPlanner.plan(
             CrossmixTrackInput("a", 200_000L, outgoingTrack, null),
             CrossmixTrackInput("b", 0L, nearTempoTrack, null),
-            CrossmixSettings(tempoMatch = com.mochyy.mochymusic.constants.CrossmixTempoMatch.OFF),
+            CrossmixSettings(tempoMatch = co.oto.music.constants.CrossmixTempoMatch.OFF),
         )
         assertEquals(1f, off.inSpeed)
         assertEquals(1f, off.outSpeed)
@@ -661,7 +661,7 @@ class CrossmixTest {
             val short = CrossmixPlanner.plan(
                 CrossmixTrackInput("o$seed", 200_000L, outgoingTrack, null),
                 CrossmixTrackInput("i$seed", 0L, nearTempoTrack, null),
-                CrossmixSettings(length = com.mochyy.mochymusic.constants.CrossmixLength.SHORT),
+                CrossmixSettings(length = co.oto.music.constants.CrossmixLength.SHORT),
             )
             if (!short.style.entersAtEnd) assertTrue("${short.lengthBeats} beats", short.lengthBeats * short.outBeatMs <= 16_000.0 * 0.6 + 1.0)
         }

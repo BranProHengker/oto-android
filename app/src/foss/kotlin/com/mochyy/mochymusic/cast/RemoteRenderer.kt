@@ -1,10 +1,10 @@
 // RemoteRenderer.kt
 
-package com.mochyy.mochymusic.cast
+package co.oto.music.cast
 
 import kotlinx.coroutines.flow.StateFlow
 
-/** what a receiver is doing, as far as mochy can tell */
+/** what a receiver is doing, as far as oto can tell */
 data class RemoteState(
     val playing: Boolean = false,
     val buffering: Boolean = false,
@@ -30,7 +30,7 @@ data class RemoteMedia(
     val durationMs: Long,
 )
 
-/** a cast receiver mochy drives itself, without google play services: a chromecast or a dlna renderer */
+/** a cast receiver oto drives itself, without google play services: a chromecast or a dlna renderer */
 interface RemoteRenderer {
     val state: StateFlow<RemoteState>
 

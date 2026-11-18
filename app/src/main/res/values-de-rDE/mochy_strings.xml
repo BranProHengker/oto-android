@@ -96,8 +96,8 @@
     <string name="thumbnail_corner_radius_desc">Change the corner radius of the album cover thumbnail</string>
     <string name="crop_album_art">Crop Album Art</string>
     <string name="crop_album_art_desc">Force a square aspect ratio by cropping video thumbnails</string>
-    <string name="mochy_canvas">Canvas</string>
-    <string name="mochy_canvas_desc">Show animated album covers when available</string>
+    <string name="oto_canvas">Canvas</string>
+    <string name="oto_canvas_desc">Show animated album covers when available</string>
     <string name="show_album_canvas">Show Album Canvas</string>
     <string name="show_album_canvas_desc">Display animated canvas in album</string>
     <string name="rotating_thumbnail">Rotating thumbnail</string>
@@ -409,7 +409,7 @@
     <string name="karaoke">Karaoke</string>
     <string name="apple_music_style">Apple Music</string>
     <string name="apple_music_style_letter">Apple Music V2 (Letter by Letter)</string>
-    <string name="mochy_1">oto (Fluid)</string>
+    <string name="oto_1">oto (Fluid)</string>
     <string name="apple_music_lyrics_blur">Apple Music Lyrics Blur</string>
     <string name="apple_music_lyrics_blur_desc">Apply blur to inactive lyrics lines for a premium focus effect</string>
     <string name="lyrics_v2_fluid">Lyrics V2 (Fluid)</string>
@@ -451,7 +451,7 @@
     <string name="wrapped_ready_title">YOUR WRAPPED IS READY!</string>
     <string name="wrapped_ready_subtitle">Time to see what you loved this year.</string>
     <string name="wrapped_thank_you">Thank you for listening</string>
-    <string name="wrapped_special_thanks">Special thanks to mochydh for creating oto</string>
+    <string name="wrapped_special_thanks">Special thanks to otodh for creating oto</string>
     <string name="wrapped_close">Close wrapped</string>
     <string name="wrapped_playlist_title">Your %s Wrapped</string>
     <string name="wrapped_create_playlist">Create playlist</string>
@@ -479,16 +479,16 @@
     <string name="import_error_title">Import Error</string>
     <string name="error_title">Error</string>
     <string name="error_eq_apply_failed">Failed to apply EQ profile: %1$s</string>
-    <!-- mochyEqualizer Strings -->
-    <string name="mochy_equalizer">otoEqualizer</string>
-    <string name="mochy_equalizer_desc">Pro-grade acoustic tuning &amp; effects</string>
+    <!-- otoEqualizer Strings -->
+    <string name="oto_equalizer">otoEqualizer</string>
+    <string name="oto_equalizer_desc">Pro-grade acoustic tuning &amp; effects</string>
     <string name="eq_simple">Simple</string>
     <string name="eq_advanced">Advanced</string>
     <string name="eq_label_bass">Bass</string>
     <string name="eq_label_mid">Mids</string>
     <string name="eq_label_treble">Treble</string>
     <string name="eq_preset_flat">Flat</string>
-    <string name="eq_preset_mochy_signature">oto Signature</string>
+    <string name="eq_preset_oto_signature">oto Signature</string>
     <string name="eq_preset_acoustic">Acoustic</string>
     <string name="eq_preset_spatial">3D Stage</string>
     <string name="eq_preset_bass_boost">Bass Boost</string>
@@ -507,7 +507,7 @@
     <string name="eq_preset_dirac_game">Dirac Game</string>
     <string name="eq_enable_title">otoEqualizer</string>
     <string name="eq_enable_summary">Toggle professional audio processing</string>
-    <string name="eq_label_mochy">oto Signature</string>
+    <string name="eq_label_oto">oto Signature</string>
     <string name="eq_label_dolby">Dolby Atmos</string>
     <string name="eq_label_dirac">Dirac Audio</string>
     <string name="eq_reset">Reset</string>
@@ -524,9 +524,9 @@
     <string name="plays">plays</string>
     <string name="casting_to">Casting to %s</string>
     <string name="progress_percent">Progress %s%%</string>
-    <string name="listening_to_mochy">Listening to oto</string>
+    <string name="listening_to_oto">Listening to oto</string>
     <string name="listen_on_youtube_music">Listen on YouTube Music</string>
-    <string name="visit_mochy">Visit oto</string>
+    <string name="visit_oto">Visit oto</string>
     <string name="open">Open</string>
     <string name="failed_to_create_image">Failed to create image: %s</string>
     <string name="copied_title">Copied Title</string>
@@ -787,9 +787,9 @@
     <string name="discord_rpc_preview">Rich Presence Preview</string>
     <string name="discord_presence">Presence</string>
     <string name="discord_connect_description">Sign in with Discord to share what you\'re listening to</string>
-    <string name="discord_playing_mochy">Playing oto</string>
-    <string name="discord_watching_mochy">Watching oto</string>
-    <string name="discord_competing_mochy">Competing in oto</string>
+    <string name="discord_playing_oto">Playing oto</string>
+    <string name="discord_watching_oto">Watching oto</string>
+    <string name="discord_competing_oto">Competing in oto</string>
     <string name="discord_activity_name">Activity name</string>
     <string name="discord_activity_name_description">Custom name for the activity (leave empty for default)</string>
     <string name="discord_advanced_mode">Advanced mode</string>

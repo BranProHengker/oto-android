@@ -1,6 +1,6 @@
 // CastOptionsProvider.kt
 
-package com.mochyy.mochymusic.cast
+package co.oto.music.cast
 
 import android.content.Context
 import com.google.android.gms.cast.CastMediaControlIntent

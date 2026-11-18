@@ -55,6 +55,6 @@ echo "⚡ [1/2] Compiling incremental & installing to device..."
 ./gradlew :app:installArm64FossDebug
 
 echo "🚀 [2/2] Launching Oto (Debug) on screen..."
-"$ADB_BIN" shell am start -n co.oto.music.debug/com.mochyy.mochymusic.MainActivity
+"$ADB_BIN" shell am start -n co.oto.music.debug/co.oto.music.MainActivity
 
 echo "✅ Beres! Oto (Debug) sudah jalan di HP."

@@ -96,8 +96,8 @@
     <string name="thumbnail_corner_radius_desc">Change the corner radius of the album cover thumbnail</string>
     <string name="crop_album_art">Cortar Capa do Álbum</string>
     <string name="crop_album_art_desc">Forçar formato quadrado nas miniaturas dos vídeos</string>
-    <string name="mochy_canvas">Canvas</string>
-    <string name="mochy_canvas_desc">Show animated album covers when available</string>
+    <string name="oto_canvas">Canvas</string>
+    <string name="oto_canvas_desc">Show animated album covers when available</string>
     <string name="show_album_canvas">Show Album Canvas</string>
     <string name="show_album_canvas_desc">Display animated canvas in album</string>
     <string name="rotating_thumbnail">Rotating thumbnail</string>
@@ -409,7 +409,7 @@
     <string name="karaoke">Karaoke</string>
     <string name="apple_music_style">Apple Music</string>
     <string name="apple_music_style_letter">Apple Music V2 (Letter by Letter)</string>
-    <string name="mochy_1">oto (Fluid)</string>
+    <string name="oto_1">oto (Fluid)</string>
     <string name="apple_music_lyrics_blur">Apple Music Lyrics Blur</string>
     <string name="apple_music_lyrics_blur_desc">Apply blur to inactive lyrics lines for a premium focus effect</string>
     <string name="lyrics_v2_fluid">Lyrics V2 (Fluid)</string>
@@ -477,16 +477,16 @@
     <string name="import_error_title">Erro ao importar</string>
     <string name="error_title">Erro inesperado</string>
     <string name="error_eq_apply_failed">Falha ao aplicar o perfil de equalização: %1$s</string>
-    <!-- mochyEqualizer Strings -->
-    <string name="mochy_equalizer">otoEqualizer</string>
-    <string name="mochy_equalizer_desc">Pro-grade acoustic tuning &amp; effects</string>
+    <!-- otoEqualizer Strings -->
+    <string name="oto_equalizer">otoEqualizer</string>
+    <string name="oto_equalizer_desc">Pro-grade acoustic tuning &amp; effects</string>
     <string name="eq_simple">Simple</string>
     <string name="eq_advanced">Advanced</string>
     <string name="eq_label_bass">Bass</string>
     <string name="eq_label_mid">Mids</string>
     <string name="eq_label_treble">Treble</string>
     <string name="eq_preset_flat">Flat</string>
-    <string name="eq_preset_mochy_signature">oto Signature</string>
+    <string name="eq_preset_oto_signature">oto Signature</string>
     <string name="eq_preset_acoustic">Acoustic</string>
     <string name="eq_preset_spatial">3D Stage</string>
     <string name="eq_preset_bass_boost">Bass Boost</string>
@@ -505,7 +505,7 @@
     <string name="eq_preset_dirac_game">Dirac Game</string>
     <string name="eq_enable_title">otoEqualizer</string>
     <string name="eq_enable_summary">Toggle professional audio processing</string>
-    <string name="eq_label_mochy">oto Signature</string>
+    <string name="eq_label_oto">oto Signature</string>
     <string name="eq_label_dolby">Dolby Atmos</string>
     <string name="eq_label_dirac">Dirac Audio</string>
     <string name="eq_reset">Reset</string>
@@ -522,9 +522,9 @@
     <string name="plays">plays</string>
     <string name="casting_to">Transmitir para %s</string>
     <string name="progress_percent">Progresso %s%%</string>
-    <string name="listening_to_mochy">Ouvindo oto</string>
+    <string name="listening_to_oto">Ouvindo oto</string>
     <string name="listen_on_youtube_music">Ouça no YouTube Music</string>
-    <string name="visit_mochy">Visite oto</string>
+    <string name="visit_oto">Visite oto</string>
     <string name="open">Abrir</string>
     <string name="failed_to_create_image">Falha ao criar a imagem: %s</string>
     <string name="copied_title">Título Copiado</string>
@@ -785,9 +785,9 @@
     <string name="discord_rpc_preview">Visualização de rich presence</string>
     <string name="discord_presence">Presença</string>
     <string name="discord_connect_description">Entre com o Discord para compartilhar o que você está ouvindo</string>
-    <string name="discord_playing_mochy">Jogando oto</string>
-    <string name="discord_watching_mochy">Assistindo oto</string>
-    <string name="discord_competing_mochy">Competindo no oto</string>
+    <string name="discord_playing_oto">Jogando oto</string>
+    <string name="discord_watching_oto">Assistindo oto</string>
+    <string name="discord_competing_oto">Competindo no oto</string>
     <string name="discord_activity_name">Nome da atividade</string>
     <string name="discord_activity_name_description">Nome personalizado para a atividade (deixe vazio para padrão)</string>
     <string name="discord_advanced_mode">Modo avançado</string>

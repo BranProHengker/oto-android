@@ -1,10 +1,10 @@
-package com.mochyy.mochymusic.modules.web
+package co.oto.music.modules.web
 
-import com.mochyy.mochymusic.module.FieldKind
-import com.mochyy.mochymusic.modules.skin.ActionTarget
-import com.mochyy.mochymusic.modules.skin.PageBlock
-import com.mochyy.mochymusic.modules.skin.SkinParser
-import com.mochyy.mochymusic.modules.skin.appliedLook
+import co.oto.music.module.FieldKind
+import co.oto.music.modules.skin.ActionTarget
+import co.oto.music.modules.skin.PageBlock
+import co.oto.music.modules.skin.SkinParser
+import co.oto.music.modules.skin.appliedLook
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -28,7 +28,7 @@ class ManifestSettingsTest {
             { "key": "style", "label": "Glass", "type": "select", "default": "liquid", "options": [
               { "value": "liquid", "label": "Liquid glass", "glass": { "blur": 7, "uniforms": { "tintAlpha": 0.42 } } },
               { "value": "clear", "label": "Clear glass", "glass": { "blur": 2.5, "uniforms": { "tintAlpha": 0.16 } } },
-              { "value": "frost", "label": "Mochy's frost", "look": { "bottomBar": "FROSTED" } }
+              { "value": "frost", "label": "Oto's frost", "look": { "bottomBar": "FROSTED" } }
             ] },
             { "key": "fringe", "label": "Colour fringe", "default": true, "glass": { "uniforms": { "spread": 0.06 } } },
             { "key": "black", "label": "Pure black", "default": false, "look": { "pureBlack": "true" } },
@@ -57,7 +57,7 @@ class ManifestSettingsTest {
         val fields = ManifestSettings(glassy).fields
         assertEquals(listOf("style", "fringe", "black", "token"), fields.map { it.id })
         assertEquals(listOf(FieldKind.Select, FieldKind.Toggle, FieldKind.Toggle, FieldKind.Text), fields.map { it.kind })
-        assertEquals(listOf("Liquid glass", "Clear glass", "Mochy's frost"), fields[0].options.map { it.label })
+        assertEquals(listOf("Liquid glass", "Clear glass", "Oto's frost"), fields[0].options.map { it.label })
         assertEquals("liquid", fields[0].default)
         assertEquals("true", fields[1].default)
         assertEquals("Token", fields[3].label)
@@ -71,7 +71,7 @@ class ManifestSettingsTest {
         assertEquals("glass.agsl", glass.shader)
         assertEquals(7f, glass.blurDp)
         assertEquals(22f, glass.marginDp)
-        // mochy's own uniforms, bad names and words are left out
+        // oto's own uniforms, bad names and words are left out
         assertEquals(mapOf("tintAlpha" to 0.42f, "spread" to 0f), glass.uniforms)
         assertTrue(skin()!!.restyles)
     }

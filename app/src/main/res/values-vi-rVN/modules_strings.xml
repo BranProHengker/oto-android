@@ -135,7 +135,7 @@
     <string name="modules_file_not_signed">Module này chạy mã riêng, nên phải được ký bằng cùng khóa với Oto của bạn, và bản này thì không. Hãy lấy bản được làm cho bản dựng Oto của bạn.</string>
     <string name="modules_code_broken">Mã của module này không khởi động được. Có thể nó được làm cho một phiên bản Oto khác.</string>
     <string name="modules_github_no_release">Dự án GitHub đó chưa phát hành bản nào. Hãy nhờ người tạo ra nó phát hành một bản kèm tệp .zip của module.</string>
-    <string name="modules_github_no_module">Bản phát hành mới nhất không có module nào. Oto tìm tệp .zip có \"mochyymodule\" trong tên, như glass.mochyymodule.zip.</string>
+    <string name="modules_github_no_module">Bản phát hành mới nhất không có module nào. Oto tìm tệp .zip có \"otoymodule\" trong tên, như glass.otoymodule.zip.</string>
     <string name="skin_customise_row">Tùy chỉnh %1$s</string>
     <string name="skin_customise_title">Tùy chỉnh</string>
     <string name="skin_customise_body">Các mục này thay đổi diện mạo của %1$s. Chúng là cùng các cài đặt như ở trang của module.</string>

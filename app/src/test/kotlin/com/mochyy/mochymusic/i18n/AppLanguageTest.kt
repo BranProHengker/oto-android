@@ -1,6 +1,6 @@
-package com.mochyy.mochymusic.i18n
+package co.oto.music.i18n
 
-import com.mochyy.mochymusic.constants.SYSTEM_DEFAULT
+import co.oto.music.constants.SYSTEM_DEFAULT
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.Locale

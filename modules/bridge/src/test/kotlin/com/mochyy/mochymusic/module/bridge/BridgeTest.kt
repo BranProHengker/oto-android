@@ -1,22 +1,22 @@
-package com.mochyy.mochymusic.module.bridge
+package co.oto.music.module.bridge
 
-import com.mochyy.mochymusic.module.AccountState
-import com.mochyy.mochymusic.module.DiagnosticStep
-import com.mochyy.mochymusic.module.HttpRequest
-import com.mochyy.mochymusic.module.HttpResponse
-import com.mochyy.mochymusic.module.ItemListModule
-import com.mochyy.mochymusic.module.ItemProblem
-import com.mochyy.mochymusic.module.ItemsAdded
-import com.mochyy.mochymusic.module.MochyModule
-import com.mochyy.mochymusic.module.ModuleFeature
-import com.mochyy.mochymusic.module.ModuleHost
-import com.mochyy.mochymusic.module.ModuleStorage
-import com.mochyy.mochymusic.module.ResolveResult
-import com.mochyy.mochymusic.module.ServerListModule
-import com.mochyy.mochymusic.module.StreamDrm
-import com.mochyy.mochymusic.module.StreamFormat
-import com.mochyy.mochymusic.module.TrackQuery
-import com.mochyy.mochymusic.module.bridge.shared.ModuleBridge
+import co.oto.music.module.AccountState
+import co.oto.music.module.DiagnosticStep
+import co.oto.music.module.HttpRequest
+import co.oto.music.module.HttpResponse
+import co.oto.music.module.ItemListModule
+import co.oto.music.module.ItemProblem
+import co.oto.music.module.ItemsAdded
+import co.oto.music.module.OtoModule
+import co.oto.music.module.ModuleFeature
+import co.oto.music.module.ModuleHost
+import co.oto.music.module.ModuleStorage
+import co.oto.music.module.ResolveResult
+import co.oto.music.module.ServerListModule
+import co.oto.music.module.StreamDrm
+import co.oto.music.module.StreamFormat
+import co.oto.music.module.TrackQuery
+import co.oto.music.module.bridge.shared.ModuleBridge
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -35,7 +35,7 @@ import java.io.IOException
 import java.net.URLClassLoader
 import kotlin.io.path.createTempDirectory
 
-// a module behind the bridge in a class loader of its own, the way mochy loads one from a zip: if anything but the shared package crossed, these would throw
+// a module behind the bridge in a class loader of its own, the way oto loads one from a zip: if anything but the shared package crossed, these would throw
 class BridgeTest {
 
     private class FakeHost : ModuleHost {
@@ -64,10 +64,10 @@ class BridgeTest {
 
     private val song = TrackQuery("Espresso", listOf("Sabrina Carpenter"), durationMs = 175_000)
 
-    // the module's own copy of everything it runs on, mochy's classes only reachable through the shared package
+    // the module's own copy of everything it runs on, oto's classes only reachable through the shared package
     private fun isolated(): URLClassLoader {
         val homes = listOf(
-            ModuleSide::class.java, FakeModule::class.java, MochyModule::class.java, KotlinVersion::class.java,
+            ModuleSide::class.java, FakeModule::class.java, OtoModule::class.java, KotlinVersion::class.java,
             Job::class.java, Json::class.java, SerializationException::class.java,
         ).map { it.protectionDomain.codeSource.location }.distinct()
         return URLClassLoader(homes.toTypedArray(), BridgeOnlyParent(javaClass.classLoader))
@@ -99,7 +99,7 @@ class BridgeTest {
         assertEquals("Scripts", (module as ItemListModule).itemsLabel)
         assertEquals(AccountState.SignedIn("ready"), module.accountState())
         assertEquals(listOf("quality"), module.choices.map { it.id })
-        // attach reached mochy's storage and its private folder
+        // attach reached oto's storage and its private folder
         assertEquals(host.folder.path, host.saved["folder"])
     }
 
@@ -117,7 +117,7 @@ class BridgeTest {
         val drm = stream.drm as StreamDrm.Widevine
         assertArrayEquals(byteArrayOf(1, 2, 3), drm.initData.single())
         assertArrayEquals(byteArrayOf(3, 2, 1), drm.license.acquire(byteArrayOf(1, 2, 3)))
-        // its http went through mochy, and the answer came back with its headers
+        // its http went through oto, and the answer came back with its headers
         assertEquals("https://fake.example/search?q=Espresso", host.requests.single().url)
         assertTrue(host.logs.any { it == "search said application/json {\"ok\":true}" })
     }
@@ -183,7 +183,7 @@ class BridgeTest {
         assertEquals("https://rich.example/icon.png", module.icon)
         assertEquals("https://rich.example/banner.webp", module.banner)
         assertEquals(listOf("region", "token"), module.fields.map { it.id })
-        assertEquals(com.mochyy.mochymusic.module.FieldKind.Select, module.fields[0].kind)
+        assertEquals(co.oto.music.module.FieldKind.Select, module.fields[0].kind)
         assertEquals(listOf("us", "jp"), module.fields[0].options.map { it.id })
         assertEquals("Paste it", module.fields[1].hint)
         module.onFields(mapOf("region" to "jp", "token" to "abc"))

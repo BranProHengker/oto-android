@@ -1,4 +1,4 @@
-/* mochy's site and wiki: one dark look, the dotted ground from the concept, inter like the app */
+/* oto's site and wiki: one dark look, the dotted ground from the concept, inter like the app */
 :root {
   --bg: #0e0e0f;
   --bg-deep: #070708;
@@ -276,7 +276,7 @@ pre .k { color: #8fb8ff; } pre .s { color: var(--yellow); } pre .n { color: #ff9
 .next small { color: var(--faint); display: block; font-size: 13px; }
 .next b { font-size: 17px; letter-spacing: -0.03em; }
 
-/* the footer: a black sheet under every page, mochy holding up the app on the right, sliding along with the sidebar like the page does */
+/* the footer: a black sheet under every page, oto holding up the app on the right, sliding along with the sidebar like the page does */
 .footer {
   position: relative; overflow: hidden; margin-left: var(--side-w); min-height: 290px;
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px;

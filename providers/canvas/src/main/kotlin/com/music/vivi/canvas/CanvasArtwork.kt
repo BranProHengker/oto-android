@@ -1,4 +1,4 @@
-package com.mochyy.mochymusic.canvas
+package co.oto.music.canvas
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

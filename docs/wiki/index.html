@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mochy Wiki</title>
-<meta name="description" content="Mochy Music's wiki: how the app works, and how to make modules for it.">
+<title>Oto Wiki</title>
+<meta name="description" content="Oto Music's wiki: how the app works, and how to make modules for it.">
 <meta name="theme-color" content="#0e0e0f">
 <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,7 +18,7 @@
 <div class="wiki">
 <aside class="side" id="side">
   <div class="side-head">
-    <div class="brand"><a class="brand-name" href="#welcome" style="text-decoration:none"><img src="../assets/img/logo.svg" alt="" width="32" height="35">Mochy Music</a><span class="brand-sep"></span><span class="brand-sub">Docs</span></div>
+    <div class="brand"><a class="brand-name" href="#welcome" style="text-decoration:none"><img src="../assets/img/logo.svg" alt="" width="32" height="35">Oto Music</a><span class="brand-sep"></span><span class="brand-sub">Docs</span></div>
     <button class="icon-btn fold press" type="button" id="sideFold" aria-label="Hide the sidebar" aria-expanded="true" aria-controls="toc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5"/><path d="M9.5 4.5v15"/><path class="arrow" d="m15.5 10-2 2 2 2"/></svg></button>
     <button class="icon-btn burger press" type="button" id="tocToggle" aria-label="Pages" aria-expanded="false" aria-controls="toc"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="bars" d="M4 7h16M4 12h16M4 17h16"/><path class="cross" d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
@@ -38,11 +38,11 @@
 
 <article class="page" id="welcome" data-group="Beggining" data-title="Hi! start here">
 <h1>Hi!</h1>
-<p class="sub">this is mochy's wiki &lt;3</p>
-<p>hello, im the one making mochy. this wiki is where i explain how the app works and how to make your own modules for it. i tried to keep it with a lot of pictures instead of a wall of code, becuase reading code in docs is boring lol.</p>
+<p class="sub">this is oto's wiki &lt;3</p>
+<p>hello, im the one making oto. this wiki is where i explain how the app works and how to make your own modules for it. i tried to keep it with a lot of pictures instead of a wall of code, becuase reading code in docs is boring lol.</p>
 <p>everything here comes from the real app, the screenshots are from the latest build. if something looks diffrent on your phone, you're probably on an older version, go update :p</p>
 <div class="cards">
-  <a class="press" href="#app-tour"><b>Using the app</b><span>a walk around mochy, page by page, with what every button does</span></a>
+  <a class="press" href="#app-tour"><b>Using the app</b><span>a walk around oto, page by page, with what every button does</span></a>
   <a class="press" href="#modules-types"><b>Making modules</b><span>new looks, your own player, liquid glass, sources, lyrics and song info</span></a>
   <a class="press" href="#modules-first"><b>Your first module</b><span>a whole module in two minutes, one json file in a zip</span></a>
   <a class="press" href="#roadmap"><b>Roadmap</b><span>what's done and what i'm working on</span></a>
@@ -53,7 +53,7 @@
 <article class="page" id="app-tour" data-group="Beggining" data-title="The app">
 <h1>The app</h1>
 <p class="sub">a quick walk around</p>
-<p>mochy has four tabs at the bottom, plus the player that lives right above them. tap the bar below, it switches just like in the app:</p>
+<p>oto has four tabs at the bottom, plus the player that lives right above them. tap the bar below, it switches just like in the app:</p>
 <div class="tour" style="align-items:flex-start;margin:20px 0 30px">
   <div class="phone">
     <img class="on" src="../assets/img/app-home.webp" alt="Home" width="450" height="1000" loading="lazy">
@@ -76,13 +76,13 @@
 
 <article class="page" id="install" data-group="Beggining" data-title="Installing">
 <h1>Installing</h1>
-<p class="sub">getting mochy on your phone</p>
+<p class="sub">getting oto on your phone</p>
 <ol>
-  <li>go to the <a href="https://github.com/realidkroo/Mochy-Music/releases">releases page</a> and download the apk. <b>arm64</b> is for almost every phone, <b>universal</b> works everywhere but its bigger.</li>
+  <li>go to the <a href="https://github.com/realidkroo/Oto-Music/releases">releases page</a> and download the apk. <b>arm64</b> is for almost every phone, <b>universal</b> works everywhere but its bigger.</li>
   <li>open it, android asks if you trust the source, say yes.</li>
-  <li>open mochy, it walks you thru a few steps: a username, importing (you can skip), and a check if your phone can do blur.</li>
+  <li>open oto, it walks you thru a few steps: a username, importing (you can skip), and a check if your phone can do blur.</li>
 </ol>
-<div class="note">mochy works on android 8 and newer. blur and glass need android 12, the liquid glass needs android 13. older phones get a plain version that still looks nice.</div>
+<div class="note">oto works on android 8 and newer. blur and glass need android 12, the liquid glass needs android 13. older phones get a plain version that still looks nice.</div>
 <p>updates show up inside the app when theres a new one, you can turn that off in app behaviour.</p>
 </article>
 
@@ -103,7 +103,7 @@
 <h2>Search</h2>
 <div class="shot">
   <div class="phone"><img src="../assets/img/app-search.webp" alt="Search" width="450" height="1000" loading="lazy"></div>
-  <div><p>moods and genres at first. type to search songs, albums, artists, playlists and videos. tap search twice fast and it goes straight to typing.</p><p>Home has three styles too (mochyy, listen now, hop in), change it in customisation.</p></div>
+  <div><p>moods and genres at first. type to search songs, albums, artists, playlists and videos. tap search twice fast and it goes straight to typing.</p><p>Home has three styles too (otoy, listen now, hop in), change it in customisation.</p></div>
 </div>
 </article>
 
@@ -137,7 +137,7 @@
   <div class="phone"><img src="../assets/img/app-lyrics.webp" alt="Lyrics" width="450" height="1000" loading="lazy"></div>
   <div>
     <p>tap the card at the bottom of the player to open the lyrics. the line being sung is bright, the rest fade.</p>
-    <p>mochy asks a bunch of lyric sources at once and keeps the best one (timed lyrics win). you can switch source from the player's menu, nudge the timing, or translate them.</p>
+    <p>oto asks a bunch of lyric sources at once and keeps the best one (timed lyrics win). you can switch source from the player's menu, nudge the timing, or translate them.</p>
     <div class="note">with a music video playing, lyrics follow the video instead of the album version.</div>
     <p>lyrics modules join the list too, and go first while their on.</p>
   </div>
@@ -179,7 +179,7 @@
 </div>
 <div class="shot">
   <div class="phone"><img src="../assets/img/app-recap.webp" alt="Recap" width="450" height="1000" loading="lazy"></div>
-  <div><p>pick the month or the year and play through it.</p><p class="aside">all of this stays on your phone, mochy never sends it anywhere.</p></div>
+  <div><p>pick the month or the year and play through it.</p><p class="aside">all of this stays on your phone, oto never sends it anywhere.</p></div>
 </div>
 </article>
 
@@ -212,24 +212,24 @@
 <article class="page" id="modules-types" data-group="Modules" data-title="What's a module?">
 <h1>Modules</h1>
 <p class="sub">what they are and how they work</p>
-<p>a module adds something to mochy without waiting for an app update. you write a small description of what you want (a json file), and mochy does the rest with its own parts. one module can add any mix of these four things:</p>
+<p>a module adds something to oto without waiting for an app update. you write a small description of what you want (a json file), and oto does the rest with its own parts. one module can add any mix of these four things:</p>
 <div class="cards">
-  <div><b>🎵 Songs</b><span>mochy asks your module for the song that's playing, in the provider order, then plays the stream itself. so the equalizer, crossfade and every audio lab effect still work on your songs.</span></div>
+  <div><b>🎵 Songs</b><span>oto asks your module for the song that's playing, in the provider order, then plays the stream itself. so the equalizer, crossfade and every audio lab effect still work on your songs.</span></div>
   <div><b>💬 Lyrics</b><span>your module goes first in the lyrics sources while it's on. timed lyrics beat plain ones.</span></div>
-  <div><b>ℹ️ Song info</b><span>genre, release date, album, who wrote and produced it, the label and what it's about. it shows in about song, before mochy's own sources.</span></div>
-  <div><b>🎨 A look</b><span>restyles mochy: its settings, a whole player of your own, a font, a glass for the bottom bar, pictures, pages (even in settings) and rows in the player's menu.</span></div>
+  <div><b>ℹ️ Song info</b><span>genre, release date, album, who wrote and produced it, the label and what it's about. it shows in about song, before oto's own sources.</span></div>
+  <div><b>🎨 A look</b><span>restyles oto: its settings, a whole player of your own, a font, a glass for the bottom bar, pictures, pages (even in settings) and rows in the player's menu.</span></div>
 </div>
 <p>every module can also bring an icon, a banner and settings of its own that people change on its page.</p>
 
 <h2>One switch</h2>
 <p>each module has one switch. off means gone everywhere: from audio quality, the provider order, the download order, the lyrics sources, about song, settings, the player's menu and the look. and every new module starts <b>off</b>, so adding one never changes anything until you turn it on yourself.</p>
-<div class="flow"><div>add it<small>a link, a zip or github</small></div><i>→</i><div>mochy shows what it adds</div><i>→</i><div>it sits there, off</div><i>→</i><div>you flip enable</div><i>→</i><div>it's live</div></div>
+<div class="flow"><div>add it<small>a link, a zip or github</small></div><i>→</i><div>oto shows what it adds</div><i>→</i><div>it sits there, off</div><i>→</i><div>you flip enable</div><i>→</i><div>it's live</div></div>
 
 <h2>Where you see them</h2>
 <div class="shot">
   <div class="phone"><img src="../assets/img/app-modules2.webp" alt="The modules page" width="450" height="1000" loading="lazy"><span class="mark" style="left:30%;top:9%">1</span><span class="mark" style="left:36%;top:30%">2</span><span class="mark" style="left:94%;top:40%">3</span></div>
   <ol class="marks">
-    <li><b>look modules</b> are the ones that only change how mochy looks.</li>
+    <li><b>look modules</b> are the ones that only change how oto looks.</li>
     <li><b>JS &amp; source modules</b> bring songs, lyrics or song info.</li>
     <li><b>drag a row by its lines</b> to reorder, <b>swipe it left</b> to delete. the order is the order songs and lyrics are asked in. tap a row to open the module's own page.</li>
   </ol>
@@ -239,23 +239,23 @@
 <h2>Which kind should i make?</h2>
 <div class="tbl"><table>
 <tr><th>you want to…</th><th>make a…</th><th>needs a server?</th><th>who can make it</th></tr>
-<tr><td>restyle mochy, your own glass or player, pages, menu rows</td><td><b>look</b>, as a zip (or a link to a manifest.json, but a glass, a font or a shader needs the zip)</td><td>no</td><td>anyone</td></tr>
+<tr><td>restyle oto, your own glass or player, pages, menu rows</td><td><b>look</b>, as a zip (or a link to a manifest.json, but a glass, a font or a shader needs the zip)</td><td>no</td><td>anyone</td></tr>
 <tr><td>songs, lyrics or song info from a service</td><td><b>web module</b>: a link to a small http service</td><td>yes</td><td>anyone</td></tr>
 <tr><td>share a web module as one file</td><td><b>zip with a url</b></td><td>yes, the one it names</td><td>anyone</td></tr>
 <tr><td>songs, lyrics or song info from javascript</td><td><b>script</b> for JS Modules</td><td>no</td><td>anyone</td></tr>
 <tr><td>add another monochrome server</td><td>not a module: monochrome's page → servers</td><td>no</td><td>anyone</td></tr>
-<tr><td>code that runs inside mochy</td><td><b>zip with its own code</b>, a built-in module or a module app</td><td>no</td><td>mochy devs only</td></tr>
+<tr><td>code that runs inside oto</td><td><b>zip with its own code</b>, a built-in module or a module app</td><td>no</td><td>oto devs only</td></tr>
 </table></div>
 
 <h2>Why it's safe</h2>
-<p>nothing from a look, a web module or a plain zip runs inside mochy. they only hand back json, stream links and look values, and mochy draws everything with its own parts. that's why anyone can make one and nobody has to trust it with the app.</p>
-<div class="note">the only exceptions are code modules (only loaded when they're signed with mochy's own key) and JS Modules scripts, which run sandboxed inside that module with no access to your phone or the app, only the internet through mochy. player and glass shaders run on the gpu and can only paint pixels.</div>
+<p>nothing from a look, a web module or a plain zip runs inside oto. they only hand back json, stream links and look values, and oto draws everything with its own parts. that's why anyone can make one and nobody has to trust it with the app.</p>
+<div class="note">the only exceptions are code modules (only loaded when they're signed with oto's own key) and JS Modules scripts, which run sandboxed inside that module with no access to your phone or the app, only the internet through oto. player and glass shaders run on the gpu and can only paint pixels.</div>
 </article>
 
 <article class="page" id="modules-first" data-group="Modules" data-title="Your first module">
 <h1>Your first module</h1>
 <p class="sub">two minutes, i promise</p>
-<p>the easiest module is a look in a zip: one json file and an icon. this one turns mochy pure black with sharp corners and the turntable player.</p>
+<p>the easiest module is a look in a zip: one json file and an icon. this one turns oto pure black with sharp corners and the turntable player.</p>
 <div class="flow"><div>1. a folder<small>midnight/</small></div><i>→</i><div>2. manifest.json<small>+ icon.png</small></div><i>→</i><div>3. zip it</div><i>→</i><div>4. add from a file</div><i>→</i><div>5. turn it on</div></div>
 <pre><code class="json">{
   "id": "midnight",
@@ -273,8 +273,8 @@
 <ol>
   <li>make a folder called <code>midnight</code>. put that <code>manifest.json</code> in it, plus a square <code>icon.png</code> (512×512 is plenty).</li>
   <li>zip it. <b>mac:</b> right click the folder → compress. <b>windows:</b> right click → send to → compressed (zipped) folder. <b>terminal:</b> <code>cd midnight &amp;&amp; zip midnight.zip manifest.json icon.png</code></li>
-  <li>send the zip to your phone. in mochy: <b>settings → modules → add a module → add from a file → choose a .zip</b>.</li>
-  <li>mochy shows what it adds. tap <b>add</b>, open its page and flip <b>enable</b>.</li>
+  <li>send the zip to your phone. in oto: <b>settings → modules → add a module → add from a file → choose a .zip</b>.</li>
+  <li>oto shows what it adds. tap <b>add</b>, open its page and flip <b>enable</b>.</li>
 </ol>
 <p>thats a whole module! turn it off and your own settings come back, exactly how you had them. want something bigger? the <a href="#modules-glass">liquid glass</a> module uses almost everything in this wiki, and the <a href="#modules-player-example">vinyl night</a> example shows off a full custom player.</p>
 </article>
@@ -282,10 +282,10 @@
 <article class="page" id="modules-install" data-group="Modules" data-title="Adding a module">
 <h1>Adding a module</h1>
 <p class="sub">four ways in</p>
-<p>everything starts at <b>settings → modules → add a module</b>. whichever way you pick, mochy checks the module first and shows you what it adds before anything is installed.</p>
+<p>everything starts at <b>settings → modules → add a module</b>. whichever way you pick, oto checks the module first and shows you what it adds before anything is installed.</p>
 <div class="cards">
   <div><b>From a link</b><span>paste a web module's link (<code>https://my-flac.example</code>) or the link to any manifest.json. both work.</span></div>
-  <div><b>From GitHub</b><span>paste a github project's link. mochy grabs the module zip from its newest release. <a href="#modules-github">how to set that up</a></span></div>
+  <div><b>From GitHub</b><span>paste a github project's link. oto grabs the module zip from its newest release. <a href="#modules-github">how to set that up</a></span></div>
   <div><b>From a file</b><span>pick a module's .zip that someone sent you on discord, telegram or as a download.</span></div>
   <div><b>From the catalog</b><span>the list under the link box, read straight from github so it grows without an app update.</span></div>
 </div>
@@ -294,44 +294,44 @@
 <h2>Removing</h2>
 <p>swipe the row left on the modules page, or tap <b>remove this module</b> on its page. its look gives your settings back, and its pictures, fonts, shaders and settings are deleted with it.</p>
 <h2>Backups</h2>
-<p>modules you added are kept in mochy's backup like everything else, zips and code modules included.</p>
+<p>modules you added are kept in oto's backup like everything else, zips and code modules included.</p>
 </article>
 
 <article class="page" id="modules-github" data-group="Modules" data-title="Publishing on GitHub">
 <h1>Publishing on GitHub</h1>
 <p class="sub">a link people paste once</p>
-<p>if your module lives on github, people don't need to download anything themselves. they paste your project's link, and mochy finds the module in your newest release and installs it.</p>
-<div class="flow"><div>github.com/you/vinyl</div><i>→</i><div>newest release<small>not drafts or pre-releases</small></div><i>→</i><div>the zip named *mochyymodule*</div><i>→</i><div>checked like any zip</div><i>→</i><div>add</div></div>
+<p>if your module lives on github, people don't need to download anything themselves. they paste your project's link, and oto finds the module in your newest release and installs it.</p>
+<div class="flow"><div>github.com/you/vinyl</div><i>→</i><div>newest release<small>not drafts or pre-releases</small></div><i>→</i><div>the zip named *otoymodule*</div><i>→</i><div>checked like any zip</div><i>→</i><div>add</div></div>
 <h2>Naming the zip</h2>
-<p>attach your module's zip to a release and put <code>mochyymodule</code> in its file name. that's the only thing mochy looks for, so other files in the release (source code, screenshots, apks) are left alone.</p>
+<p>attach your module's zip to a release and put <code>otoymodule</code> in its file name. that's the only thing oto looks for, so other files in the release (source code, screenshots, apks) are left alone.</p>
 <div class="tbl"><table>
 <tr><th>file name</th><th>picked?</th></tr>
-<tr><td><code>vinyl-night.mochyymodule.zip</code></td><td>yes ✓</td></tr>
-<tr><td><code>liquid-glass-1.2.mochyymodule.zip</code></td><td>yes ✓</td></tr>
-<tr><td><code>vinyl-night.zip</code></td><td>no, it doesn't say mochyymodule</td></tr>
-<tr><td><code>vinyl.mochyymodule.tar.gz</code></td><td>no, it has to be a .zip</td></tr>
+<tr><td><code>vinyl-night.otoymodule.zip</code></td><td>yes ✓</td></tr>
+<tr><td><code>liquid-glass-1.2.otoymodule.zip</code></td><td>yes ✓</td></tr>
+<tr><td><code>vinyl-night.zip</code></td><td>no, it doesn't say otoymodule</td></tr>
+<tr><td><code>vinyl.otoymodule.tar.gz</code></td><td>no, it has to be a .zip</td></tr>
 </table></div>
 <p>the zip itself is exactly the same as one you'd send as a file: a <a href="#modules-manifest">manifest.json</a> at the root or one folder in, plus your pictures, fonts and shaders.</p>
 <h2>The links that work</h2>
 <div class="tbl"><table>
-<tr><th>someone pastes</th><th>mochy takes</th></tr>
+<tr><th>someone pastes</th><th>oto takes</th></tr>
 <tr><td><code>github.com/you/vinyl</code></td><td>the newest release</td></tr>
 <tr><td><code>github.com/you/vinyl/releases</code></td><td>the newest release</td></tr>
 <tr><td><code>github.com/you/vinyl/releases/tag/v1.2</code></td><td>exactly that release</td></tr>
 <tr><td><code>github.com/you/vinyl/blob/main/manifest.json</code></td><td>not a release: treated as a normal link</td></tr>
 </table></div>
 <h2>Debug and release builds</h2>
-<p>a module with its own code has to be signed like the mochy it runs in. if your release has two zips with mochyymodule in the name, mochy takes the one with <code>debug</code> in its name on debug, fast and profileable builds, and the other one on a release build. so <code>js-modules-debug.mochyymodule.zip</code> next to <code>js-modules.mochyymodule.zip</code> just works.</p>
+<p>a module with its own code has to be signed like the oto it runs in. if your release has two zips with otoymodule in the name, oto takes the one with <code>debug</code> in its name on debug, fast and profileable builds, and the other one on a release build. so <code>js-modules-debug.otoymodule.zip</code> next to <code>js-modules.otoymodule.zip</code> just works.</p>
 <h2>Shipping an update</h2>
 <ol>
   <li>bump <code>version</code> in your manifest. keep the <code>id</code> the same, always.</li>
   <li>make the zip, publish a new release and attach it.</li>
   <li>people paste your link again and tap add. it updates in place, their switch and settings stay.</li>
 </ol>
-<div class="note">limits: the zip can be up to 40 MB. a project with no release, or a release with no zip named mochyymodule, gets a friendly message saying so.</div>
+<div class="note">limits: the zip can be up to 40 MB. a project with no release, or a release with no zip named otoymodule, gets a friendly message saying so.</div>
 <pre><code># with the github cli, from your module's folder
-zip -r vinyl-night.mochyymodule.zip manifest.json images fonts
-gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</code></pre>
+zip -r vinyl-night.otoymodule.zip manifest.json images fonts
+gh release create v1.2 vinyl-night.otoymodule.zip --title "Vinyl Night 1.2"</code></pre>
 </article>
 
 <article class="page" id="modules-manifest" data-group="Modules" data-title="manifest.json">
@@ -340,7 +340,7 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
 <p>every module, link or zip, describes itself with one <code>manifest.json</code>. here's every field:</p>
 <div class="tbl"><table>
 <tr><th>field</th><th>needed?</th><th>what it's for</th></tr>
-<tr><td><code>id</code></td><td>id or name</td><td>short and stable, like <code>my-flac</code>. mochy turns it into <code>web.my-flac</code> (link) or <code>local.my-flac</code> (zip), so it can never replace a built-in module. <b>never change it</b>: adding the same id again updates the module.</td></tr>
+<tr><td><code>id</code></td><td>id or name</td><td>short and stable, like <code>my-flac</code>. oto turns it into <code>web.my-flac</code> (link) or <code>local.my-flac</code> (zip), so it can never replace a built-in module. <b>never change it</b>: adding the same id again updates the module.</td></tr>
 <tr><td><code>name</code></td><td>id or name</td><td>what people see</td></tr>
 <tr><td><code>version</code></td><td>no</td><td>shown on its row and page. bump it when you change anything</td></tr>
 <tr><td><code>description</code></td><td>no</td><td>one line under its name on its page</td></tr>
@@ -354,14 +354,14 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
 <tr><td><code>pages</code>, <code>actions</code></td><td>no</td><td><a href="#modules-pages">pages and menu rows</a></td></tr>
 <tr><td><code>glass</code></td><td>no, zip only</td><td><a href="#modules-glass">a glass shader for the bottom bar</a></td></tr>
 <tr><td><code>url</code></td><td>zip only</td><td>the service a zip plays from. a link module doesn't need it, its link <i>is</i> the service</td></tr>
-<tr><td><code>code</code></td><td>zip only, mochy devs</td><td><a href="#modules-zip">signed code</a> inside the zip</td></tr>
+<tr><td><code>code</code></td><td>zip only, oto devs</td><td><a href="#modules-zip">signed code</a> inside the zip</td></tr>
 </table></div>
 <h2>Two rules worth knowing</h2>
 <ul>
   <li><b>a manifest with no <code>resources</code> and nothing that changes the look</b> (<code>look</code>, <code>player</code>, <code>font</code>, <code>pages</code>, <code>actions</code>, <code>glass</code>, or settings that carry a look or a glass) is read as a song source, because that's what most services like this are.</li>
   <li><b>a website's own manifest.json is turned away.</b> websites have one for "install to home screen", with <code>start_url</code>, <code>display</code>, <code>short_name</code> or <code>icons</code>. a manifest with any of those and none of the module fields gets "that's a website, not a module". so don't use those names.</li>
 </ul>
-<p>fields mochy doesn't know are ignored, so a newer manifest still opens on an older mochy.</p>
+<p>fields oto doesn't know are ignored, so a newer manifest still opens on an older oto.</p>
 </article>
 
 <article class="page" id="modules-art" data-group="Modules" data-title="Icon &amp; banner">
@@ -371,14 +371,14 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
   <div class="phone"><img src="../assets/img/app-module_page.webp" alt="A module's page" width="450" height="1000" loading="lazy"><span class="mark" style="left:50%;top:9%">1</span><span class="mark" style="left:14%;top:27%">2</span><span class="mark" style="left:60%;top:36%">3</span><span class="mark" style="left:50%;top:55%">4</span></div>
   <ol class="marks">
     <li><b>banner.</b> wide, about 2:1 (1200×600 is plenty). it fades into the page, and <b>the page takes its colour from it</b>. keep the bottom third calm, the icon and name sit over it.</li>
-    <li><b>icon.</b> square, 512×512 is plenty. shown on the row, big on the page and next to its pages in settings. mochy rounds the corners, so give it square ones.</li>
+    <li><b>icon.</b> square, 512×512 is plenty. shown on the row, big on the page and next to its pages in settings. oto rounds the corners, so give it square ones.</li>
     <li><b>name + dot.</b> green is on, grey is off, amber means it needs something.</li>
     <li><b>enable.</b> the one switch.</li>
   </ol>
 </div>
 <pre><code class="json">"icon": "icon.png",
 "banner": "images/banner.webp"</code></pre>
-<p>no banner? mochy blows your icon up and softly blurs it instead. no icon either? your first letter on a colour.</p>
+<p>no banner? oto blows your icon up and softly blurs it instead. no icon either? your first letter on a colour.</p>
 <h2>Where a picture can come from</h2>
 <p>this is the same everywhere in a module: icons, banners, player pictures, page pictures, menu row icons.</p>
 <div class="tbl"><table>
@@ -413,7 +413,7 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
 <tr><th>field</th><th>what it's for</th></tr>
 <tr><td><code>key</code></td><td>the setting's name, the same forever. it's also the query parameter a service gets, and the name a player uses in <code>when</code> and <code>$colours</code></td></tr>
 <tr><td><code>label</code></td><td>what people see. without it the key is shown</td></tr>
-<tr><td><code>type</code></td><td><code>select</code> (round rows to pick one), <code>text</code> (a line to type in, saved when you stop typing) or <code>toggle</code> (a switch). left out, mochy works it out: options make a select, a <code>"true"</code>/<code>"false"</code> default a toggle, anything else text</td></tr>
+<tr><td><code>type</code></td><td><code>select</code> (round rows to pick one), <code>text</code> (a line to type in, saved when you stop typing) or <code>toggle</code> (a switch). left out, oto works it out: options make a select, a <code>"true"</code>/<code>"false"</code> default a toggle, anything else text</td></tr>
 <tr><td><code>default</code></td><td>what it starts as. a select starts on its first option without one, a toggle starts off</td></tr>
 <tr><td><code>options</code></td><td>for a select: plain values (<code>["us", "jp"]</code>) or objects with <code>value</code>, <code>label</code>, <code>description</code>, <code>look</code> and <code>glass</code></td></tr>
 <tr><td><code>hint</code></td><td>for text: the grey words in the empty field</td></tr>
@@ -421,20 +421,20 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
 <tr><td><code>look</code>, <code>glass</code></td><td>for a toggle: the look or glass change it puts on while it's on</td></tr>
 </table></div>
 <h2>Where the values go</h2>
-<div class="flow"><div>you pick<small>on the page</small></div><i>→</i><div>mochy keeps it</div><i>→</i><div>it goes where it's needed</div></div>
+<div class="flow"><div>you pick<small>on the page</small></div><i>→</i><div>oto keeps it</div><i>→</i><div>it goes where it's needed</div></div>
 <ul>
   <li><b>a web module</b> gets every setting as a query parameter on every call (<code>/search</code>, <code>/stream</code>, <code>/lyrics</code>, <code>/metadata</code>): <code>?region=jp&amp;token=abc&amp;explicit=true</code>. a value nobody set goes as its default.</li>
-  <li><b>a module that plays songs</b> keeps <code>quality</code> and <code>atmos</code> for mochy's own stream and dolby atmos choices (<a href="#modules-web">web modules</a>), so those two never show as options.</li>
+  <li><b>a module that plays songs</b> keeps <code>quality</code> and <code>atmos</code> for oto's own stream and dolby atmos choices (<a href="#modules-web">web modules</a>), so those two never show as options.</li>
   <li><b>a player</b> reads them live: blocks can show or hide with <code>when</code>, and colours can come from a setting. see <a href="#modules-player-custom">customise &amp; menu</a>.</li>
   <li><b>a zip with its own code</b> gets them through <code>ModuleFields.onFields</code> (<a href="#devs">for devs</a>).</li>
 </ul>
 <h2>Settings that change the look or the glass</h2>
-<p>an option, or a toggle that's on, can carry a <code>look</code> of its own. it's laid over the module's look while the module is on. when someone picks something else, mochy gives the old values back and puts the new ones on. a <code>glass</code> works the same way: a <code>blur</code>, a <code>margin</code> and <code>uniforms</code> laid over your <a href="#modules-glass">glass</a>. that's how one module offers "liquid" or "clear" glass, or hands the bars back to mochy's frost:</p>
+<p>an option, or a toggle that's on, can carry a <code>look</code> of its own. it's laid over the module's look while the module is on. when someone picks something else, oto gives the old values back and puts the new ones on. a <code>glass</code> works the same way: a <code>blur</code>, a <code>margin</code> and <code>uniforms</code> laid over your <a href="#modules-glass">glass</a>. that's how one module offers "liquid" or "clear" glass, or hands the bars back to oto's frost:</p>
 <pre><code class="json">"settings": [
   { "key": "style", "label": "Glass", "type": "select", "default": "liquid", "options": [
     { "value": "liquid", "label": "Liquid glass", "glass": { "blur": 7, "uniforms": { "tintAlpha": 0.42 } } },
     { "value": "clear",  "label": "Clear glass",  "glass": { "blur": 2.5, "uniforms": { "tintAlpha": 0.16 } } },
-    { "value": "frost",  "label": "Mochy's frost", "look": { "bottomBar": "FROSTED" } }
+    { "value": "frost",  "label": "Oto's frost", "look": { "bottomBar": "FROSTED" } }
   ] },
   { "key": "fringe", "label": "Colour fringe", "type": "toggle", "default": "true",
     "glass": { "uniforms": { "spread": 0.06 } } },
@@ -446,11 +446,11 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
 
 <article class="page" id="modules-look" data-group="Modules" data-title="Looks">
 <h1>Looks</h1>
-<p class="sub">restyle mochy, safely</p>
+<p class="sub">restyle oto, safely</p>
 <p>a look can do all of these, in any mix:</p>
 <div class="tbl"><table>
 <tr><th>what</th><th>in manifest.json</th><th>works from</th></tr>
-<tr><td>change mochy's settings</td><td><code>look</code>, and looks inside <code>settings</code></td><td>a zip or a link</td></tr>
+<tr><td>change oto's settings</td><td><code>look</code>, and looks inside <code>settings</code></td><td>a zip or a link</td></tr>
 <tr><td><a href="#modules-player">a player of its own</a></td><td><code>player</code></td><td>a zip or a link (shaders zip only)</td></tr>
 <tr><td><a href="#modules-fonts">its own font</a></td><td><code>font</code></td><td>a zip</td></tr>
 <tr><td><a href="#modules-art">its own pictures</a></td><td>paths in <code>player</code>, <code>pages</code>, <code>actions</code></td><td>a zip, or a link with pictures beside it</td></tr>
@@ -462,16 +462,16 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
 <div class="cards">
   <div><b>one at a time</b><span>turning a second look on turns the first off and gives its settings back first. a module with only pages or menu rows doesn't count, so it can stay on next to one. a glass or a player does count.</span></div>
   <div><b>you always win</b><span>change a setting by hand while a look is on, and you keep your value when the look goes off.</span></div>
-  <div><b>survives restarts</b><span>mochy remembers what each look replaced, so turning it off after a restart still gives the right settings back.</span></div>
-  <div><b>nothing runs</b><span>a look is a description. mochy draws it with its own parts, so it stays smooth on slow phones and can't break anything.</span></div>
+  <div><b>survives restarts</b><span>oto remembers what each look replaced, so turning it off after a restart still gives the right settings back.</span></div>
+  <div><b>nothing runs</b><span>a look is a description. oto draws it with its own parts, so it stays smooth on slow phones and can't break anything.</span></div>
 </div>
 <h2>Look settings</h2>
-<p>a look may change <b>only</b> these, so a module can restyle mochy but never reach your accounts, the network or playback. values are written as text (<code>"true"</code>, <code>"12"</code>, <code>"FLAGSHIP"</code>). keys are spelled exactly like this, style names can be any case, and a value out of range is simply ignored.</p>
+<p>a look may change <b>only</b> these, so a module can restyle oto but never reach your accounts, the network or playback. values are written as text (<code>"true"</code>, <code>"12"</code>, <code>"FLAGSHIP"</code>). keys are spelled exactly like this, style names can be any case, and a value out of range is simply ignored.</p>
 <div class="tbl"><table>
 <tr><th>key</th><th>values</th><th>what it changes</th></tr>
 <tr><td><code>bottomBar</code></td><td><code>FROSTED</code>, <code>MODULE</code></td><td>the glass of the nav bar, the wide bar and the mini player. <code>MODULE</code> is your own <a href="#modules-glass">glass</a> and is picked for you when you bring one</td></tr>
 <tr><td><code>playerStyle</code></td><td><code>FLAGSHIP</code>, <code>CLASSIC</code>, <code>TURNTABLE</code>, <code>VIDEO</code>, <code>IPOD</code>, <code>POSTER</code>, <code>TIMELINE</code>, <code>LYRICS</code>, <code>BEDSIDE</code>, <code>BEDSIDE_TILES</code>, <code>MODULE</code></td><td>the now playing screen. <code>MODULE</code> is your own <a href="#modules-player">player</a>, picked for you when you bring one</td></tr>
-<tr><td><code>homeStyle</code></td><td><code>MOCHYY</code>, <code>LISTEN_NOW</code>, <code>HOP_IN</code></td><td>the home page layout</td></tr>
+<tr><td><code>homeStyle</code></td><td><code>OTO</code>, <code>LISTEN_NOW</code>, <code>HOP_IN</code></td><td>the home page layout</td></tr>
 <tr><td><code>playlistStyle</code></td><td><code>FLOW</code>, <code>CLASSIC</code>, <code>MINIMAL</code></td><td>how playlists and albums are laid out</td></tr>
 <tr><td><code>thumbnailCornerRadius</code></td><td><code>0</code> to <code>45</code></td><td>how round covers are</td></tr>
 <tr><td><code>lyricsMotionStyle</code></td><td><code>MOTION</code>, <code>LEGACY</code>, <code>BORING</code>, <code>PLAIN</code></td><td>how lyrics animate</td></tr>
@@ -487,13 +487,13 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
 <tr><td><code>enableProgressiveBlur</code></td><td><code>true</code>, <code>false</code></td><td>blur that grows toward the edges</td></tr>
 <tr><td><code>elementBlur</code></td><td><code>true</code>, <code>false</code></td><td>blur on moving elements</td></tr>
 </table></div>
-<p>a look made only of settings can be added from a link to its manifest.json too, like a raw github link: <code>https://raw.githubusercontent.com/you/midnight/main/manifest.json</code>. want a setting that isn't in this list? it has to be added to mochy first (<a href="#devs">for devs</a>).</p>
+<p>a look made only of settings can be added from a link to its manifest.json too, like a raw github link: <code>https://raw.githubusercontent.com/you/midnight/main/manifest.json</code>. want a setting that isn't in this list? it has to be added to oto first (<a href="#devs">for devs</a>).</p>
 </article>
 
 <article class="page" id="modules-player" data-group="Your own player" data-title="How a player works">
 <h1>Your own player</h1>
 <p class="sub">design the now playing screen</p>
-<p>a <code>player</code> in your manifest describes a whole now playing screen. while your look is on, it's the first style in the style picker (hold the player to open it) under the name you give it. mochy switches to it when your look turns on, and back to the person's own style when it goes off.</p>
+<p>a <code>player</code> in your manifest describes a whole now playing screen. while your look is on, it's the first style in the style picker (hold the player to open it) under the name you give it. oto switches to it when your look turns on, and back to the person's own style when it goes off.</p>
 <h2>What you get for free</h2>
 <p>your player gets everything the other styles have, without writing anything: swipe sideways to change song (your cover and words ride along), tap to play or pause, swipe down to close, the chevron menu (lyrics, shuffle, repeat, other menu, edit player, plus <a href="#modules-player-custom">your own items</a>), turning sideways, and its clocks resting while it's hidden.</p>
 <h2>How it's put together</h2>
@@ -546,7 +546,7 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
   <li><b>row</b> puts its blocks side by side. words, bars, visualizers and columns share the width; covers, pictures and buttons keep their own size.</li>
   <li><b>column</b> stacks its blocks, handy inside a row.</li>
   <li><b>stack</b> lays its blocks on top of each other, the first at the back. that's how you put a ring visualizer around a cover, or a sticker over it.</li>
-  <li>rows, columns and stacks can go three deep. a block mochy doesn't know is skipped, so a newer layout still opens on an older mochy.</li>
+  <li>rows, columns and stacks can go three deep. a block oto doesn't know is skipped, so a newer layout still opens on an older oto.</li>
 </ul>
 <pre><code class="json">{ "type": "row", "gap": 14, "blocks": [
   { "type": "cover", "size": 0.22, "corner": 10 },
@@ -555,7 +555,7 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
     { "type": "artist", "size": 14, "align": "start" }
   ]}
 ]}</code></pre>
-<div class="note">it stays smooth because nothing you write runs as code on the main thread. mochy draws every block with its own parts, moving things are read at draw time, and every loop and visualizer stops the moment the player is closed or paused.</div>
+<div class="note">it stays smooth because nothing you write runs as code on the main thread. oto draws every block with its own parts, moving things are read at draw time, and every loop and visualizer stops the moment the player is closed or paused.</div>
 </article>
 
 <article class="page" id="modules-player-blocks" data-group="Your own player" data-title="Blocks">
@@ -703,7 +703,7 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
   { "type": "visualizer", "style": "ring", "count": 40, "height": 340, "color": "#99FFFFFF" },
   { "type": "cover", "shape": "circle", "size": 0.62, "spin": true }
 ]}</code></pre>
-<div class="note">the visualizer and every music-driven loop share one clock that reads the music once a frame, however many of them you use. it only runs while something on your player needs it. when the audio goes straight to a receiver (some passthrough outputs), there's nothing for mochy to read and the bars stay low.</div>
+<div class="note">the visualizer and every music-driven loop share one clock that reads the music once a frame, however many of them you use. it only runs while something on your player needs it. when the audio goes straight to a receiver (some passthrough outputs), there's nothing for oto to read and the bars stay low.</div>
 </article>
 
 <article class="page" id="modules-player-styles" data-group="Your own player" data-title="Style sheets">
@@ -785,7 +785,7 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
   { "type": "button", "page": "about", "image": "icons/info.png" },
   { "type": "space", "grow": true }
 ]}</code></pre>
-<p>without an <code>image</code>, mochy uses its own icon (a puzzle piece for custom actions). <code>imageOn</code> swaps in while it's on: playing, liked, shuffling or repeating.</p>
+<p>without an <code>image</code>, oto uses its own icon (a puzzle piece for custom actions). <code>imageOn</code> swaps in while it's on: playing, liked, shuffling or repeating.</p>
 <h2>The chevron menu</h2>
 <p>the chevron at the top right opens a little menu (lyrics, shuffle, repeat, other menu, edit player). <code>menu</code> adds up to 4 items of your own above other menu, each with your own picture and any action or custom action:</p>
 <pre><code class="json">"menu": [
@@ -813,8 +813,8 @@ gh release create v1.2 vinyl-night.mochyymodule.zip --title "Vinyl Night 1.2"</c
 <tr><td><code>fallback</code></td><td>a background: another background object. a block: a colour. used below android 13, and if the shader doesn't compile</td></tr>
 <tr><td><code>width</code>, <code>height</code>, <code>corner</code></td><td>a block's box: width (full), height 8–800 (120), corner 0–300 (0)</td></tr>
 </table></div>
-<h2>What mochy gives your shader</h2>
-<p>declare the ones you use and mochy fills them in every frame. ones you don't declare are simply skipped.</p>
+<h2>What oto gives your shader</h2>
+<p>declare the ones you use and oto fills them in every frame. ones you don't declare are simply skipped.</p>
 <div class="tbl"><table>
 <tr><th>uniform</th><th>what it is</th></tr>
 <tr><td><code>uniform float2 size;</code></td><td>the box in pixels</td></tr>
@@ -854,7 +854,7 @@ half4 main(float2 p) {
 <h1>A full example</h1>
 <p class="sub">vinyl night, with everything on</p>
 <p>a record player in warm wood, its own font, a ring that follows the music around a spinning record, a customise sheet and its own chevron item. it uses most of the player pages at once, so copy what you like.</p>
-<pre><code>vinyl-night.mochyymodule.zip
+<pre><code>vinyl-night.otoymodule.zip
 ├── manifest.json
 ├── fonts/Lora-Regular.ttf
 ├── fonts/Lora-Bold.ttf
@@ -938,7 +938,7 @@ half4 main(float2 p) {
 <h1>Pages &amp; menu rows</h1>
 <p class="sub">add your own bits to the app</p>
 <h2>Pages</h2>
-<p>an about page, a "start here", your favourite playlists, or a <b>settings page that shows up in mochy's own settings</b>. they're listed on your module's page under pages while it's on.</p>
+<p>an about page, a "start here", your favourite playlists, or a <b>settings page that shows up in oto's own settings</b>. they're listed on your module's page under pages while it's on.</p>
 <pre><code class="json">"pages": [
   { "id": "about", "title": "Vinyl Night", "blocks": [
     { "type": "image", "image": "images/banner.webp", "height": 160 },
@@ -982,10 +982,10 @@ half4 main(float2 p) {
 <div class="tbl"><table>
 <tr><th>field</th><th>what it's for</th></tr>
 <tr><td><code>title</code></td><td>the row's words, up to 40 characters</td></tr>
-<tr><td><code>icon</code></td><td>a small picture beside it. without one, mochy's puzzle piece</td></tr>
+<tr><td><code>icon</code></td><td>a small picture beside it. without one, oto's puzzle piece</td></tr>
 <tr><td><code>link</code></td><td>opens a web page. https:// or http:// only, so a row can never open another app</td></tr>
 <tr><td><code>page</code></td><td>opens one of your pages, by its id</td></tr>
-<tr><td><code>search</code></td><td>opens a search in mochy for these words</td></tr>
+<tr><td><code>search</code></td><td>opens a search in oto for these words</td></tr>
 </table></div>
 <p>give exactly one of link, page or search. <code>{title}</code>, <code>{artist}</code> (every artist, joined with commas), <code>{album}</code> and <code>{id}</code> (its youtube music video id) are filled in. in a link they're made safe for a url, so write spaces between them as <code>%20</code>. up to 6 rows per module.</p>
 <p class="aside">the player's chevron menu takes items of its own too, see <a href="#modules-player-custom">customise, buttons &amp; menu</a>.</p>
@@ -994,9 +994,9 @@ half4 main(float2 p) {
 <article class="page" id="modules-glass" data-group="More looks" data-title="Liquid glass">
 <h1>Liquid glass</h1>
 <p class="sub">a glass of your own for the bottom bar</p>
-<p>a look can swap mochy's frosted nav bar, wide bar and mini player for a glass of its own: an <b>agsl shader</b> in your zip. mochy captures what's under each bar (with some room around it), blurs it, runs your shader over it and clips the result to the bar. your shader decides the rest: how it bends, tints, shines and lights its rim. compare them here:</p>
+<p>a look can swap oto's frosted nav bar, wide bar and mini player for a glass of its own: an <b>agsl shader</b> in your zip. oto captures what's under each bar (with some room around it), blurs it, runs your shader over it and clips the result to the bar. your shader decides the rest: how it bends, tints, shines and lights its rim. compare them here:</p>
 <div class="demo">
-  <div class="demo-row" data-group="g"><button class="opt on press" type="button" data-bar="frost">Mochy's frost</button><button class="opt press" type="button" data-bar="liquid">Liquid</button><button class="opt press" type="button" data-bar="clear">Clear</button></div>
+  <div class="demo-row" data-group="g"><button class="opt on press" type="button" data-bar="frost">Oto's frost</button><button class="opt press" type="button" data-bar="liquid">Liquid</button><button class="opt press" type="button" data-bar="clear">Clear</button></div>
   <div class="glass-stage"><div class="bar frost" id="glassBar"></div></div>
 </div>
 <div class="flow"><div>what's under the bar</div><i>→</i><div>blur<small>glass.blur</small></div><i>→</i><div>your shader<small>glass.agsl</small></div><i>→</i><div>clipped to the bar</div></div>
@@ -1009,11 +1009,11 @@ half4 main(float2 p) {
 <div class="tbl"><table>
 <tr><th>field</th><th>what it's for</th><th>default</th></tr>
 <tr><td><code>shader</code></td><td>the <code>.agsl</code> (or <code>.sksl</code>) file in your zip, up to 64 KB</td><td></td></tr>
-<tr><td><code>blur</code></td><td>how much mochy blurs what's under the bar before your shader sees it, in dp, 0–40</td><td>6</td></tr>
-<tr><td><code>margin</code></td><td>how far past the bar your shader may read, in dp, 0–64. mochy adds room for the blur on top</td><td>16</td></tr>
+<tr><td><code>blur</code></td><td>how much oto blurs what's under the bar before your shader sees it, in dp, 0–40</td><td>6</td></tr>
+<tr><td><code>margin</code></td><td>how far past the bar your shader may read, in dp, 0–64. oto adds room for the blur on top</td><td>16</td></tr>
 <tr><td><code>uniforms</code></td><td>your shader's own float uniforms by name, up to 24. <a href="#modules-settings">settings</a> can change them</td><td></td></tr>
 </table></div>
-<p>while your look is on, mochy switches <code>bottomBar</code> to <code>MODULE</code> for you.</p>
+<p>while your look is on, oto switches <code>bottomBar</code> to <code>MODULE</code> for you.</p>
 <h2>What your shader gets</h2>
 <div class="tbl"><table>
 <tr><th>uniform</th><th>what it is</th></tr>
@@ -1023,7 +1023,7 @@ half4 main(float2 p) {
 <tr><td><code>uniform float radius;</code></td><td>the bar's corner radius in pixels (half its height, the bars are stadiums)</td></tr>
 <tr><td><code>uniform float density;</code></td><td>pixels per dp</td></tr>
 <tr><td><code>uniform float quality;</code></td><td>1 on high blur quality, 0 on low: skip your extras on low</td></tr>
-<tr><td><code>layout(color) uniform half4 chrome;</code></td><td>mochy's bar colour: #131313, or black with pure black on</td></tr>
+<tr><td><code>layout(color) uniform half4 chrome;</code></td><td>oto's bar colour: #131313, or black with pure black on</td></tr>
 </table></div>
 <p>declare the ones you use. a uniform you don't declare is skipped, and so is one of yours the shader doesn't have. a small glass to start from, a tinted pane with a lit edge:</p>
 <pre><code>uniform shader content;
@@ -1050,13 +1050,13 @@ half4 main(float2 p) {
 }</code></pre>
 <div class="note warn">keep it light! it runs for every pixel of every bar, every frame what's under the bar moves, on phones with weak gpus. no loops over the picture, a few reads of <code>content</code> per pixel at most. it needs android 13 and blur switched on, older phones keep the frost. a shader that doesn't compile leaves the frost in place and your module's page says why. a glass counts as a look, so only one is on at a time.</div>
 <h2>Liquid Glass, the real one</h2>
-<p><b>Liquid Glass</b> is a complete look using an icon, a banner, a glass with settings that change it, a page in settings and a menu row. it lives in its own project, <code>mochy-liquid-glass</code>, and <code>./build.sh</code> there makes the zip. its shader bends the rim like a lens, adds a colour fringe on high, lifts the saturation, tints with <code>chrome</code>, and lights the edge toward the top left with a soft sheen.</p>
+<p><b>Liquid Glass</b> is a complete look using an icon, a banner, a glass with settings that change it, a page in settings and a menu row. it lives in its own project, <code>oto-liquid-glass</code>, and <code>./build.sh</code> there makes the zip. its shader bends the rim like a lens, adds a colour fringe on high, lifts the saturation, tints with <code>chrome</code>, and lights the edge toward the top left with a soft sheen.</p>
 <pre><code class="json">{
   "id": "liquid-glass",
   "name": "Liquid Glass",
   "version": "1.0",
   "description": "Turns the nav bar and the mini player into glass that bends what's under it",
-  "author": "Mochy",
+  "author": "Oto",
   "icon": "icon.png",
   "banner": "banner.webp",
   "glass": {
@@ -1069,7 +1069,7 @@ half4 main(float2 p) {
         "glass": { "blur": 7, "uniforms": { "tintAlpha": 0.42, "bevel": 18, "strength": 14, "saturation": 1.35, "rimAlpha": 0.55 } } },
       { "value": "clear", "label": "Clear glass", "description": "Almost no tint, lovely over bright covers.",
         "glass": { "blur": 2.5, "uniforms": { "tintAlpha": 0.16, "bevel": 22, "strength": 18, "saturation": 1.2, "rimAlpha": 0.7 } } },
-      { "value": "frost", "label": "Mochy's frost", "description": "The usual frosted bars, keeping the rest of this look.",
+      { "value": "frost", "label": "Oto's frost", "description": "The usual frosted bars, keeping the rest of this look.",
         "look": { "bottomBar": "FROSTED" } }
     ] },
     { "key": "fringe", "label": "Colour fringe", "type": "toggle", "default": "true",
@@ -1096,7 +1096,7 @@ half4 main(float2 p) {
 <article class="page" id="modules-web" data-group="Songs &amp; lyrics" data-title="Web modules">
 <h1>Web modules</h1>
 <p class="sub">songs, lyrics and song info from your server</p>
-<p>a web module is a tiny http service. mochy calls it with plain <b>GET</b>s and reads json back. people add it by pasting its base link (<code>https://my-flac.example</code>) or its manifest's link. every request carries <code>Accept: application/json</code>, <code>User-Agent: Mochy</code> and your <a href="#modules-settings">settings</a> as query parameters.</p>
+<p>a web module is a tiny http service. oto calls it with plain <b>GET</b>s and reads json back. people add it by pasting its base link (<code>https://my-flac.example</code>) or its manifest's link. every request carries <code>Accept: application/json</code>, <code>User-Agent: Oto</code> and your <a href="#modules-settings">settings</a> as query parameters.</p>
 <div class="flow"><div>GET /manifest.json</div><div>GET /search?q=</div><div>GET /stream/{id}</div><div>GET /lyrics</div><div>GET /metadata</div></div>
 <h2>/manifest.json</h2>
 <pre><code class="json">{
@@ -1113,18 +1113,18 @@ half4 main(float2 p) {
   ]
 }</code></pre>
 <h2>Playing a song</h2>
-<div class="flow"><div>song plays</div><i>→</i><div>/search<small>first artist + title</small></div><i>→</i><div>mochy picks the match<small>studio, not the remix</small></div><i>→</i><div>/stream/{id}</div><i>→</i><div>plays it</div></div>
+<div class="flow"><div>song plays</div><i>→</i><div>/search<small>first artist + title</small></div><i>→</i><div>oto picks the match<small>studio, not the remix</small></div><i>→</i><div>/stream/{id}</div><i>→</i><div>plays it</div></div>
 <h3>GET /search?q=&lt;artist title&gt;&amp;quality=…</h3>
-<p>mochy searches with the <b>first artist</b> and the <b>title without extras</b>: no "(feat. …)", "(Official Video)" or "- Remastered". so <code>q=benny%20blanco%20eastside</code>.</p>
+<p>oto searches with the <b>first artist</b> and the <b>title without extras</b>: no "(feat. …)", "(Official Video)" or "- Remastered". so <code>q=benny%20blanco%20eastside</code>.</p>
 <pre><code class="json">{ "tracks": [ {
   "id": "123", "title": "Eastside", "artist": "benny blanco, Halsey, Khalid",
   "album": "Eastside", "duration": 173, "isrc": "USUM71809132",
   "streamURL": "https://…/123.flac"
 } ] }</code></pre>
 <ul>
-  <li><code>id</code> and <code>title</code> are needed. give <code>artist</code>, <code>album</code>, <code>duration</code> and <code>isrc</code> too: they're how mochy's matcher tells the studio song from a remix, a live take or a sped up one.</li>
+  <li><code>id</code> and <code>title</code> are needed. give <code>artist</code>, <code>album</code>, <code>duration</code> and <code>isrc</code> too: they're how oto's matcher tells the studio song from a remix, a live take or a sped up one.</li>
   <li><code>duration</code> is in <b>seconds</b> (anything over 10000 is read as ms).</li>
-  <li><code>streamURL</code> is optional. when it's there, mochy skips the stream call.</li>
+  <li><code>streamURL</code> is optional. when it's there, oto skips the stream call.</li>
   <li>return a handful of results, 5 to 10, best first.</li>
 </ul>
 <h3>GET /stream/{id}?quality=…</h3>
@@ -1132,15 +1132,15 @@ half4 main(float2 p) {
 <ul>
   <li><b>kind of stream:</b> <code>format</code> or <code>manifest</code> saying <code>hls</code>/<code>m3u8</code> plays as hls, <code>dash</code>/<code>mpd</code> as dash. anything else plays as one file. byte ranges are welcome, seeking uses them.</li>
   <li><b>codec</b> names it for the format badge: <code>flac</code>, <code>alac</code>, <code>aac</code>, <code>opus</code>, <code>mp3</code>, <code>eac3</code>, <code>eac3-joc</code>/<code>atmos</code>.</li>
-  <li><b>encrypted:</b> a stream marked <code>"encrypted": true</code> is passed over, mochy has no keys for it.</li>
-  <li><b>sample rate:</b> give <code>sampleRate</code> and <code>bitDepth</code>. a flac the phone can't decode at that rate is passed over instead of playing silence. without them, mochy reads "96 kHz" and "24-bit" out of <code>quality</code>.</li>
+  <li><b>encrypted:</b> a stream marked <code>"encrypted": true</code> is passed over, oto has no keys for it.</li>
+  <li><b>sample rate:</b> give <code>sampleRate</code> and <code>bitDepth</code>. a flac the phone can't decode at that rate is passed over instead of playing silence. without them, oto reads "96 kHz" and "24-bit" out of <code>quality</code>.</li>
   <li><b>redirects:</b> the url may redirect, a 302 or 307 to a cdn is fine.</li>
 </ul>
 <h2>Quality and dolby atmos</h2>
 <ul>
-  <li><b>stream:</b> lossless (default), hi-res, high or low, sent as <code>quality=</code>. if your manifest declares a <code>quality</code> setting, mochy sends the option whose name matches best (<code>lossless</code>, <code>flac</code>, <code>hires</code>, <code>24bit</code>, <code>high</code>, <code>320</code>, <code>low</code>…). if not, it sends tidal's names: <code>LOSSLESS</code>, <code>HI_RES_LOSSLESS</code>, <code>HIGH</code>, <code>LOW</code>.</li>
+  <li><b>stream:</b> lossless (default), hi-res, high or low, sent as <code>quality=</code>. if your manifest declares a <code>quality</code> setting, oto sends the option whose name matches best (<code>lossless</code>, <code>flac</code>, <code>hires</code>, <code>24bit</code>, <code>high</code>, <code>320</code>, <code>low</code>…). if not, it sends tidal's names: <code>LOSSLESS</code>, <code>HI_RES_LOSSLESS</code>, <code>HIGH</code>, <code>LOW</code>.</li>
   <li><b>dolby atmos:</b> stereo (default) or atmos. atmos is only asked for when the phone can decode it (<code>atmos=auto</code>, or your declared atmos setting's "on" option).</li>
-  <li>mark an atmos mix in search results with <code>"atmos": true</code> (or <code>atmos</code>/<code>joc</code>/<code>ec+3</code> in <code>audioMode</code>, <code>audioModes</code>, <code>audioQuality</code> or <code>format</code>). mochy picks the row that matches the person's choice.</li>
+  <li>mark an atmos mix in search results with <code>"atmos": true</code> (or <code>atmos</code>/<code>joc</code>/<code>ec+3</code> in <code>audioMode</code>, <code>audioModes</code>, <code>audioQuality</code> or <code>format</code>). oto picks the row that matches the person's choice.</li>
   <li><b>data saver</b> asks for high instead of lossless or hi-res while it's working.</li>
 </ul>
 <h2>Lyrics</h2>
@@ -1167,7 +1167,7 @@ half4 main(float2 p) {
 </ul>
 <h2>A whole web module in 30 lines</h2>
 <p>a cloudflare worker serving your own files. free, and no server to look after:</p>
-<pre><code class="js">// worker.js: a tiny Mochy module
+<pre><code class="js">// worker.js: a tiny Oto module
 const SONGS = [
   { id: "1", title: "My Song", artist: "Me", album: "Demo", duration: 201, url: "https://example.com/my-song.flac", genre: "Indie" },
 ];
@@ -1198,7 +1198,7 @@ export default {
     return json({ error: "not found" }, 404);
   },
 };</code></pre>
-<p>deno deploy, vercel and netlify work the same way. <b>github alone can't host a songs, lyrics or song info module:</b> it only serves files, and mochy needs an answer that depends on the song. github is fine for looks.</p>
+<p>deno deploy, vercel and netlify work the same way. <b>github alone can't host a songs, lyrics or song info module:</b> it only serves files, and oto needs an answer that depends on the song. github is fine for looks.</p>
 </article>
 
 <article class="page" id="modules-zip" data-group="Songs &amp; lyrics" data-title="Zip modules">
@@ -1210,28 +1210,28 @@ export default {
                                   └── manifest.json</code></pre>
 <div class="tbl"><table>
 <tr><th>in the zip</th><th>what happens</th></tr>
-<tr><td>manifest.json</td><td>read. under 256 KB, and mochy only looks through the first 200 entries for it</td></tr>
+<tr><td>manifest.json</td><td>read. under 256 KB, and oto only looks through the first 200 entries for it</td></tr>
 <tr><td>.png .jpg .jpeg .webp .gif .ttf .otf .agsl .sksl</td><td>unpacked when the zip is added, keeping their paths. up to 200 files, 8 MB each, 30 MB in all</td></tr>
-<tr><td>the file a <code>code</code> field names</td><td>checked, then loaded (mochy devs only, below)</td></tr>
+<tr><td>the file a <code>code</code> field names</td><td>checked, then loaded (oto devs only, below)</td></tr>
 <tr><td>anything else, and macos's hidden __MACOSX / ._ files</td><td>ignored</td></tr>
 </table></div>
 <ul>
   <li><b>a zip without a <code>url</code> lives on the phone.</b> it never touches the network, and its page has no server to check.</li>
-  <li><b>a zip that plays songs, lyrics or song info needs a <code>url</code></b>, and is then added just like pasting that link. the difference is that the manifest and its pictures come from the file. without one, mochy says the zip "doesn't say where from".</li>
+  <li><b>a zip that plays songs, lyrics or song info needs a <code>url</code></b>, and is then added just like pasting that link. the difference is that the manifest and its pictures come from the file. without one, oto says the zip "doesn't say where from".</li>
 </ul>
 <pre><code class="json">{ "id": "my-flac", "name": "My FLAC", "icon": "icon.png", "url": "https://my-flac.example", "resources": ["search", "stream"] }</code></pre>
 <h2>Zips with their own code</h2>
-<p>a zip can also bring a whole module written in kotlin against <code>:modules:api</code>, the same kind as a built-in one. mochy only runs that code when it's signed with mochy's own key, so only mochy's developers can make one.</p>
-<pre><code>js-modules.mochyymodule.zip
+<p>a zip can also bring a whole module written in kotlin against <code>:modules:api</code>, the same kind as a built-in one. oto only runs that code when it's signed with oto's own key, so only oto's developers can make one.</p>
+<pre><code>js-modules.otoymodule.zip
 ├── manifest.json     ← says "code": "module.apk"
-└── module.apk        ← the module's code, signed like mochy, never installed</code></pre>
+└── module.apk        ← the module's code, signed like oto, never installed</code></pre>
 <pre><code class="json">{ "id": "addons", "name": "JS Modules",
   "description": "Your addon links and scripts in one place: songs, lyrics and song info.",
   "resources": ["search", "stream", "lyrics", "metadata"], "code": "module.apk" }</code></pre>
 <ul>
   <li><code>name</code> and <code>resources</code> only fill in the sheet before it's added. once it's in, the module says itself what it adds, its icon, banner and settings.</li>
-  <li><b>signed like your mochy:</b> a debug mochy takes a zip built with the debug key, a release mochy one built with the release key. anything else gets "it has to be signed with the same key as your mochy".</li>
-  <li><b>it runs on its own copy of everything:</b> its own kotlin, coroutines and libraries, in a class loader that only sees android, java and mochy's bridge. calls go across as json, so a different kotlin version or mochy's r8 can't break it.</li>
+  <li><b>signed like your oto:</b> a debug oto takes a zip built with the debug key, a release oto one built with the release key. anything else gets "it has to be signed with the same key as your oto".</li>
+  <li><b>it runs on its own copy of everything:</b> its own kotlin, coroutines and libraries, in a class loader that only sees android, java and oto's bridge. calls go across as json, so a different kotlin version or oto's r8 can't break it.</li>
   <li><b>updating</b> with the same id swaps the running copy straight away. switch, choices and settings stay. <b>removing</b> deletes its code and everything it kept.</li>
   <li>it takes the place of a built-in module with the same id, and backups carry it. it's checked again every time it's loaded.</li>
 </ul>
@@ -1240,13 +1240,13 @@ export default {
 <article class="page" id="modules-js" data-group="Songs &amp; lyrics" data-title="JS Modules scripts">
 <h1>JS Modules</h1>
 <p class="sub">songs, lyrics and info from a script</p>
-<p><b>JS Modules</b> is a module that runs javascript scripts. it lives in its own project, <code>mochy-js-modules</code>. once it's added, add scripts on its page under <b>sources</b> with <b>add from a file or a link</b>: a zip, or a link to a zip, a script, an index or an addon link. one zip can hold many scripts.</p>
+<p><b>JS Modules</b> is a module that runs javascript scripts. it lives in its own project, <code>oto-js-modules</code>. once it's added, add scripts on its page under <b>sources</b> with <b>add from a file or a link</b>: a zip, or a link to a zip, a script, an index or an addon link. one zip can hold many scripts.</p>
 <p>each source has its icon, a dot (green if it worked the last time it was asked, amber if not, with the reason under it) and a line saying what it is: <i>script · songs · lyrics · v1.2 · someone</i>. swipe a source left to remove it. <b>check sources</b> asks every one once.</p>
 <h2>What a script exports</h2>
 <p>any of these four. songs need the first two together, lyrics and song info can come with them or alone.</p>
 <pre><code class="js">// module.exports, export async function, export default {...} and export { a as b } all work
 module.exports = {
-  // songs: search, then the stream of the row Mochy picked
+  // songs: search, then the stream of the row Oto picked
   async searchTracks(query, limit, context) {
     const quality = context.settings.quality.value;   // LOSSLESS, HI_RES_LOSSLESS, HIGH or LOW
     const res = await fetch('https://my-flac.example/search?q=' + encodeURIComponent(query));
@@ -1312,11 +1312,11 @@ module.exports = {
 <h1>Sharing</h1>
 <p class="sub">get it to other people</p>
 <div class="cards">
-  <a class="press" href="#modules-github"><b>GitHub releases</b><span>publish a zip named *mochyymodule*, people paste your project's link</span></a>
-  <a class="press" href="https://discord.gg/NTmqVphbRY"><b>Mochy's Bar</b><span>post the zip or the link on discord, thats where people find modules. the card at the top of the modules page goes there</span></a>
+  <a class="press" href="#modules-github"><b>GitHub releases</b><span>publish a zip named *otoymodule*, people paste your project's link</span></a>
+  <a class="press" href="https://discord.gg/NTmqVphbRY"><b>Oto's Bar</b><span>post the zip or the link on discord, thats where people find modules. the card at the top of the modules page goes there</span></a>
 </div>
 <h2>The catalog</h2>
-<p><b>settings → modules → add a module</b> lists the modules in <a href="https://github.com/realidkroo/Mochy-Music/blob/main/modules/catalog.json">catalog.json</a>, read straight from github, so the list grows without an app update. to get listed, open a pull request adding an entry:</p>
+<p><b>settings → modules → add a module</b> lists the modules in <a href="https://github.com/realidkroo/Oto-Music/blob/main/modules/catalog.json">catalog.json</a>, read straight from github, so the list grows without an app update. to get listed, open a pull request adding an entry:</p>
 <pre><code class="json">{ "modules": [ {
   "name": "My FLAC", "description": "My own library, lossless",
   "url": "https://my-flac.example", "icon": "https://my-flac.example/icon.png",
@@ -1342,12 +1342,12 @@ curl "https://my-flac.example/stream/123?quality=LOSSLESS"
 curl -I "&lt;the url your stream call returned&gt;"     # 200 or 206, an audio type, ideally Accept-Ranges
 curl "https://my-flac.example/lyrics?title=Eastside&amp;artist=benny%20blanco&amp;duration=173"
 curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&amp;duration=173"</code></pre>
-<h2>In mochy</h2>
+<h2>In oto</h2>
 <div class="shot">
   <div class="phone"><img src="../assets/img/app-module_page2.webp" alt="Testing a module" width="450" height="1000" loading="lazy"></div>
   <div>
     <p><b>check server</b> asks for your manifest again and says whether it answered.</p>
-    <p><b>test the module</b>, at the bottom of its page: search any song (or take the one playing) and tap it. mochy runs everything your module adds with that song, right on the phone, step by step:</p>
+    <p><b>test the module</b>, at the bottom of its page: search any song (or take the one playing) and tap it. oto runs everything your module adds with that song, right on the phone, step by step:</p>
     <div class="flow"><div>find the song</div><i>→</i><div>stream</div><i>→</i><div>license</div><i>→</i><div>decode 2 s<small>muted</small></div></div>
     <p>lyrics modules show how many lines came back, timed or plain, and the first one. song info modules show the facts. the ••• beside a song plays it instead.</p>
     <p>after turning it on, play anything: a toast says where each song came from, and about song shows your facts.</p>
@@ -1360,8 +1360,8 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
 <p><code>SourceModules</code> prints, for every song, which provider was asked, what it answered and why it was passed over. <code>ActiveSkin</code> says why a font, glass or player shader didn't load.</p>
 </article>
 
-<article class="page" id="modules-how" data-group="Sharing &amp; help" data-title="How mochy uses it">
-<h1>How mochy uses it</h1>
+<article class="page" id="modules-how" data-group="Sharing &amp; help" data-title="How oto uses it">
+<h1>How oto uses it</h1>
 <p class="sub">behind the scenes</p>
 <h2>Playing</h2>
 <p><b>settings → audio lab → audio quality → provider</b> is the provider order. each song plays from the first provider that's on and has it. youtube music can sit anywhere in it, or be switched off. dragging modules on the modules page changes this order too.</p>
@@ -1371,7 +1371,7 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
   <li>a module that doesn't answer is left alone for 10 minutes, then tried again.</li>
 </ul>
 <h2>Lyrics and song info</h2>
-<p>lyrics modules that are on come first among the lyrics sources, in the order of the modules page. song info modules are all asked together when about song opens (they get 12 seconds). each fact comes from the first module on the list that knows it, then from mochy's own sources. what your module says the song is about is one of the sources under about, listed as modules.</p>
+<p>lyrics modules that are on come first among the lyrics sources, in the order of the modules page. song info modules are all asked together when about song opens (they get 12 seconds). each fact comes from the first module on the list that knows it, then from oto's own sources. what your module says the song is about is one of the sources under about, listed as modules.</p>
 <h2>Downloading</h2>
 <p><b>audio quality → download order</b> is a separate order, just for downloads. it starts as a copy of the provider order. each download comes from the first provider that can give the song as <b>one whole file</b> this phone can play.</p>
 <ul>
@@ -1381,7 +1381,7 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
   <li>give <code>codec</code> in your stream answer: the downloaded song's format badge comes from it. data saver never changes downloads.</li>
 </ul>
 <h2>Data saver</h2>
-<p><b>app behaviour → data saver</b> cuts what mochy uses on mobile data (or everywhere, with only on mobile data off). while it's working:</p>
+<p><b>app behaviour → data saver</b> cuts what oto uses on mobile data (or everywhere, with only on mobile data off). while it's working:</p>
 <ul>
   <li>a module's stream choice steps down to its <code>high</code> option, or one step below its best without one. a web module is asked for <code>quality=HIGH</code> (or your declared "high" word). a pick that was already lighter stays.</li>
   <li>youtube plays its lightest stream. canvas covers and video backgrounds stay off.</li>
@@ -1395,10 +1395,10 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
 <h2>Rules</h2>
 <ul>
   <li><b>https</b> for every link: manifest, service, streams and pictures.</li>
-  <li><b>answer fast.</b> mochy waits 12 s to connect and 20 s for an answer, then moves on. a slow module makes every song wait.</li>
+  <li><b>answer fast.</b> oto waits 12 s to connect and 20 s for an answer, then moves on. a slow module makes every song wait.</li>
   <li><b>answer with json</b> in the shapes above, with <code>Content-Type: application/json</code>. return an error status (404, 503…) when something's wrong, never a web page with 200.</li>
   <li><b>keep ids stable.</b> an id from search must work in /stream/{id}, your manifest's id never changes, and neither do your settings' keys.</li>
-  <li><b>be honest</b> in search results and song info: real titles, every artist, real durations, real credits. a wrong duration makes mochy pick the wrong recording or none.</li>
+  <li><b>be honest</b> in search results and song info: real titles, every artist, real durations, real credits. a wrong duration makes oto pick the wrong recording or none.</li>
   <li><b>no encrypted streams.</b> they're skipped anyway.</li>
   <li><b>bump <code>version</code></b> whenever you change your manifest.</li>
   <li><b>never put secrets in a manifest you share.</b> if your link carries a personal key, that link <i>is</i> a password. a <code>text</code> setting is the place for a key: it stays on the phone it was typed on.</li>
@@ -1412,19 +1412,19 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
 <tr><td>"That's a website, not a module"</td><td>you pasted a website. use the module's link or its manifest.json. a monochrome site goes on monochrome's page under servers</td></tr>
 <tr><td>"That link answered, but it isn't a module"</td><td>the manifest has no id and no name, isn't valid json, or adds nothing</td></tr>
 <tr><td>"That GitHub project hasn't published a release"</td><td>publish a release (not a draft or pre-release) with the zip attached</td></tr>
-<tr><td>"The newest release has no module in it"</td><td>the zip's name needs <code>mochyymodule</code> in it and has to end in .zip</td></tr>
+<tr><td>"The newest release has no module in it"</td><td>the zip's name needs <code>otoymodule</code> in it and has to end in .zip</td></tr>
 <tr><td>"That file isn't a module"</td><td>no manifest.json at the zip's root or one folder in, or it isn't a zip</td></tr>
 <tr><td>"…its .zip doesn't say where from"</td><td>the zip lists search, stream, lyrics or metadata but has no <code>url</code></td></tr>
-<tr><td>"…signed with the same key as your Mochy"</td><td>the zip's code was built with another key, like a debug zip on a release mochy</td></tr>
+<tr><td>"…signed with the same key as your Oto"</td><td>the zip's code was built with another key, like a debug zip on a release oto</td></tr>
 <tr><td>"This module's code didn't start"</td><td>built for another api version, or its module.apk has no entry meta-data. <code>adb logcat -s CodeModules</code> says which</td></tr>
 <tr><td>my icon or banner doesn't show</td><td>paths are relative to manifest.json and case sensitive. png/jpg/webp/gif under 8 MB</td></tr>
-<tr><td>my settings don't show</td><td><code>settings</code> must be a list of objects, each with a key. quality and atmos show as mochy's own choices instead</td></tr>
+<tr><td>my settings don't show</td><td><code>settings</code> must be a list of objects, each with a key. quality and atmos show as oto's own choices instead</td></tr>
 <tr><td>a setting doesn't change the look</td><td>the module has to be on, the option's look must use <a href="#modules-look">look keys</a>, and only one look is on at a time</td></tr>
 <tr><td>my glass doesn't show</td><td>module on? an option may have set bottomBar back to FROSTED. it needs android 13, blur switched on, and a zip. the page says if the shader failed</td></tr>
-<tr><td>my player doesn't show up</td><td>your look has to be on, and the player needs at least one block mochy knows. then hold the player: yours is first in the picker</td></tr>
+<tr><td>my player doesn't show up</td><td>your look has to be on, and the player needs at least one block oto knows. then hold the player: yours is first in the picker</td></tr>
 <tr><td>a block is missing from my player</td><td>its type is misspelled, its <code>when</code> says no right now, or a required field (an image's <code>image</code>, a button's action) is missing</td></tr>
 <tr><td>my player shader shows the fallback</td><td>it needs android 13 and a zip. if it didn't compile, the module's page says why</td></tr>
-<tr><td>the visualizer stays flat</td><td>nothing's playing, or the audio is going straight to a receiver mochy can't read from</td></tr>
+<tr><td>the visualizer stays flat</td><td>nothing's playing, or the audio is going straight to a receiver oto can't read from</td></tr>
 <tr><td>my page isn't in settings</td><td>it needs <code>"inSettings": true</code>, the module on, a valid id and at least one block</td></tr>
 <tr><td>my menu row doesn't show</td><td>module on, a title and one of link (https), page (an id that exists) or search. rows only show while a song is loaded</td></tr>
 <tr><td>my font isn't used</td><td>zip only, .ttf or .otf, and <code>regular</code> must point at the file. a broken font is skipped</td></tr>
@@ -1448,24 +1448,24 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
   <div><b>Done ✓</b><span>modules revamp, liquid glass module, data saver, revamped profile, gesture custom, lyrics offset, discord integration, lyrics share, ipod styles, storage usage, device output, playlist revamp, tv layout</span></div>
   <div><b>Next</b><span>better crossmix, lastfm integration, voice and music recognition, search on downloads, and as always bugs fixing</span></div>
 </div>
-<p class="aside">plans may change as development progresses. the live list is <a href="https://github.com/realidkroo/Mochy-Music/blob/main/Roadmap.md">Roadmap.md</a>.</p>
+<p class="aside">plans may change as development progresses. the live list is <a href="https://github.com/realidkroo/Oto-Music/blob/main/Roadmap.md">Roadmap.md</a>.</p>
 </article>
 
-<article class="page" id="devs" data-group="More" data-title="For mochy devs">
+<article class="page" id="devs" data-group="More" data-title="For oto devs">
 <h1>For devs</h1>
 <p class="sub">changing the module system itself</p>
-<p>this part is for people working on mochy itself: where the module system lives and how to change it without breaking modules people already made.</p>
+<p>this part is for people working on oto itself: where the module system lives and how to change it without breaking modules people already made.</p>
 <div class="flow"><div>modules/api<small>the contract</small></div><i>→</i><div>modules/bridge<small>json both ways</small></div><i>→</i><div>app/modules<small>registry, web, local, skin</small></div><i>→</i><div>ui/player/styles + ui/screens/settings/modules<small>what you see</small></div></div>
 <h2>Where things live</h2>
 <div class="tbl"><table>
 <tr><th>what</th><th>where</th></tr>
-<tr><td>the contract every module follows</td><td><code>modules/api/…/module/MochyModule.kt</code></td></tr>
+<tr><td>the contract every module follows</td><td><code>modules/api/…/module/OtoModule.kt</code></td></tr>
 <tr><td>the matcher every module uses</td><td><code>modules/api/…/module/TrackMatcher.kt</code></td></tr>
 <tr><td>built-in modules</td><td><code>modules/applemusic</code>, <code>modules/monochrome</code>, <code>modules/jiosaavn</code></td></tr>
 <tr><td>the bridge to a zip's code</td><td><code>modules/bridge</code> (<code>shared/Shared.kt</code>, <code>Wire.kt</code>, <code>ModuleSide.kt</code>, <code>BridgedModule.kt</code>)</td></tr>
 <tr><td>checking, unpacking and starting a zip's code</td><td><code>app/…/modules/code/CodeModules.kt</code></td></tr>
 <tr><td>every module, its switch, choices, settings, order; adding from a link or a zip</td><td><code>app/…/modules/ModuleRegistry.kt</code></td></tr>
-<tr><td>github release links: finding and downloading the mochyymodule zip</td><td><code>app/…/modules/GitHubReleases.kt</code></td></tr>
+<tr><td>github release links: finding and downloading the otoymodule zip</td><td><code>app/…/modules/GitHubReleases.kt</code></td></tr>
 <tr><td>provider order, download order, data saver's picks</td><td><code>app/…/modules/SourceModules.kt</code></td></tr>
 <tr><td>song info, merged for about song</td><td><code>app/…/modules/ModuleMetadata.kt</code>, read by <code>ui/player/info/SongAbout.kt</code></td></tr>
 <tr><td>link modules</td><td><code>app/…/modules/web/WebModuleManifest.kt</code>, <code>WebModule.kt</code></td></tr>
@@ -1481,25 +1481,25 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
 <tr><td>looks: applying and giving settings back</td><td><code>app/…/modules/ModuleLooks.kt</code></td></tr>
 <tr><td>the catalog</td><td><code>modules/catalog.json</code>, read by <code>ModuleCatalog.kt</code></td></tr>
 <tr><td>the modules pages</td><td><code>app/…/ui/screens/settings/modules/</code></td></tr>
-<tr><td>JS Modules</td><td>not in this repo: <code>mochy-js-modules</code>, next to the mochy folder</td></tr>
+<tr><td>JS Modules</td><td>not in this repo: <code>oto-js-modules</code>, next to the oto folder</td></tr>
 <tr><td>downloads</td><td><code>app/…/playback/DownloadUtil.kt</code></td></tr>
 </table></div>
 <h2>The contract and its version</h2>
-<p><code>:modules:api</code> is plain kotlin on purpose: no android, no media3, no http library, so a module can be built as its own apk and loaded at runtime. it has a version, <code>MODULE_API_VERSION</code> (now 3). a module app built for another version is skipped with a log line, so it can't crash mochy.</p>
+<p><code>:modules:api</code> is plain kotlin on purpose: no android, no media3, no http library, so a module can be built as its own apk and loaded at runtime. it has a version, <code>MODULE_API_VERSION</code> (now 3). a module app built for another version is skipped with a log line, so it can't crash oto.</p>
 <div class="tbl"><table>
 <tr><th>change</th><th>bump?</th></tr>
 <tr><td>add a new optional interface (like <code>ModuleArt</code>, <code>ModuleFields</code>, <code>MetadataModule</code>)</td><td>no</td></tr>
-<tr><td>add a field with a default to a class only mochy creates</td><td>no</td></tr>
+<tr><td>add a field with a default to a class only oto creates</td><td>no</td></tr>
 <tr><td>add a field with a default to the end of a class modules create, with <code>@JvmOverloads</code> so the old constructor stays</td><td>no</td></tr>
 <tr><td>add a value to <code>ModuleFeature</code></td><td>no, a module only lists the ones it adds</td></tr>
 <tr><td>rename, remove or change the type of anything a module calls or implements</td><td><b>yes</b></td></tr>
 <tr><td>add a method to an interface modules implement, even with a default body</td><td><b>yes</b>, an older module app was built without it</td></tr>
 <tr><td>change what a value means (units, ranges)</td><td><b>yes</b></td></tr>
 </table></div>
-<p>after a bump every module app has to be rebuilt against the new api. built-in modules are rebuilt with mochy anyway.</p>
+<p>after a bump every module app has to be rebuilt against the new api. built-in modules are rebuilt with oto anyway.</p>
 <h2>What a module can implement</h2>
 <div class="tbl"><table>
-<tr><th>interface</th><th>what it gives mochy</th></tr>
+<tr><th>interface</th><th>what it gives oto</th></tr>
 <tr><td><code>SourceModule</code></td><td><code>resolve</code> and <code>diagnose</code> for songs</td></tr>
 <tr><td><code>LyricsModule</code></td><td><code>lyrics(track)</code> as lrc or plain lines</td></tr>
 <tr><td><code>MetadataModule</code></td><td><code>metadata(track)</code>, a <code>TrackMetadata</code></td></tr>
@@ -1508,10 +1508,10 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
 <tr><td><code>ModuleFields</code></td><td><code>fields</code> (<code>Text</code>, <code>Select</code> or <code>Toggle</code>) and <code>onFields(values)</code></td></tr>
 <tr><td><code>ServerListModule</code>, <code>ItemListModule</code></td><td>the lists on its page; <code>ModuleItem</code> can carry an icon link and <code>working</code></td></tr>
 </table></div>
-<p><b>settings for code modules:</b> implement <code>ModuleFields</code>. mochy keeps each value (its default until changed) and calls <code>onFields</code> with every value right after <code>attach</code>, and again each time one changes. over the bridge, <code>BridgedModule</code> always implements <code>ModuleFields</code>, <code>ModuleArt</code> and <code>MetadataModule</code>; a zip packed before they existed simply has none.</p>
+<p><b>settings for code modules:</b> implement <code>ModuleFields</code>. oto keeps each value (its default until changed) and calls <code>onFields</code> with every value right after <code>attach</code>, and again each time one changes. over the bridge, <code>BridgedModule</code> always implements <code>ModuleFields</code>, <code>ModuleArt</code> and <code>MetadataModule</code>; a zip packed before they existed simply has none.</p>
 <h2>Adding a look setting</h2>
 <ol>
-  <li>add the key to <code>LookSetting</code> in <code>MochyModule.kt</code>, with a one-line comment saying its values.</li>
+  <li>add the key to <code>LookSetting</code> in <code>OtoModule.kt</code>, with a one-line comment saying its values.</li>
   <li>add it to <code>ModuleLooks.Settings</code> with the preference key it writes and a parser that turns away anything out of range (<code>enumName&lt;…&gt;</code>, <code>number(it, min..max)</code> or <code>bool</code>).</li>
   <li>add a row to the <a href="#modules-look">looks</a> table.</li>
 </ol>
@@ -1523,7 +1523,7 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
   <li>draw it in <code>ModulePlayerStyle.kt</code> or the skin files next to it, <code>ModulePageScreen.kt</code> or <code>ModuleMenuRows.kt</code>. follow the smoothness rules: read anything that changes every frame (position, <code>SkinPulse</code>) inside <code>drawBehind</code>/<code>graphicsLayer</code>, never in composition; let anything that loops ride <code>SkinPulse</code> so it rests with the player, and wrap it in <code>damageBoundary()</code> when nothing draws outside it; compile shaders off the main thread in <code>ActiveSkin</code>; use the GlassKit helpers for live blur.</li>
   <li>add a case to <code>SkinParserTest.kt</code> or <code>ManifestSettingsTest.kt</code>, and a row to the matching page of this wiki.</li>
 </ol>
-<p>an older mochy skips a block it doesn't know, so adding one never breaks older layouts. renaming or removing one does, so don't.</p>
+<p>an older oto skips a block it doesn't know, so adding one never breaks older layouts. renaming or removing one does, so don't.</p>
 <h2>Changing what a link or zip module can do</h2>
 <ul>
   <li>new manifest fields go in <code>WebModuleManifest</code>, always with a default, so every manifest out there keeps working.</li>
@@ -1539,21 +1539,21 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
   <li>write tests with a fake host like <code>MonochromeModuleTest.kt</code>, run with <code>./gradlew :modules:&lt;name&gt;:test</code>.</li>
 </ol>
 <h2>Zip modules with their own code</h2>
-<p>these live outside the repo, so mochy never compiles them. <code>mochy-js-modules</code> is the one to copy:</p>
+<p>these live outside the repo, so oto never compiles them. <code>oto-js-modules</code> is the one to copy:</p>
 <ol>
-  <li>its <code>mochy-api</code> and <code>mochy-bridge</code> projects compile mochy's <code>modules/api</code> and <code>modules/bridge</code> straight from a mochy checkout (<code>mochyDir</code> in its gradle.properties), so the zip always matches.</li>
+  <li>its <code>oto-api</code> and <code>oto-bridge</code> projects compile oto's <code>modules/api</code> and <code>modules/bridge</code> straight from a oto checkout (<code>otoDir</code> in its gradle.properties), so the zip always matches.</li>
   <li><code>module/</code> is the module, written like a built-in one, with a no-argument constructor.</li>
-  <li><code>zip/</code> is an android app build depending on <code>:module</code> and <code>:mochy-bridge</code>, with <code>&lt;meta-data android:name="com.mochyy.mochymusic.module.entry"&gt;</code> naming the module class, and a manifest.json with <code>"code": "module.apk"</code>.</li>
-  <li><code>./gradlew :zip:moduleZipDebug</code> makes the zip for a debug mochy, <code>:zip:moduleZipRelease</code> (with the release key's environment set) for a release one. it lands in <code>zip/build/outputs/module/</code>. name the release assets <code>…-debug.mochyymodule.zip</code> and <code>….mochyymodule.zip</code> and <a href="#modules-github">github links</a> pick the right one.</li>
+  <li><code>zip/</code> is an android app build depending on <code>:module</code> and <code>:oto-bridge</code>, with <code>&lt;meta-data android:name="co.oto.music.module.entry"&gt;</code> naming the module class, and a manifest.json with <code>"code": "module.apk"</code>.</li>
+  <li><code>./gradlew :zip:moduleZipDebug</code> makes the zip for a debug oto, <code>:zip:moduleZipRelease</code> (with the release key's environment set) for a release one. it lands in <code>zip/build/outputs/module/</code>. name the release assets <code>…-debug.otoymodule.zip</code> and <code>….otoymodule.zip</code> and <a href="#modules-github">github links</a> pick the right one.</li>
 </ol>
-<p>keep r8 off in the packing project: mochy makes <code>ModuleSide</code> and your module class by name. only <code>com.mochyy.mochymusic.module.bridge.shared</code> crosses between the two class loaders. it's kept by name in mochy's r8 rules, and changing it means bumping <code>MODULE_API_VERSION</code>.</p>
+<p>keep r8 off in the packing project: oto makes <code>ModuleSide</code> and your module class by name. only <code>co.oto.music.module.bridge.shared</code> crosses between the two class loaders. it's kept by name in oto's r8 rules, and changing it means bumping <code>MODULE_API_VERSION</code>.</p>
 <h2>Module apps</h2>
-<p>an apk whose code runs inside mochy. it needs a <code>&lt;service&gt;</code> answering <code>com.mochyy.mochymusic.SOURCE_MODULE</code>, <code>&lt;meta-data android:name="com.mochyy.mochymusic.module.entry" android:value="your.module.EntryClass" /&gt;</code> on it, an entry class with a no-argument constructor implementing <code>MochyModule</code>, and to be <b>signed with mochy's own key</b> and built for the same api version. build against <code>:modules:api</code> as <code>compileOnly</code>. a module app replaces the built-in module with the same id.</p>
+<p>an apk whose code runs inside oto. it needs a <code>&lt;service&gt;</code> answering <code>co.oto.music.SOURCE_MODULE</code>, <code>&lt;meta-data android:name="co.oto.music.module.entry" android:value="your.module.EntryClass" /&gt;</code> on it, an entry class with a no-argument constructor implementing <code>OtoModule</code>, and to be <b>signed with oto's own key</b> and built for the same api version. build against <code>:modules:api</code> as <code>compileOnly</code>. a module app replaces the built-in module with the same id.</p>
 <h2>Checking your change</h2>
 <pre><code>./gradlew :app:compileArm64FossDebugKotlin
 ./gradlew :modules:bridge:test
 ./gradlew :modules:&lt;name&gt;:test
-./gradlew :module:test                          # inside mochy-js-modules</code></pre>
+./gradlew :module:test                          # inside oto-js-modules</code></pre>
 </article>
 
 <nav class="next" id="next"></nav>
@@ -1561,17 +1561,17 @@ curl "https://my-flac.example/metadata?title=Eastside&amp;artist=benny%20blanco&
 
 <footer class="footer">
   <div class="footer-brand">
-    <a class="brand-name" href="#welcome"><img src="../assets/img/logo.svg" alt="" width="32" height="35">Mochy Music</a>
+    <a class="brand-name" href="#welcome"><img src="../assets/img/logo.svg" alt="" width="32" height="35">Oto Music</a>
     <p>not affiliated by google, apple, or other.</p>
     <span class="footer-year">2026</span>
   </div>
-  <nav class="footer-links" aria-label="Mochy links">
+  <nav class="footer-links" aria-label="Oto links">
     <a href="#welcome">Docs</a>
-    <a href="https://github.com/realidkroo/Mochy-Music">Github</a>
+    <a href="https://github.com/realidkroo/Oto-Music">Github</a>
     <a href="https://discord.gg/NTmqVphbRY">Join discord</a>
-    <a href="https://github.com/realidkroo/Mochy-Music/releases">Download now</a>
+    <a href="https://github.com/realidkroo/Oto-Music/releases">Download now</a>
   </nav>
-  <img class="footer-art" src="../assets/img/mochy-phone.webp?v=2" alt="" width="648" height="1100" loading="lazy" decoding="async">
+  <img class="footer-art" src="../assets/img/oto-phone.webp?v=2" alt="" width="648" height="1100" loading="lazy" decoding="async">
 </footer>
 </div>
 <script src="../assets/js/site.js?v=20261107e" defer></script>

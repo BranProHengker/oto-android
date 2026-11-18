@@ -12,7 +12,7 @@
     <string name="onb_selected">Đã chọn</string>
 
     <!-- welcome -->
-    <string name="onb_welcome_title">Chào mừng đến\nmochy!</string>
+    <string name="onb_welcome_title">Chào mừng đến\noto!</string>
     <string name="onb_welcome_subtitle">Một cách khác để nghe và\nsở hữu âm nhạc của bạn.</string>
 
     <!-- photo cropper -->
@@ -100,7 +100,7 @@
 
     <!-- hello / done -->
     <string name="onb_hello">Xin chào!</string>
-    <string name="onb_welcome_to_mochy">chào mừng đến với oto!</string>
+    <string name="onb_welcome_to_oto">chào mừng đến với oto!</string>
     <string name="onb_all_good">Bạn đã sẵn sàng</string>
 
     <!-- blur warning -->

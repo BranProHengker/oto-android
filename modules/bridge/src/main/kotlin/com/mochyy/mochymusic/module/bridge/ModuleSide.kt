@@ -1,25 +1,25 @@
-// the module's side of the bridge, packed into its zip: makes the module from its own code and answers mochy's calls with it, in json
+// the module's side of the bridge, packed into its zip: makes the module from its own code and answers oto's calls with it, in json
 
-package com.mochyy.mochymusic.module.bridge
+package co.oto.music.module.bridge
 
-import com.mochyy.mochymusic.module.HttpRequest
-import com.mochyy.mochymusic.module.HttpResponse
-import com.mochyy.mochymusic.module.ItemListModule
-import com.mochyy.mochymusic.module.LicenseServer
-import com.mochyy.mochymusic.module.LookModule
-import com.mochyy.mochymusic.module.LyricsModule
-import com.mochyy.mochymusic.module.MetadataModule
-import com.mochyy.mochymusic.module.MochyModule
-import com.mochyy.mochymusic.module.ModuleFields
-import com.mochyy.mochymusic.module.ModuleHost
-import com.mochyy.mochymusic.module.ModuleStorage
-import com.mochyy.mochymusic.module.ServerListModule
-import com.mochyy.mochymusic.module.SourceModule
-import com.mochyy.mochymusic.module.bridge.Wire.obj
-import com.mochyy.mochymusic.module.bridge.Wire.text
-import com.mochyy.mochymusic.module.bridge.shared.BridgeReply
-import com.mochyy.mochymusic.module.bridge.shared.HostBridge
-import com.mochyy.mochymusic.module.bridge.shared.ModuleBridge
+import co.oto.music.module.HttpRequest
+import co.oto.music.module.HttpResponse
+import co.oto.music.module.ItemListModule
+import co.oto.music.module.LicenseServer
+import co.oto.music.module.LookModule
+import co.oto.music.module.LyricsModule
+import co.oto.music.module.MetadataModule
+import co.oto.music.module.OtoModule
+import co.oto.music.module.ModuleFields
+import co.oto.music.module.ModuleHost
+import co.oto.music.module.ModuleStorage
+import co.oto.music.module.ServerListModule
+import co.oto.music.module.SourceModule
+import co.oto.music.module.bridge.Wire.obj
+import co.oto.music.module.bridge.Wire.text
+import co.oto.music.module.bridge.shared.BridgeReply
+import co.oto.music.module.bridge.shared.HostBridge
+import co.oto.music.module.bridge.shared.ModuleBridge
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -39,25 +39,25 @@ import kotlin.io.encoding.Base64
 
 class ModuleSide : ModuleBridge {
 
-    private lateinit var module: MochyModule
+    private lateinit var module: OtoModule
 
     private val work = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val calls = ConcurrentHashMap<Long, Job>()
 
-    // license servers handed out with streams, by the id mochy asks back with; only the latest few, a stream that old has long been replaced
+    // license servers handed out with streams, by the id oto asks back with; only the latest few, a stream that old has long been replaced
     private val licenses = object : LinkedHashMap<String, LicenseServer>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, LicenseServer>) = size > MaxLicenses
     }
     private val licenseIds = AtomicLong()
 
     override fun open(entry: String): String {
-        module = Class.forName(entry, true, javaClass.classLoader).getDeclaredConstructor().newInstance() as MochyModule
+        module = Class.forName(entry, true, javaClass.classLoader).getDeclaredConstructor().newInstance() as OtoModule
         return Wire.aboutToJson(module).toString()
     }
 
     override fun attach(host: HostBridge) = module.attach(HostOverBridge(host))
 
-    // anything the module throws goes back as a plain java exception, so mochy never has to know a class from this side
+    // anything the module throws goes back as a plain java exception, so oto never has to know a class from this side
     override fun ask(method: String, args: String): String = try {
         answer(method, Wire.objectOf(args)).toString()
     } catch (e: Throwable) {
@@ -135,7 +135,7 @@ class ModuleSide : ModuleBridge {
     private fun licenseFor(id: String?): LicenseServer =
         synchronized(licenses) { licenses[id] } ?: throw IllegalStateException("That stream's license is gone, start it again")
 
-    // what the module sees as mochy: the same host every module gets, each call crossing the bridge
+    // what the module sees as oto: the same host every module gets, each call crossing the bridge
     private class HostOverBridge(private val bridge: HostBridge) : ModuleHost {
         override val storage = object : ModuleStorage {
             override fun get(key: String): String? = bridge.get(key)

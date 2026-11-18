@@ -1,4 +1,4 @@
-package com.mochyy.mochymusic.artistvideo
+package co.oto.music.artistvideo
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body

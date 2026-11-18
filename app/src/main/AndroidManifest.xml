@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- the floating lyrics pill, only asked for when someone turns it on -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- lets android auto draw mochy's own player from the media session -->
+    <!-- lets android auto draw oto's own player from the media session -->
     <uses-permission android:name="androidx.car.app.MEDIA_TEMPLATES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -31,7 +31,7 @@
     <!-- Optional: If you also need to scan for Bluetooth devices -->
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
-    <!-- Library > Local: lets Mochy find the songs already on the phone. Android 13 has its own
+    <!-- Library > Local: lets Oto find the songs already on the phone. Android 13 has its own
          audio permission; older phones need the general storage one. -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -60,7 +60,7 @@
         </intent>
         <!-- source modules installed as their own app (modules/SourceModules.kt) -->
         <intent>
-            <action android:name="com.mochyy.mochymusic.SOURCE_MODULE" />
+            <action android:name="co.oto.music.SOURCE_MODULE" />
         </intent>
         <!-- the song share sends straight to these three -->
         <package android:name="com.instagram.android" />
@@ -83,7 +83,7 @@
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
-        android:theme="@style/Theme.mochy"
+        android:theme="@style/Theme.oto"
         tools:targetApi="tiramisu">
         <uses-library
             android:name="org.apache.http.legacy"
@@ -92,7 +92,7 @@
         <activity
             android:name=".ui.screens.CrashActivity"
             android:exported="false"
-            android:theme="@style/Theme.mochy"
+            android:theme="@style/Theme.oto"
             android:excludeFromRecents="true"
             android:process=":crash" />
 
@@ -102,7 +102,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode"
-            android:theme="@style/Theme.mochy"
+            android:theme="@style/Theme.oto"
             android:windowSoftInputMode="adjustNothing">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -1061,7 +1061,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data android:scheme="mochy-modules" android:host="signed-in" />
+                <data android:scheme="oto-modules" android:host="signed-in" />
             </intent-filter>
         </activity>
 
@@ -1087,9 +1087,9 @@
             </intent-filter>
         </service>
 
-        <!-- mochy's own android auto screens: tabs, lists, the player and lyrics, all from google's car templates -->
+        <!-- oto's own android auto screens: tabs, lists, the player and lyrics, all from google's car templates -->
         <service
-            android:name=".car.MochyCarAppService"
+            android:name=".car.OtoCarAppService"
             android:exported="true"
             tools:ignore="ExportedService">
             <intent-filter>
@@ -1098,7 +1098,7 @@
             </intent-filter>
         </service>
 
-        <!-- "hey google, play … on mochy" on the phone: the assistant only offers apps that take this intent with no data, and the phone is often locked in the car -->
+        <!-- "hey google, play … on oto" on the phone: the assistant only offers apps that take this intent with no data, and the phone is often locked in the car -->
         <activity
             android:name=".playback.voice.VoicePlayActivity"
             android:exported="true"
@@ -1114,7 +1114,7 @@
             </intent-filter>
         </activity>
 
-        <!-- keeps a paired tv able to reach this phone while mochy is closed -->
+        <!-- keeps a paired tv able to reach this phone while oto is closed -->
         <service
             android:name=".link.phone.PhoneLinkService"
             android:exported="false"
@@ -1161,9 +1161,9 @@
             android:label="@string/widget_music_player">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.mochyy.mochymusic.widget.PLAY_PAUSE" />
-                <action android:name="com.mochyy.mochymusic.widget.LIKE" />
-                <action android:name="com.mochyy.mochymusic.widget.UPDATE_WIDGET" />
+                <action android:name="co.oto.music.widget.PLAY_PAUSE" />
+                <action android:name="co.oto.music.widget.LIKE" />
+                <action android:name="co.oto.music.widget.UPDATE_WIDGET" />
             </intent-filter>
 
             <meta-data
@@ -1178,9 +1178,9 @@
             android:label="@string/widget_turntable">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.mochyy.mochymusic.widget.TURNTABLE_PLAY_PAUSE" />
-                <action android:name="com.mochyy.mochymusic.widget.TURNTABLE_LIKE" />
-                <action android:name="com.mochyy.mochymusic.widget.UPDATE_TURNTABLE_WIDGET" />
+                <action android:name="co.oto.music.widget.TURNTABLE_PLAY_PAUSE" />
+                <action android:name="co.oto.music.widget.TURNTABLE_LIKE" />
+                <action android:name="co.oto.music.widget.UPDATE_TURNTABLE_WIDGET" />
             </intent-filter>
 
             <meta-data
@@ -1191,7 +1191,7 @@
         <!-- Google Cast Options Provider -->
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.mochyy.mochymusic.cast.CastOptionsProvider" />
+            android:value="co.oto.music.cast.CastOptionsProvider" />
     </application>
 
 </manifest>

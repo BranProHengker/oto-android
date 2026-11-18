@@ -1,6 +1,6 @@
-// what mochy and its modules agree on, kept free of android so a module app loads at runtime; change a shape and bump the version (docs/notes/modules.md)
+// what oto and its modules agree on, kept free of android so a module app loads at runtime; change a shape and bump the version (docs/notes/modules.md)
 
-package com.mochyy.mochymusic.module
+package co.oto.music.module
 
 import java.io.File
 
@@ -19,11 +19,11 @@ data class ModuleInfo(
     val author: String? = null,
 )
 
-/** what a module brings to mochy, one module can bring several */
+/** what a module brings to oto, one module can bring several */
 enum class ModuleFeature { AudioSource, Lyrics, Look, Metadata }
 
-/** a module's own pictures: a square icon for its row and a wide banner over its page, each a link or a file path; null keeps mochy's own */
-interface ModuleArt : MochyModule {
+/** a module's own pictures: a square icon for its row and a wide banner over its page, each a link or a file path; null keeps oto's own */
+interface ModuleArt : OtoModule {
     val icon: String? get() = null
     val banner: String? get() = null
 }
@@ -42,20 +42,20 @@ data class ModuleField(
     val description: String = "",
 )
 
-/** a module with settings of its own: mochy shows them, keeps what people pick, and hands every value over */
-interface ModuleFields : MochyModule {
+/** a module with settings of its own: oto shows them, keeps what people pick, and hands every value over */
+interface ModuleFields : OtoModule {
     val fields: List<ModuleField>
 
     /** every field's value, once before the first call and again each time one changes */
     fun onFields(values: Map<String, String>) {}
 }
 
-/** What Mochy gives a module. */
+/** What Oto gives a module. */
 interface ModuleHost {
     /** small key-value storage private to this module: tokens, choices */
     val storage: ModuleStorage
 
-    /** HTTP through Mochy's own client, so its proxy, DNS and IP-version settings apply. Blocking. */
+    /** HTTP through Oto's own client, so its proxy, DNS and IP-version settings apply. Blocking. */
     fun http(request: HttpRequest): HttpResponse
 
     fun log(message: String)
@@ -85,7 +85,7 @@ class HttpResponse(val code: Int, val body: ByteArray, val headers: Map<String, 
     fun header(name: String): String? = headers[name.lowercase()]
 }
 
-/** The track Mochy wants to play, as Mochy knows it. */
+/** The track Oto wants to play, as Oto knows it. */
 data class TrackQuery(
     val title: String,
     val artists: List<String>,
@@ -95,8 +95,8 @@ data class TrackQuery(
 )
 
 /**
- * How a module's account is signed into: Mochy opens [startUrl] in its sign-in browser and
- * passes every request header the service's own web page sends to [MochyModule.onSignInHeader].
+ * How a module's account is signed into: Oto opens [startUrl] in its sign-in browser and
+ * passes every request header the service's own web page sends to [OtoModule.onSignInHeader].
  */
 data class SignInSpec(
     val startUrl: String,
@@ -120,7 +120,7 @@ data class StreamOption(val id: String, val label: String, val description: Stri
 
 /**
  * A setting the module offers, shown as a row of chips: the stream quality, the catalog region.
- * The first option is the default; Mochy keeps what was picked and passes it to every call.
+ * The first option is the default; Oto keeps what was picked and passes it to every call.
  */
 data class ModuleChoice(val id: String, val label: String, val options: List<StreamOption>)
 
@@ -180,10 +180,10 @@ sealed interface ResolveResult {
 data class DiagnosticStep(val name: String, val ok: Boolean?, val detail: String)
 
 /** every module: its name, what it adds, and its account when it needs one */
-interface MochyModule {
+interface OtoModule {
     val info: ModuleInfo
 
-    /** mochy only asks a module for the things listed here */
+    /** oto only asks a module for the things listed here */
     val adds: Set<ModuleFeature>
 
     /** called once, before anything else */
@@ -209,7 +209,7 @@ interface MochyModule {
 const val NO_ACCOUNT_LABEL = "No account needed"
 
 /** a place songs play from */
-interface SourceModule : MochyModule {
+interface SourceModule : OtoModule {
     override val adds: Set<ModuleFeature> get() = setOf(ModuleFeature.AudioSource)
 
     /** [picks]: choice id to option id, for the choices the user changed */
@@ -226,7 +226,7 @@ data class ModuleServer(val url: String, val name: String, val builtIn: Boolean)
 enum class ServerProblem { NotALink, Unreachable, NotAServer, AlreadyAdded }
 
 /** a module that plays from several servers, people can add the ones they find */
-interface ServerListModule : MochyModule {
+interface ServerListModule : OtoModule {
     val servers: List<ModuleServer>
 
     /** checks the link, a server's own or a site that plays from one, and adds what it finds; null once it's in */
@@ -255,7 +255,7 @@ sealed interface ItemsAdded {
 }
 
 /** a module that holds things people bring as zips or links, as many as they like: scripts, packs */
-interface ItemListModule : MochyModule {
+interface ItemListModule : OtoModule {
     /** what the module calls them, the heading of their list on its page */
     val itemsLabel: String
 
@@ -273,8 +273,8 @@ interface ItemListModule : MochyModule {
     fun removeItem(id: String)
 }
 
-/** a lyrics source, it joins the ones mochy already asks while the module is on */
-interface LyricsModule : MochyModule {
+/** a lyrics source, it joins the ones oto already asks while the module is on */
+interface LyricsModule : OtoModule {
     override val adds: Set<ModuleFeature> get() = setOf(ModuleFeature.Lyrics)
 
     /** the song's lyrics as lrc ("[01:02.34] a line"), or plain lines when they aren't timed; null when it has none */
@@ -292,32 +292,32 @@ data class TrackMetadata(
     val label: String? = null,
     /** a paragraph or two about the song, shown in about song */
     val about: String? = null,
-    /** a sharper cover than the one mochy has, a link */
+    /** a sharper cover than the one oto has, a link */
     val coverUrl: String? = null,
     val isrc: String? = null,
 )
 
-/** a source of song facts (genre, release, credits, what it's about), asked before mochy's own while the module is on */
-interface MetadataModule : MochyModule {
+/** a source of song facts (genre, release, credits, what it's about), asked before oto's own while the module is on */
+interface MetadataModule : OtoModule {
     override val adds: Set<ModuleFeature> get() = setOf(ModuleFeature.Metadata)
 
     /** null when it doesn't know the song */
     suspend fun metadata(track: TrackQuery): TrackMetadata?
 }
 
-/** a look: values for mochy's look settings, put in place while the module is on and given back when it goes off */
-interface LookModule : MochyModule {
+/** a look: values for oto's look settings, put in place while the module is on and given back when it goes off */
+interface LookModule : OtoModule {
     override val adds: Set<ModuleFeature> get() = setOf(ModuleFeature.Look)
 
     /** a [LookSetting] name to its value, anything else is ignored */
     val look: Map<String, String>
 }
 
-/** the only settings a look may change, so a module can restyle mochy but never touch accounts, network or playback */
+/** the only settings a look may change, so a module can restyle oto but never touch accounts, network or playback */
 object LookSetting {
     /** a player style's name: FLAGSHIP, CLASSIC, TURNTABLE, VIDEO, IPOD, POSTER, TIMELINE, LYRICS */
     const val PLAYER_STYLE = "playerStyle"
-    /** MOCHYY, LISTEN_NOW or HOP_IN */
+    /** OTO, LISTEN_NOW or HOP_IN */
     const val HOME_STYLE = "homeStyle"
     /** FLOW, CLASSIC or MINIMAL */
     const val PLAYLIST_STYLE = "playlistStyle"

@@ -1,9 +1,9 @@
-package com.mochyy.mochymusic.modules.skin
+package co.oto.music.modules.skin
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.mochyy.mochymusic.constants.PlayerBackgroundStyle
-import com.mochyy.mochymusic.modules.web.WebModuleManifest
+import co.oto.music.constants.PlayerBackgroundStyle
+import co.oto.music.modules.web.WebModuleManifest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -166,7 +166,7 @@ class SkinParserTest {
         val player = skin(stage, files = File("/data/m"))!!.player!!
         val shader = player.background as SkinBackground.Shader
         assertEquals("bg.agsl", shader.program.file)
-        // mochy fills time in itself, so the module can't set it
+        // oto fills time in itself, so the module can't set it
         assertEquals(mapOf("speed" to 2f), shader.program.uniforms)
         assertEquals(SkinBackground.Player(PlayerBackgroundStyle.SOLID), shader.fallback)
         val layer = player.layers.single()
@@ -253,7 +253,7 @@ class SkinParserTest {
         val title = player.blocks[1] as SkinBlock.Styled
         assertEquals(EnterKind.Keyframes, title.enter!!.kind)
         assertTrue(title.enter!!.eachSong)
-        // an event mochy doesn't know is skipped
+        // an event oto doesn't know is skipped
         assertEquals(listOf(SkinEvent.Like, SkinEvent.Beat), title.triggers.map { it.event })
         assertEquals(SkinRepeat.Once, title.triggers[0].timeline.repeat)
         assertEquals(setOf(SkinEvent.Like, SkinEvent.Beat), player.events)
@@ -302,7 +302,7 @@ class SkinParserTest {
         """
         val page = skin(text, files = File("/data/m"))!!.pages.single()
         val background = page.background as PageBackground.Shader
-        // mochy fills time in itself, so the module's own value is dropped
+        // oto fills time in itself, so the module's own value is dropped
         assertEquals(mapOf("speed" to 2f), background.program.uniforms)
         assertEquals(2, background.fallback.size)
         assertEquals(800.dp, (page.blocks[0] as PageBlock.Shader).height)

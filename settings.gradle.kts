@@ -16,7 +16,7 @@ dependencyResolutionManagement {
 //     id("org.gradle.toolchains.foojay-resolver-convention") version("1.0.0")
 // }
 
-rootProject.name = "mochy"
+rootProject.name = "oto"
 include(":app")
 include(":providers:canvas")
 include(":providers:innertube")
@@ -35,7 +35,7 @@ include(":providers:musixmatch")
 include(":providers:genius")
 include(":providers:wikipedia")
 
-// source modules built into mochy, the api every module is written against, and the bridge to a module that brings its own code in a zip
+// source modules built into oto, the api every module is written against, and the bridge to a module that brings its own code in a zip
 include(":modules:api")
 include(":modules:bridge")
 include(":modules:applemusic")

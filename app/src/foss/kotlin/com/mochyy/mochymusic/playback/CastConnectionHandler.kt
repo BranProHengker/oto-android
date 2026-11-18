@@ -1,19 +1,19 @@
 // CastConnectionHandler.kt
 
-package com.mochyy.mochymusic.playback
+package co.oto.music.playback
 
 import android.content.Context
 import androidx.compose.runtime.Stable
-import com.mochyy.mochymusic.R
-import com.mochyy.mochymusic.cast.CastDiscovery
-import com.mochyy.mochymusic.cast.ChromecastRenderer
-import com.mochyy.mochymusic.cast.DlnaRenderer
-import com.mochyy.mochymusic.cast.FoundReceiver
-import com.mochyy.mochymusic.cast.RemoteMedia
-import com.mochyy.mochymusic.cast.RemoteRenderer
-import com.mochyy.mochymusic.cast.RemoteState
-import com.mochyy.mochymusic.ui.component.TopToaster
-import com.mochyy.mochymusic.ui.utils.resize
+import co.oto.music.R
+import co.oto.music.cast.CastDiscovery
+import co.oto.music.cast.ChromecastRenderer
+import co.oto.music.cast.DlnaRenderer
+import co.oto.music.cast.FoundReceiver
+import co.oto.music.cast.RemoteMedia
+import co.oto.music.cast.RemoteRenderer
+import co.oto.music.cast.RemoteState
+import co.oto.music.ui.component.TopToaster
+import co.oto.music.ui.utils.resize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import com.mochyy.mochymusic.models.MediaMetadata as AppMediaMetadata
+import co.oto.music.models.MediaMetadata as AppMediaMetadata
 
 /** casting without google play services: chromecasts over the cast protocol and dlna renderers over upnp (docs/notes/cast.md) */
 @Stable

@@ -1,7 +1,7 @@
 #!/bin/zsh
 # helpers for leak and battery checks on a device: memory counts, per-thread cpu over a window, wake locks and sensors; source it, then call mem, heap, cpu or holds
-PKG=${PKG:-com.mochyy.mochymusic.debug}
-OUT=${PERF_OUT:-${TMPDIR:-/tmp}/mochy-perf}
+PKG=${PKG:-co.oto.music.debug}
+OUT=${PERF_OUT:-${TMPDIR:-/tmp}/oto-perf}
 mkdir -p $OUT
 
 pid() { adb shell pidof $PKG | tr -d '\r'; }
@@ -53,7 +53,7 @@ EOF
 
 # wake locks, alarms and sensors the app holds right now
 holds() {
-  echo "-- wake locks"; adb shell dumpsys power | tr -d '\r' | grep -i "mochy\|ExoPlayer" | head
-  echo "-- sensors"; adb shell dumpsys sensorservice | tr -d '\r' | grep -i "mochy" | head
-  echo "-- jobs/alarms"; adb shell dumpsys alarm | tr -d '\r' | grep -i "mochy" | head -5
+  echo "-- wake locks"; adb shell dumpsys power | tr -d '\r' | grep -i "oto\|ExoPlayer" | head
+  echo "-- sensors"; adb shell dumpsys sensorservice | tr -d '\r' | grep -i "oto" | head
+  echo "-- jobs/alarms"; adb shell dumpsys alarm | tr -d '\r' | grep -i "oto" | head -5
 }

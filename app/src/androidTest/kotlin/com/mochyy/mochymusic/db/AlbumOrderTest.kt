@@ -1,14 +1,14 @@
-package com.mochyy.mochymusic.db
+package co.oto.music.db
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.mochyy.mochymusic.db.entities.AlbumArtistMap
-import com.mochyy.mochymusic.db.entities.AlbumEntity
-import com.mochyy.mochymusic.db.entities.ArtistEntity
-import com.mochyy.mochymusic.db.entities.SongAlbumMap
-import com.mochyy.mochymusic.db.entities.SongArtistMap
-import com.mochyy.mochymusic.db.entities.SongEntity
+import co.oto.music.db.entities.AlbumArtistMap
+import co.oto.music.db.entities.AlbumEntity
+import co.oto.music.db.entities.ArtistEntity
+import co.oto.music.db.entities.SongAlbumMap
+import co.oto.music.db.entities.SongArtistMap
+import co.oto.music.db.entities.SongEntity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first

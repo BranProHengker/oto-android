@@ -94,8 +94,8 @@
     <string name="import_link_deezer_desc">Danh sách phát công khai và album, độ dài bất kỳ</string>
     <string name="import_link_youtube_desc">Danh sách phát và album, khớp chính xác bài hát, không cần tìm kiếm</string>
     <string name="import_providers_file_header">Từ tệp</string>
-    <string name="import_mochy_backup_title">Bản sao lưu Oto</string>
-    <string name="import_mochy_backup_desc">Tệp CSV từ Xuất ra Oto CSV. Khôi phục chính xác các bài hát</string>
+    <string name="import_oto_backup_title">Bản sao lưu Oto</string>
+    <string name="import_oto_backup_desc">Tệp CSV từ Xuất ra Oto CSV. Khôi phục chính xác các bài hát</string>
     <string name="import_tunemymusic_csv_desc">Danh sách phát riêng tư, bài hát đã thích và tất cả dịch vụ khác</string>
     <string name="import_providers_other_header">Dịch vụ khác</string>
     <string name="import_other_services_title">Amazon Music, SoundCloud, Pandora…</string>

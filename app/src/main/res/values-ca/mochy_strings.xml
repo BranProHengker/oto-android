@@ -316,9 +316,9 @@
     <string name="wrapped_playlist_saved">Llista de reproducció desada</string>
     <string name="casting_to">Transmetent a %s</string>
     <string name="progress_percent">Progrés %s%%</string>
-    <string name="listening_to_mochy">Escoltant oto</string>
+    <string name="listening_to_oto">Escoltant oto</string>
     <string name="listen_on_youtube_music">Escoltar a YouTube Music</string>
-    <string name="visit_mochy">Visita oto</string>
+    <string name="visit_oto">Visita oto</string>
     <string name="open">Obrir</string>
     <string name="failed_to_create_image">No s\'ha pogut generar la imatge: %s</string>
     <string name="copied_title">Títol copiat</string>
@@ -626,9 +626,9 @@
     <string name="discord_rpc_preview">Previsualització de la Rich Presence</string>
     <string name="discord_presence">Presència</string>
     <string name="discord_connect_description">Inicia sessió a Discord per compartir el que estàs escoltant</string>
-    <string name="discord_playing_mochy">Reproduint oto</string>
-    <string name="discord_watching_mochy">Veient oto</string>
-    <string name="discord_competing_mochy">Competint a oto</string>
+    <string name="discord_playing_oto">Reproduint oto</string>
+    <string name="discord_watching_oto">Veient oto</string>
+    <string name="discord_competing_oto">Competint a oto</string>
     <string name="discord_activity_name">Nom de l\'activitat</string>
     <string name="discord_activity_name_description">Nom personalitzat per a l\'activitat (buit de manera predeterminada)</string>
     <string name="discord_advanced_mode">Mode avançat</string>

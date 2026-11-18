@@ -1,24 +1,24 @@
-package com.mochyy.mochymusic.module.applemusic
+package co.oto.music.module.applemusic
 
-import com.mochyy.mochymusic.module.AccountState
-import com.mochyy.mochymusic.module.DiagnosticStep
-import com.mochyy.mochymusic.module.HttpRequest
-import com.mochyy.mochymusic.module.HttpResponse
-import com.mochyy.mochymusic.module.LicenseServer
-import com.mochyy.mochymusic.module.MatchedTrack
-import com.mochyy.mochymusic.module.ModuleChoice
-import com.mochyy.mochymusic.module.ModuleHost
-import com.mochyy.mochymusic.module.ModuleInfo
-import com.mochyy.mochymusic.module.ResolveResult
-import com.mochyy.mochymusic.module.SignInSpec
-import com.mochyy.mochymusic.module.SourceModule
-import com.mochyy.mochymusic.module.SourceStream
-import com.mochyy.mochymusic.module.StreamDrm
-import com.mochyy.mochymusic.module.StreamFormat
-import com.mochyy.mochymusic.module.StreamOption
-import com.mochyy.mochymusic.module.TrackQuery
-import com.mochyy.mochymusic.module.CatalogTrack
-import com.mochyy.mochymusic.module.TrackMatcher
+import co.oto.music.module.AccountState
+import co.oto.music.module.DiagnosticStep
+import co.oto.music.module.HttpRequest
+import co.oto.music.module.HttpResponse
+import co.oto.music.module.LicenseServer
+import co.oto.music.module.MatchedTrack
+import co.oto.music.module.ModuleChoice
+import co.oto.music.module.ModuleHost
+import co.oto.music.module.ModuleInfo
+import co.oto.music.module.ResolveResult
+import co.oto.music.module.SignInSpec
+import co.oto.music.module.SourceModule
+import co.oto.music.module.SourceStream
+import co.oto.music.module.StreamDrm
+import co.oto.music.module.StreamFormat
+import co.oto.music.module.StreamOption
+import co.oto.music.module.TrackQuery
+import co.oto.music.module.CatalogTrack
+import co.oto.music.module.TrackMatcher
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -35,13 +35,13 @@ import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Plays the user's own Apple Music subscription inside Mochy.
+ * Plays the user's own Apple Music subscription inside Oto.
  *
  * Signing in happens on music.apple.com itself; the module keeps the web player's developer token
  * and the account's music-user token. A song is found in the catalog by title, artist and length,
  * its web-playback stream is opened, and the device's Widevine CDM decrypts it inside the
  * platform, licensed by Apple's web license server exactly as the web player in Chrome is.
- * Mochy's own player does the playing, so every effect applies.
+ * Oto's own player does the playing, so every effect applies.
  *
  * What it can't do: lossless, Atmos and Apple's Spatial mix (only in streams encoded for FairPlay,
  * Apple's own DRM) and downloads (no offline licenses; the audio is never decrypted outside the
@@ -53,7 +53,7 @@ class AppleMusicModule : SourceModule {
         id = Id,
         name = "Apple Music",
         version = "1.0",
-        description = "Plays your Apple Music subscription in Mochy, in AAC 256, with every Audio Lab effect",
+        description = "Plays your Apple Music subscription in Oto, in AAC 256, with every Audio Lab effect",
     )
 
     private lateinit var host: ModuleHost
@@ -71,7 +71,7 @@ class AppleMusicModule : SourceModule {
         sessionOrigins = setOf("https://music.apple.com"),
         desktopSite = false,
         title = "Sign in to Apple Music",
-        subtitle = "Your subscription plays in Mochy",
+        subtitle = "Your subscription plays in Oto",
     )
 
     override val choices = listOf(

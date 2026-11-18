@@ -1,6 +1,6 @@
 // DlnaRenderer.kt
 
-package com.mochyy.mochymusic.cast
+package co.oto.music.cast
 
 import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope

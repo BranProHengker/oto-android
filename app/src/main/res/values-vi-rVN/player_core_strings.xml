@@ -184,7 +184,7 @@
     <string name="pc_stat_speed">Tốc độ</string>
     <string name="pc_stat_pitch">Cao độ</string>
     <string name="pc_stat_semitones">%1$s nửa cung</string>
-    <string name="pc_stat_rs_mochy">Oto hi-fi, windowed sinc (Kaiser)</string>
+    <string name="pc_stat_rs_oto">Oto hi-fi, windowed sinc (Kaiser)</string>
     <string name="pc_stat_passband">Dải thông</string>
     <string name="pc_stat_flat_to">phẳng đến %1$s</string>
     <string name="pc_stat_stopband">Dải chặn −%1$d dB, float 32-bit</string>

@@ -1,11 +1,11 @@
-package com.mochyy.mochymusic.module.jiosaavn
+package co.oto.music.module.jiosaavn
 
-import com.mochyy.mochymusic.module.HttpRequest
-import com.mochyy.mochymusic.module.HttpResponse
-import com.mochyy.mochymusic.module.ModuleHost
-import com.mochyy.mochymusic.module.ModuleStorage
-import com.mochyy.mochymusic.module.ResolveResult
-import com.mochyy.mochymusic.module.TrackQuery
+import co.oto.music.module.HttpRequest
+import co.oto.music.module.HttpResponse
+import co.oto.music.module.ModuleHost
+import co.oto.music.module.ModuleStorage
+import co.oto.music.module.ResolveResult
+import co.oto.music.module.TrackQuery
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

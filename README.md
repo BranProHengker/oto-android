@@ -80,7 +80,7 @@ Compiled APKs will be located at:
 Oto Android builds upon open-source foundations:
 
 - [Oto](https://github.com/BranProHengker/oto) — Original desktop music player (Rust & GPUI).
-- [Mochy-Music](https://github.com/realidkroo/Mochy-Music) — Base Android player framework and UI foundations.
+- [Oto-Music](https://github.com/realidkroo/Oto-Music) — Base Android player framework and UI foundations.
 - [ViviMusic](https://github.com/vivizzz007/vivi-music) — Upstream player architecture.
 - [Metrolist](https://github.com/mostafaalagamy/Metrolist) — Upstream base player foundations.
 - [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) — YouTube stream extraction.

@@ -1,9 +1,9 @@
-package com.mochyy.mochymusic.ui.player
+package co.oto.music.ui.player
 
-import com.mochyy.mochymusic.ui.player.customize.coverArtBoxF
-import com.mochyy.mochymusic.ui.player.customize.turntableLeftOffset
-import com.mochyy.mochymusic.ui.player.customize.turntableStageWidth
-import com.mochyy.mochymusic.ui.player.customize.turntableTopPadding
+import co.oto.music.ui.player.customize.coverArtBoxF
+import co.oto.music.ui.player.customize.turntableLeftOffset
+import co.oto.music.ui.player.customize.turntableStageWidth
+import co.oto.music.ui.player.customize.turntableTopPadding
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

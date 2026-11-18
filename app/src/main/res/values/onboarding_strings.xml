@@ -12,7 +12,7 @@
     <string name="onb_selected">Selected</string>
 
     <!-- welcome -->
-    <string name="onb_welcome_title">Welcome to\nmochy!</string>
+    <string name="onb_welcome_title">Welcome to\noto!</string>
     <string name="onb_welcome_subtitle">A way to listen and own your\nmusic, differently.</string>
 
     <!-- photo cropper -->
@@ -103,7 +103,7 @@
 
     <!-- hello / done -->
     <string name="onb_hello">Hello!</string>
-    <string name="onb_welcome_to_mochy">welcome to oto!</string>
+    <string name="onb_welcome_to_oto">welcome to oto!</string>
     <string name="onb_all_good">You\'re good to go</string>
 
     <!-- blur warning -->

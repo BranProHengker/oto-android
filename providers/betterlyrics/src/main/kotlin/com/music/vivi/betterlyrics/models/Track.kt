@@ -1,4 +1,4 @@
-package com.mochyy.mochymusic.betterlyrics.models
+package co.oto.music.betterlyrics.models
 
 import kotlinx.serialization.Serializable
 

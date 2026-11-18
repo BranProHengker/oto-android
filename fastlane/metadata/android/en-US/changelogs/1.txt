@@ -1,4 +1,4 @@
-Mochy Initial Release
+Oto Initial Release
 
      Play music/videos from YouTube & YouTube Music (ad-free)
 

@@ -2,7 +2,7 @@
 <resources>
     <!-- usage at the top of the page -->
     <string name="storage_overall">Overall</string>
-    <string name="storage_legend_mochy">Oto</string>
+    <string name="storage_legend_oto">Oto</string>
     <string name="storage_legend_yours">Your storage</string>
     <string name="storage_free">%1$s free</string>
     <string name="storage_measuring">Working out how much room Oto takes…</string>

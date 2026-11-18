@@ -177,7 +177,7 @@
     <string name="discord_target_spotify">Spotify</string>
     <string name="discord_target_apple_music">Apple Music</string>
     <string name="discord_target_tidal">Tidal</string>
-    <string name="discord_target_mochy">Oto trên GitHub</string>
+    <string name="discord_target_oto">Oto trên GitHub</string>
     <string name="discord_ph_name">Tên bài hát</string>
     <string name="discord_ph_artist">Tên nghệ sĩ</string>
     <string name="discord_ph_album">Album</string>

@@ -1,34 +1,34 @@
-// mochy's side of the bridge: a module that came with its own code, every call crossing as json and coming back the same way
+// oto's side of the bridge: a module that came with its own code, every call crossing as json and coming back the same way
 
-package com.mochyy.mochymusic.module.bridge
+package co.oto.music.module.bridge
 
-import com.mochyy.mochymusic.module.AccountState
-import com.mochyy.mochymusic.module.DiagnosticStep
-import com.mochyy.mochymusic.module.ItemListModule
-import com.mochyy.mochymusic.module.ItemsAdded
-import com.mochyy.mochymusic.module.LicenseServer
-import com.mochyy.mochymusic.module.LookModule
-import com.mochyy.mochymusic.module.LyricsModule
-import com.mochyy.mochymusic.module.MODULE_API_VERSION
-import com.mochyy.mochymusic.module.MetadataModule
-import com.mochyy.mochymusic.module.ModuleArt
-import com.mochyy.mochymusic.module.ModuleChoice
-import com.mochyy.mochymusic.module.ModuleField
-import com.mochyy.mochymusic.module.ModuleFields
-import com.mochyy.mochymusic.module.ModuleHost
-import com.mochyy.mochymusic.module.ModuleItem
-import com.mochyy.mochymusic.module.ModuleServer
-import com.mochyy.mochymusic.module.ResolveResult
-import com.mochyy.mochymusic.module.ServerListModule
-import com.mochyy.mochymusic.module.ServerProblem
-import com.mochyy.mochymusic.module.SourceModule
-import com.mochyy.mochymusic.module.TrackMetadata
-import com.mochyy.mochymusic.module.TrackQuery
-import com.mochyy.mochymusic.module.bridge.Wire.text
-import com.mochyy.mochymusic.module.bridge.shared.BridgeReply
-import com.mochyy.mochymusic.module.bridge.shared.BridgeResponse
-import com.mochyy.mochymusic.module.bridge.shared.HostBridge
-import com.mochyy.mochymusic.module.bridge.shared.ModuleBridge
+import co.oto.music.module.AccountState
+import co.oto.music.module.DiagnosticStep
+import co.oto.music.module.ItemListModule
+import co.oto.music.module.ItemsAdded
+import co.oto.music.module.LicenseServer
+import co.oto.music.module.LookModule
+import co.oto.music.module.LyricsModule
+import co.oto.music.module.MODULE_API_VERSION
+import co.oto.music.module.MetadataModule
+import co.oto.music.module.ModuleArt
+import co.oto.music.module.ModuleChoice
+import co.oto.music.module.ModuleField
+import co.oto.music.module.ModuleFields
+import co.oto.music.module.ModuleHost
+import co.oto.music.module.ModuleItem
+import co.oto.music.module.ModuleServer
+import co.oto.music.module.ResolveResult
+import co.oto.music.module.ServerListModule
+import co.oto.music.module.ServerProblem
+import co.oto.music.module.SourceModule
+import co.oto.music.module.TrackMetadata
+import co.oto.music.module.TrackQuery
+import co.oto.music.module.bridge.Wire.text
+import co.oto.music.module.bridge.shared.BridgeReply
+import co.oto.music.module.bridge.shared.BridgeResponse
+import co.oto.music.module.bridge.shared.HostBridge
+import co.oto.music.module.bridge.shared.ModuleBridge
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -149,7 +149,7 @@ open class BridgedModule private constructor(private val bridge: ModuleBridge, a
         Base64.decode((answer as? JsonPrimitive)?.contentOrNull ?: throw IOException("The module gave no license"))
     }
 
-    // mochy's host as the module reaches it, one call at a time across the bridge
+    // oto's host as the module reaches it, one call at a time across the bridge
     private class HostEnd(private val host: ModuleHost) : HostBridge {
         override fun get(key: String): String? = host.storage.get(key)
 
@@ -172,14 +172,14 @@ open class BridgedModule private constructor(private val bridge: ModuleBridge, a
     private class WithBoth(bridge: ModuleBridge, about: Wire.About) : BridgedModule(bridge, about), ServerListModule, ItemListModule
 
     companion object {
-        /** the class mochy makes from a zip's code, the module's side of the bridge */
-        const val ModuleSideClass = "com.mochyy.mochymusic.module.bridge.ModuleSide"
+        /** the class oto makes from a zip's code, the module's side of the bridge */
+        const val ModuleSideClass = "co.oto.music.module.bridge.ModuleSide"
 
-        /** makes the module named [entry] on the far side of [bridge]; throws when it can't run in this mochy */
+        /** makes the module named [entry] on the far side of [bridge]; throws when it can't run in this oto */
         fun open(bridge: ModuleBridge, entry: String): BridgedModule {
             val about = Wire.aboutFrom(Wire.objectOf(bridge.open(entry)))
             val version = about.info.apiVersion
-            if (version != MODULE_API_VERSION) throw IOException("It's made for module API $version, this Mochy has $MODULE_API_VERSION")
+            if (version != MODULE_API_VERSION) throw IOException("It's made for module API $version, this Oto has $MODULE_API_VERSION")
             if (about.info.id.isBlank()) throw IOException("It doesn't say what it is")
             return when {
                 about.servers && about.items -> WithBoth(bridge, about)
@@ -191,10 +191,10 @@ open class BridgedModule private constructor(private val bridge: ModuleBridge, a
     }
 }
 
-/** the parent of a zip module's class loader: the phone's own java and android classes and the bridge's shared package, nothing else of mochy's */
-class BridgeOnlyParent(private val mochy: ClassLoader) : ClassLoader(String::class.java.classLoader) {
+/** the parent of a zip module's class loader: the phone's own java and android classes and the bridge's shared package, nothing else of oto's */
+class BridgeOnlyParent(private val oto: ClassLoader) : ClassLoader(String::class.java.classLoader) {
     override fun loadClass(name: String, resolve: Boolean): Class<*> =
-        if (name.startsWith(SharedPackage)) mochy.loadClass(name) else super.loadClass(name, resolve)
+        if (name.startsWith(SharedPackage)) oto.loadClass(name) else super.loadClass(name, resolve)
 
     private companion object {
         val SharedPackage = ModuleBridge::class.java.name.substringBeforeLast('.') + "."

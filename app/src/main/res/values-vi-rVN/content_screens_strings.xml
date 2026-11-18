@@ -2,7 +2,7 @@
 <resources>
     <!-- About Sheet -->
     <string name="about_app">Giới thiệu ứng dụng</string>
-    <string name="about_mochy_music_version">Oto | %1$s</string>
+    <string name="about_oto_music_version">Oto | %1$s</string>
     <string name="about_app_description">Oto là một ứng dụng nghe nhạc,\nnhưng khá là thú vị đấy.</string>
     <string name="about_actions">Hành động</string>
     <string name="about_support_me">Ủng hộ mình với nhé :3 \u2192</string>

@@ -96,8 +96,8 @@
     <string name="thumbnail_corner_radius_desc">Modifier le rayon des coins de la miniature de la pochette de l\'album</string>
     <string name="crop_album_art">Recadrer la pochette d\'album</string>
     <string name="crop_album_art_desc">Forcer un format carré en recadrant les miniatures vidéo</string>
-    <string name="mochy_canvas">Toile</string>
-    <string name="mochy_canvas_desc">Afficher les pochettes d\'album animées lorsqu\'elles sont disponibles</string>
+    <string name="oto_canvas">Toile</string>
+    <string name="oto_canvas_desc">Afficher les pochettes d\'album animées lorsqu\'elles sont disponibles</string>
 	<string name="show_album_canvas">Afficher l\'album toile</string>
     <string name="show_album_canvas_desc">Afficher une toile animée dans l\'album</string>
 
@@ -392,7 +392,7 @@
     <string name="karaoke">Karaoké</string>
     <string name="apple_music_style">Apple Music</string>
     <string name="apple_music_style_letter">Apple Music V2 (Lettre par Lettre)</string>
-    <string name="mochy_1">oto Music (Fluide)</string>
+    <string name="oto_1">oto Music (Fluide)</string>
     <string name="apple_music_lyrics_blur">Paroles d\'Apple Music floues</string>
     <string name="apple_music_lyrics_blur_desc">Appliquez un effet de flou aux lignes de paroles inactives pour créer un effet de mise au point haut de gamme.</string>
     <string name="lyrics_v2_fluid">Paroles V2 (Fluide)</string>
@@ -469,9 +469,9 @@ est irréversible.
     <string name="plays">lectures</string>
     <string name="casting_to">Conversion vers %s</string>
     <string name="progress_percent">Progression %s%%</string>
-    <string name="listening_to_mochy">Écouter oto Music</string>
+    <string name="listening_to_oto">Écouter oto Music</string>
     <string name="listen_on_youtube_music">Écoutez sur YouTube Music</string>
-    <string name="visit_mochy">Rendez-vous sur oto Music</string>
+    <string name="visit_oto">Rendez-vous sur oto Music</string>
     <string name="open">Ouvrir</string>
     <string name="failed_to_create_image">Échec de la création de l\'image : %s</string>
     <string name="copied_title">Titre copié</string>
@@ -744,9 +744,9 @@ est irréversible.
     <string name="discord_rpc_preview">Aperçu de Rich Presence</string>
     <string name="discord_presence">Présence</string>
     <string name="discord_connect_description">Connectez-vous avec Discord pour partager ce que vous écoutez.</string>
-    <string name="discord_playing_mochy">Écouter oto Music</string>
-    <string name="discord_watching_mochy">Regarder oto Music</string>
-    <string name="discord_competing_mochy">En compétition sur oto Music</string>
+    <string name="discord_playing_oto">Écouter oto Music</string>
+    <string name="discord_watching_oto">Regarder oto Music</string>
+    <string name="discord_competing_oto">En compétition sur oto Music</string>
     <string name="discord_activity_name">Nom de l\'activité</string>
     <string name="discord_activity_name_description">Nom personnalisé de l\'activité (laissez vide pour utiliser le nom par défaut)</string>
     <string name="discord_advanced_mode">Mode avancé</string>

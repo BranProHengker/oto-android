@@ -1,9 +1,9 @@
-package com.mochyy.mochymusic.ui.player.video
+package co.oto.music.ui.player.video
 
-import com.mochyy.mochymusic.ui.player.videoCropTransform
-import com.mochyy.mochymusic.utils.VideoStreams
-import com.mochyy.mochymusic.utils.VideoTrack
-import com.mochyy.mochymusic.utils.pickVideoFamily
+import co.oto.music.ui.player.videoCropTransform
+import co.oto.music.utils.VideoStreams
+import co.oto.music.utils.VideoTrack
+import co.oto.music.utils.pickVideoFamily
 import com.music.innertube.models.response.PlayerResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

@@ -106,16 +106,16 @@
     <string name="tv_link_pairing">Linking…</string>
     <string name="tv_link_channel">TV link</string>
 
-    <!-- the tv's mochy page -->
-    <string name="tv_mochy">Oto</string>
-    <string name="tv_mochy_version">Version %1$s</string>
-    <string name="tv_mochy_link_phone">Link your phone to bring your library over</string>
-    <string name="tv_mochy_phone_control">Phone can control this TV</string>
+    <!-- the tv's oto page -->
+    <string name="tv_oto">Oto</string>
+    <string name="tv_oto_version">Version %1$s</string>
+    <string name="tv_oto_link_phone">Link your phone to bring your library over</string>
+    <string name="tv_oto_phone_control">Phone can control this TV</string>
     <string name="tv_on">On</string>
     <string name="tv_off">Off</string>
-    <string name="tv_mochy_updates">Updates</string>
-    <string name="tv_mochy_support">Support Oto</string>
-    <string name="tv_mochy_support_detail">Help keep it going</string>
+    <string name="tv_oto_updates">Updates</string>
+    <string name="tv_oto_support">Support Oto</string>
+    <string name="tv_oto_support_detail">Help keep it going</string>
 
     <!-- playing next, up in the tv's player -->
     <string name="tv_playing_next">Playing next</string>

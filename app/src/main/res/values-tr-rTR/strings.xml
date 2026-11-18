@@ -309,7 +309,7 @@
     <string name="backup_create_failed">Yedek oluşturulamadı</string>
     <string name="restore_failed">Yedek geri yüklenemedi</string>
     <string name="discord_integration">Discord entegrasyonu</string>
-    <string name="discord_information">oto, Discord hesabının durumunu ayarlamak için KizzyRPC kütüphanesini kullanır. Bu, Discord Gateway bağlantısını kullanmayı gerektirir ve Discord\'un Hizmet Şartları\'nın ihlali sayılabilir. Ama bu yüzden hesabı askıya alınan bir kullanıcı bilinmiyor. Riski sana ait.\nmochy sadece token\'ını alır, geri kalan her şey yerelde saklanır.</string>
+    <string name="discord_information">oto, Discord hesabının durumunu ayarlamak için KizzyRPC kütüphanesini kullanır. Bu, Discord Gateway bağlantısını kullanmayı gerektirir ve Discord\'un Hizmet Şartları\'nın ihlali sayılabilir. Ama bu yüzden hesabı askıya alınan bir kullanıcı bilinmiyor. Riski sana ait.\noto sadece token\'ını alır, geri kalan her şey yerelde saklanır.</string>
     <string name="dismiss">Kapat</string>
     <string name="options">Seçenekler</string>
     <string name="preview">Önizleme</string>

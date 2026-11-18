@@ -178,7 +178,7 @@
     <string name="discord_target_spotify">Spotify</string>
     <string name="discord_target_apple_music">Apple Music</string>
     <string name="discord_target_tidal">Tidal</string>
-    <string name="discord_target_mochy">Oto on GitHub</string>
+    <string name="discord_target_oto">Oto on GitHub</string>
     <string name="discord_ph_name">Song name</string>
     <string name="discord_ph_artist">Artist name</string>
     <string name="discord_ph_album">Album</string>

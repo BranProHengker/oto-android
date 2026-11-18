@@ -1,4 +1,4 @@
-package com.mochyy.mochymusic.module.applemusic
+package co.oto.music.module.applemusic
 
 import java.util.Base64
 

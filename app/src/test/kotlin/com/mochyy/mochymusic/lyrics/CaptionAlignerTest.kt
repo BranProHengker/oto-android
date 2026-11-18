@@ -1,4 +1,4 @@
-package com.mochyy.mochymusic.lyrics
+package co.oto.music.lyrics
 
 import com.music.innertube.CaptionCue
 import org.junit.Assert.assertEquals

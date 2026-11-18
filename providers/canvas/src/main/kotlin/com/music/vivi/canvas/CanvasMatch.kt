@@ -1,4 +1,4 @@
-package com.mochyy.mochymusic.canvas
+package co.oto.music.canvas
 
 import java.text.Normalizer
 import kotlin.math.abs

@@ -1,0 +1,10 @@
+// UtilExt.kt
+
+package co.oto.music.extensions
+
+fun <T> tryOrNull(block: () -> T): T? =
+    try {
+        block()
+    } catch (e: Exception) {
+        null
+    }
