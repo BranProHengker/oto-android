@@ -3,7 +3,7 @@
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@android:color/black</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
-        <item name="postSplashScreenTheme">@style/Theme.oto</item>
+        <item name="postSplashScreenTheme">@style/Theme.mochy</item>
     </style>
 
     <!-- the anime icons' splash, only told apart on android 12+ (values-v31) -->
