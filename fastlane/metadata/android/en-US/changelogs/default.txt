@@ -1,10 +1,8 @@
-### What's New in Oto v1.1.0:
-- **Local Audio CJK / Japanese Path Fix**: Resolved SAF (Storage Access Framework) failure on non-ASCII/Kanji folders (`Couldn't play local file: Failed to determine if primary:... is child of primary:...`) with direct POSIX & MediaStore fallbacks and automatic runtime permissions.
-- **Shuffle Freeze & ANR Deadlock Eradicated**: Eliminated blocking main-thread database queries during local music shuffle with zero-latency in-memory URI resolution.
-- **Crossfade Overlap & Duplicate Play Fix**: Fixed crossfade track truncation and audio volume ducking so outgoing tracks fade smoothly without overlapping next track duplication.
-- **Android Auto (AA) Support & Voice Commands**: Native Android Auto media browsing and head unit player.
-- **Full Song Metadata & Tag Editor**: Integrated comprehensive in-app editor for song title, artist relations, album, release year, custom cover art, and YouTube video link pairing.
-- **LrcRed / Apple Music TTML Lyrics Provider**: Word-by-word synchronized lyrics with romaji/furigana transliterations and translations.
-- **Crossmix & AudioPass Enhancements**: Refined seamless crossfade transitions and pass blockers handling for pristine gapless listening.
-- **Device Interconnectivity & Remote Control**: Clean pairing and synchronized control between Oto on phone, car, and TV.
-- **App Behaviour Controls**: Added Pause on Mute toggle and Resume on Bluetooth Connect toggle in App Behaviour settings.
+### What's New in Oto v1.2.0:
+- **USB DAC & Audio Engine Optimizations**: Fixes & tuning across USB/Exclusive AudioPass (`usb_pass.cpp`, `exclusive_pass.cpp`), `PrecisionSink`, `FfmpegFallbackRenderer`, `PeakLimiter`, and `SpatialAudioProcessor`.
+- **Floating Lyrics / Pill Overhaul**: Rebuilt Floating Lyrics & Floating Pill window with new controls, drag/drop targets, and `NavPill`.
+- **Spotify Canvas (`sp_dc`)**: Fetch animated Spotify Canvas backgrounds with customizable canvas priority order.
+- **Spotify-Style Queue & New Sleep Timer**: FIFO manual queue ahead of Autoplay (with duplicate track support) and revamped dark Sleep Timer sheet with quick presets and live countdown.
+- **In-App Module Browser & Settings Refresh**: Built-in Module Browser, dedicated Now Playing & Playback settings screens, and native FLAC export with embedded tags (`Mp4FlacRemux`, `ExportTags`).
+- **Source-Module DASH Fix & OriginOS Support**: Direct DASH segment fetching for third-party modules plus Vivo OriginOS Music Card / Atomic Island integration.
+- **Oto Signature Features Preserved & Hardened**: Non-blocking local audio auto-healing (`LocalAudioResolver`), Smart Shuffle (`OFF → ON → SMART`) on zero-ANR `DefaultShuffleOrder`, local `.lrc` sidecar auto-detection & picker, structured playback diagnostics copy, and 100% clean Oto branding (no donate prompts or mascots).
