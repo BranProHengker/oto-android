@@ -154,9 +154,15 @@ abstract class InternalDatabase : RoomDatabase() {
 
         fun migrateLegacyDatabase(context: Context) {
             try {
+                val prefs = context.getSharedPreferences("oto_migration", Context.MODE_PRIVATE)
+                if (prefs.getBoolean("legacy_db_migrated", false)) return
+
                 val oldDb = context.getDatabasePath("mochy.db")
                 val newDb = context.getDatabasePath(DB_NAME)
-                if (!oldDb.exists()) return
+                if (!oldDb.exists()) {
+                    prefs.edit().putBoolean("legacy_db_migrated", true).apply()
+                    return
+                }
 
                 var shouldMigrate = false
                 if (!newDb.exists()) {
@@ -209,6 +215,7 @@ abstract class InternalDatabase : RoomDatabase() {
                     if (oldShm.exists()) oldShm.copyTo(newShm, overwrite = true)
                     Timber.tag("MusicDatabase").i("Migrated legacy mochy.db to oto.db successfully")
                 }
+                prefs.edit().putBoolean("legacy_db_migrated", true).apply()
             } catch (e: Exception) {
                 Timber.tag("MusicDatabase").e(e, "Failed to migrate legacy database")
             }
@@ -229,10 +236,10 @@ abstract class InternalDatabase : RoomDatabase() {
                         override fun onOpen(db: SupportSQLiteDatabase) {
                             super.onOpen(db)
                             try {
-                                db.query("PRAGMA busy_timeout = 60000").close()
-                                db.query("PRAGMA cache_size = -16000").close()
-                                db.query("PRAGMA wal_autocheckpoint = 1000").close()
-                                db.query("PRAGMA synchronous = NORMAL").close()
+                                db.execSQL("PRAGMA busy_timeout = 60000")
+                                db.execSQL("PRAGMA cache_size = -16000")
+                                db.execSQL("PRAGMA wal_autocheckpoint = 1000")
+                                db.execSQL("PRAGMA synchronous = NORMAL")
                             } catch (e: Exception) {
                                 Timber.tag("MusicDatabase").e(e, "Failed to set PRAGMA settings")
                             }

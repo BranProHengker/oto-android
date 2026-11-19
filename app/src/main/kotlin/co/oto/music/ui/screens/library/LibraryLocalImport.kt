@@ -62,11 +62,11 @@ class LocalImportActions internal constructor(hasStorageAccess: Boolean) {
     internal var pickFolderLauncher: () -> Unit = {}
     internal var refreshThenScan: () -> Unit = {}
 
-    /** The import card: the songs found on the phone when Oto may look, the file picker otherwise. */
-    fun importFromPhone() = if (hasStorageAccess) openAddMusic() else pickFiles()
+    /** The import card: opens the folder picker to choose a music directory. */
+    fun importFromPhone() = pickFolderLauncher()
 
-    /** The storage card: asks for access first if needed, then lists what's on the phone. */
-    fun scanPhone() = if (hasStorageAccess) openAddMusic() else askForStorage()
+    /** The storage card: opens the folder picker to choose a music directory. */
+    fun scanPhone() = pickFolderLauncher()
 
     /** A music folder of the user's own: everything in it comes in, and Re-scan reads it again later. */
     fun pickFolder() = pickFolderLauncher()
@@ -137,8 +137,7 @@ fun rememberLocalImportActions(viewModel: LibraryImportViewModel): LocalImportAc
             val started = viewModel.refreshLocal()
             when {
                 started -> showProgress()
-                actions.hasStorageAccess -> openAddMusic()
-                !viewModel.hasFolders() -> permission.launch(DeviceMusicScanner.permission)
+                !viewModel.hasFolders() -> folderPicker.launch(null)
                 else -> TopToaster.show(context.getString(R.string.lib_local_no_new_songs), iconRes = R.drawable.library_music)
             }
         }

@@ -166,8 +166,9 @@ class App : Application(), SingletonImageLoader.Factory {
 
         applicationScope.launch(Dispatchers.IO) {
             // Local songs whose cover file was cleared away get it back from the song's own file.
-            // After the intro, so it doesn't share the disk with the first frames.
+            // After the intro and initial UI settle, so it doesn't share the disk with early frames.
             co.oto.music.ui.launch.LaunchGate.awaitIntro()
+            kotlinx.coroutines.delay(6_000L)
             runCatching { co.oto.music.importer.LocalArtwork.repair(this@App, musicDatabase) }
                 .onFailure { Timber.w(it, "Repairing local covers failed") }
         }

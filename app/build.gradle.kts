@@ -27,8 +27,8 @@ extensions.configure<ApplicationExtension> {
         applicationId = "co.oto.music"
         minSdk = 24
         targetSdk = 37
-        versionCode = 17
-        versionName = "1.2.2"
+        versionCode = 18
+        versionName = "1.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

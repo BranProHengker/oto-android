@@ -50,22 +50,6 @@ internal fun LazyListScope.libraryLocalTab(
         )
     }
 
-    // once Oto may read the storage, the import card itself lists the phone's songs
-    if (!hasStorageAccess) {
-        item(key = "local_storage") {
-            Text(
-                text = stringResource(R.string.lib_local_or),
-                color = SearchColors.Primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = SearchHorizontalPadding + 2.dp, vertical = 10.dp),
-            )
-            LocalCard(onClick = onScan, modifier = Modifier.padding(horizontal = SearchHorizontalPadding)) {
-                LocalCardTitle(stringResource(R.string.lib_local_let_read))
-            }
-        }
-    }
-
     // Nothing downloaded and nothing imported: every card below would be an empty shell linking to
     // an empty page, and the import card above already says what to do.
     if (data.songs.isNotEmpty()) {
@@ -82,7 +66,10 @@ internal fun LazyListScope.libraryLocalTab(
 @Composable
 private fun LocalImportCard(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     LocalCard(onClick = onClick, modifier = modifier) {
-        LocalCardTitle(stringResource(R.string.lib_local_import_here))
+        LocalCardTitle(
+            if (count == 0) stringResource(R.string.lib_manage_add_folder)
+            else stringResource(R.string.lib_local_import_here)
+        )
         Spacer(modifier = Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Bottom) {
             Text(

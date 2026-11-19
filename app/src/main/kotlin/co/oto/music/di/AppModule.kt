@@ -60,10 +60,10 @@ object AppModule {
             override fun onOpen(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 super.onOpen(db)
                 try {
-                    db.query("PRAGMA busy_timeout = 60000").close()
-                    db.query("PRAGMA cache_size = -16000").close()
-                    db.query("PRAGMA wal_autocheckpoint = 1000").close()
-                    db.query("PRAGMA synchronous = NORMAL").close()
+                    db.execSQL("PRAGMA busy_timeout = 60000")
+                    db.execSQL("PRAGMA cache_size = -16000")
+                    db.execSQL("PRAGMA wal_autocheckpoint = 1000")
+                    db.execSQL("PRAGMA synchronous = NORMAL")
                 } catch (e: Exception) {
                     timber.log.Timber.tag("MusicDatabase").e(e, "Failed to set PRAGMA settings")
                 }

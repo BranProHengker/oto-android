@@ -1,6 +1,5 @@
-### What's New in Oto v1.2.2:
-- **Auto Data Recovery**: Seamlessly migrates listening history, playlists, and songs from legacy database (`mochy.db`) to `oto.db` so no user records are lost.
-- **Update Loop Fixed**: Completely resolved update prompt loops by enforcing strict semantic version comparison.
-- **Local .lrc Provider & Picker Restored**: Restored custom `.lrc` file picker from device storage and instant switching for local sidecar/embedded lyrics in Lyrics Provider sheet.
-- **Pure Oto Launch Animation**: Replaced old Mochy startup animation with the authentic Oto mark logo and smooth flight animation into Home.
-- **Complete Branding Purge**: Completely removed leftover Mochy dev/contributor cards and old Mochy entities across the app.
+### What's New in Oto v1.2.3:
+- **Local Folder-Centric Audio**: Switched from phone-wide auto audio scanning to pure folder selection via system folder picker. Only songs in your chosen music folders are indexed.
+- **System Performance Overhaul**: Eliminated background recomposition storms and disk contention, making touch interactions, scrolling, and page transitions noticeably faster and smoother.
+- **Instant Cold Start**: Added persistent migration caching to eliminate redundant database checks on startup.
+- **SQLite Optimization**: Enforced effective WAL and normal synchronous mode via native SQL execution to prevent UI thread I/O lockups.
