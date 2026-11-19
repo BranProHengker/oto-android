@@ -2,6 +2,7 @@ package co.oto.music.db
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import androidx.core.content.contentValuesOf
 import androidx.room.AutoMigration
@@ -152,72 +153,234 @@ abstract class InternalDatabase : RoomDatabase() {
     companion object {
         const val DB_NAME = "oto.db"
 
-        fun migrateLegacyDatabase(context: Context) {
+        fun migrateLegacyDatabase(context: Context, targetDbName: String = DB_NAME) {
             try {
                 val prefs = context.getSharedPreferences("oto_migration", Context.MODE_PRIVATE)
-                if (prefs.getBoolean("legacy_db_migrated", false)) return
+                if (prefs.getBoolean("legacy_db_merged_v2", false)) return
 
                 val oldDb = context.getDatabasePath("mochy.db")
-                val newDb = context.getDatabasePath(DB_NAME)
+                val newDb = context.getDatabasePath(targetDbName)
                 if (!oldDb.exists()) {
-                    prefs.edit().putBoolean("legacy_db_migrated", true).apply()
+                    prefs.edit().putBoolean("legacy_db_merged_v2", true).apply()
                     return
                 }
 
-                var shouldMigrate = false
-                if (!newDb.exists()) {
-                    shouldMigrate = true
-                } else {
-                    try {
-                        val oldEvents = SQLiteDatabase.openDatabase(oldDb.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                            db.rawQuery("SELECT count(*) FROM event", null).use { c ->
-                                if (c.moveToFirst()) c.getInt(0) else 0
-                            }
-                        }
-                        val newEvents = SQLiteDatabase.openDatabase(newDb.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                            db.rawQuery("SELECT count(*) FROM event", null).use { c ->
-                                if (c.moveToFirst()) c.getInt(0) else 0
-                            }
-                        }
-                        val oldSongs = SQLiteDatabase.openDatabase(oldDb.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                            db.rawQuery("SELECT count(*) FROM song", null).use { c ->
-                                if (c.moveToFirst()) c.getInt(0) else 0
-                            }
-                        }
-                        val newSongs = SQLiteDatabase.openDatabase(newDb.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                            db.rawQuery("SELECT count(*) FROM song", null).use { c ->
-                                if (c.moveToFirst()) c.getInt(0) else 0
-                            }
-                        }
-                        if (oldEvents > newEvents || oldSongs > newSongs) {
-                            shouldMigrate = true
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("MusicDatabase").e(e, "Error checking db counts for migration")
-                        if (newDb.length() < oldDb.length()) {
-                            shouldMigrate = true
-                        }
-                    }
-                }
+                val oldWal = java.io.File(oldDb.parentFile, "${oldDb.name}-wal")
+                val oldShm = java.io.File(oldDb.parentFile, "${oldDb.name}-shm")
+                val newWal = java.io.File(newDb.parentFile, "${newDb.name}-wal")
+                val newShm = java.io.File(newDb.parentFile, "${newDb.name}-shm")
 
-                if (shouldMigrate) {
-                    val oldWal = java.io.File(oldDb.parentFile, "${oldDb.name}-wal")
-                    val oldShm = java.io.File(oldDb.parentFile, "${oldDb.name}-shm")
-                    val newWal = java.io.File(newDb.parentFile, "${newDb.name}-wal")
-                    val newShm = java.io.File(newDb.parentFile, "${newDb.name}-shm")
-
-                    if (newDb.exists()) newDb.delete()
-                    if (newWal.exists()) newWal.delete()
-                    if (newShm.exists()) newShm.delete()
-
+                if (!newDb.exists() || newDb.length() == 0L) {
                     oldDb.copyTo(newDb, overwrite = true)
                     if (oldWal.exists()) oldWal.copyTo(newWal, overwrite = true)
                     if (oldShm.exists()) oldShm.copyTo(newShm, overwrite = true)
-                    Timber.tag("MusicDatabase").i("Migrated legacy mochy.db to oto.db successfully")
+                    Timber.tag("MusicDatabase").i("Copied initial mochy.db to $targetDbName")
+                    prefs.edit().putBoolean("legacy_db_merged_v2", true).apply()
+                    return
                 }
-                prefs.edit().putBoolean("legacy_db_migrated", true).apply()
+
+                try {
+                    SQLiteDatabase.openDatabase(newDb.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+                        val hasEventTable = db.rawQuery(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='event'", null
+                        ).use { it.moveToFirst() }
+
+                        if (!hasEventTable) {
+                            oldDb.copyTo(newDb, overwrite = true)
+                            if (oldWal.exists()) oldWal.copyTo(newWal, overwrite = true)
+                            if (oldShm.exists()) oldShm.copyTo(newShm, overwrite = true)
+                            Timber.tag("MusicDatabase").i("$targetDbName had no schema, copied mochy.db cleanly")
+                        } else {
+                            val oldPathEscaped = oldDb.path.replace("'", "''")
+                            db.execSQL("ATTACH DATABASE '$oldPathEscaped' AS old_db")
+                            try {
+                                db.execSQL("PRAGMA foreign_keys = OFF")
+                                db.beginTransaction()
+                                try {
+                                    val hasOldSong = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='song'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasOldSong) {
+                                        db.execSQL("INSERT OR IGNORE INTO song SELECT * FROM old_db.song")
+                                        db.execSQL("""
+                                            UPDATE song
+                                            SET totalPlayTime = MAX(song.totalPlayTime, (SELECT o.totalPlayTime FROM old_db.song o WHERE o.id = song.id)),
+                                                liked = CASE WHEN (SELECT o.liked FROM old_db.song o WHERE o.id = song.id) = 1 THEN 1 ELSE song.liked END
+                                            WHERE EXISTS (SELECT 1 FROM old_db.song o WHERE o.id = song.id)
+                                        """.trimIndent())
+                                    }
+
+                                    val hasOldArtist = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='artist'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasOldArtist) {
+                                        db.execSQL("INSERT OR IGNORE INTO artist SELECT * FROM old_db.artist")
+                                    }
+
+                                    val hasOldAlbum = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='album'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasOldAlbum) {
+                                        db.execSQL("INSERT OR IGNORE INTO album SELECT * FROM old_db.album")
+                                    }
+
+                                    val hasSongArtist = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='song_artist_map'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasSongArtist) {
+                                        db.execSQL("INSERT OR IGNORE INTO song_artist_map SELECT * FROM old_db.song_artist_map")
+                                    }
+
+                                    val hasSongAlbum = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='song_album_map'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasSongAlbum) {
+                                        db.execSQL("INSERT OR IGNORE INTO song_album_map SELECT * FROM old_db.song_album_map")
+                                    }
+
+                                    val hasAlbumArtist = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='album_artist_map'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasAlbumArtist) {
+                                        db.execSQL("INSERT OR IGNORE INTO album_artist_map SELECT * FROM old_db.album_artist_map")
+                                    }
+
+                                    val hasPlaylist = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='playlist'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasPlaylist) {
+                                        db.execSQL("INSERT OR IGNORE INTO playlist SELECT * FROM old_db.playlist")
+                                    }
+
+                                    val hasPlaylistSongMap = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='playlist_song_map'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasPlaylistSongMap) {
+                                        db.execSQL("INSERT OR IGNORE INTO playlist_song_map SELECT * FROM old_db.playlist_song_map")
+                                    }
+
+                                    val hasOldEvent = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='event'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasOldEvent) {
+                                        db.execSQL("""
+                                            INSERT INTO event (songId, timestamp, playTime)
+                                            SELECT o.songId, o.timestamp, o.playTime
+                                            FROM old_db.event o
+                                            WHERE NOT EXISTS (
+                                                SELECT 1 FROM event e
+                                                WHERE e.songId = o.songId AND e.timestamp = o.timestamp
+                                            )
+                                        """.trimIndent())
+                                    }
+
+                                    val hasSearch = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='search_history'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasSearch) {
+                                        db.execSQL("""
+                                            INSERT INTO search_history (query)
+                                            SELECT o.query FROM old_db.search_history o
+                                            WHERE NOT EXISTS (
+                                                SELECT 1 FROM search_history s WHERE s.query = o.query
+                                            )
+                                        """.trimIndent())
+                                    }
+
+                                    val hasLyrics = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='lyrics'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasLyrics) {
+                                        db.execSQL("INSERT OR IGNORE INTO lyrics SELECT * FROM old_db.lyrics")
+                                    }
+
+                                    val hasFormat = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='format'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasFormat) {
+                                        db.execSQL("INSERT OR IGNORE INTO format SELECT * FROM old_db.format")
+                                    }
+
+                                    val hasSpeedDial = db.rawQuery(
+                                        "SELECT name FROM old_db.sqlite_master WHERE type='table' AND name='speed_dial_item'", null
+                                    ).use { it.moveToFirst() }
+                                    if (hasSpeedDial) {
+                                        db.execSQL("INSERT OR IGNORE INTO speed_dial_item SELECT * FROM old_db.speed_dial_item")
+                                    }
+
+                                    db.setTransactionSuccessful()
+                                    Timber.tag("MusicDatabase").i("Non-destructively merged legacy mochy.db into $targetDbName")
+                                } finally {
+                                    db.endTransaction()
+                                    db.execSQL("PRAGMA foreign_keys = ON")
+                                }
+                            } finally {
+                                runCatching { db.execSQL("DETACH DATABASE old_db") }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("MusicDatabase").e(e, "Error during SQL attach merge, falling back to manual merge")
+                    runManualFallbackMerge(oldDb, newDb)
+                }
+
+                prefs.edit().putBoolean("legacy_db_merged_v2", true).apply()
             } catch (e: Exception) {
                 Timber.tag("MusicDatabase").e(e, "Failed to migrate legacy database")
+            }
+        }
+
+        private fun runManualFallbackMerge(oldDb: java.io.File, newDb: java.io.File) {
+            runCatching {
+                SQLiteDatabase.openDatabase(oldDb.path, null, SQLiteDatabase.OPEN_READONLY).use { old ->
+                    SQLiteDatabase.openDatabase(newDb.path, null, SQLiteDatabase.OPEN_READWRITE).use { new ->
+                        new.beginTransaction()
+                        try {
+                            old.rawQuery("SELECT * FROM song", null).use { c ->
+                                val cols = c.columnNames
+                                val placeholders = cols.joinToString(",") { "?" }
+                                val sql = "INSERT OR IGNORE INTO song (${cols.joinToString(",")}) VALUES ($placeholders)"
+                                val stmt = new.compileStatement(sql)
+                                while (c.moveToNext()) {
+                                    for (i in cols.indices) {
+                                        when (c.getType(i)) {
+                                            Cursor.FIELD_TYPE_NULL -> stmt.bindNull(i + 1)
+                                            Cursor.FIELD_TYPE_INTEGER -> stmt.bindLong(i + 1, c.getLong(i))
+                                            Cursor.FIELD_TYPE_FLOAT -> stmt.bindDouble(i + 1, c.getDouble(i))
+                                            Cursor.FIELD_TYPE_STRING -> stmt.bindString(i + 1, c.getString(i))
+                                            Cursor.FIELD_TYPE_BLOB -> stmt.bindBlob(i + 1, c.getBlob(i))
+                                        }
+                                    }
+                                    stmt.executeInsert()
+                                }
+                            }
+
+                            old.rawQuery("SELECT songId, timestamp, playTime FROM event", null).use { c ->
+                                val stmt = new.compileStatement(
+                                    "INSERT INTO event (songId, timestamp, playTime) SELECT ?, ?, ? " +
+                                    "WHERE NOT EXISTS (SELECT 1 FROM event WHERE songId = ? AND timestamp = ?)"
+                                )
+                                while (c.moveToNext()) {
+                                    val songId = c.getString(0)
+                                    val timestamp = c.getLong(1)
+                                    val playTime = c.getLong(2)
+                                    stmt.bindString(1, songId)
+                                    stmt.bindLong(2, timestamp)
+                                    stmt.bindLong(3, playTime)
+                                    stmt.bindString(4, songId)
+                                    stmt.bindLong(5, timestamp)
+                                    stmt.executeInsert()
+                                }
+                            }
+                            new.setTransactionSuccessful()
+                            Timber.tag("MusicDatabase").i("Fallback manual merge completed successfully")
+                        } finally {
+                            new.endTransaction()
+                        }
+                    }
+                }
+            }.onFailure {
+                Timber.tag("MusicDatabase").e(it, "Manual fallback merge also failed")
             }
         }
 

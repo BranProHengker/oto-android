@@ -1,5 +1,5 @@
-### What's New in Oto v1.2.3:
-- **Local Folder-Centric Audio**: Switched from phone-wide auto audio scanning to pure folder selection via system folder picker. Only songs in your chosen music folders are indexed.
-- **System Performance Overhaul**: Eliminated background recomposition storms and disk contention, making touch interactions, scrolling, and page transitions noticeably faster and smoother.
-- **Instant Cold Start**: Added persistent migration caching to eliminate redundant database checks on startup.
-- **SQLite Optimization**: Enforced effective WAL and normal synchronous mode via native SQL execution to prevent UI thread I/O lockups.
+### What's New in Oto v1.2.4:
+- **Listening History & Data Restored**: Non-destructively restored and merged all listening history events, playlists, liked tracks, and music metadata from legacy databases (`mochy.db` to `oto.db`).
+- **Zero-Loss Database Engine**: Replaced destructive file overwrites with transactional SQLite merging so future updates never reset or regress listening stats.
+- **Local Folder-Centric Audio**: Pure music directory selection via system folder picker, indexing only chosen music folders.
+- **System Performance Overhaul**: Lightweight, responsive UI across all screens with native SQLite WAL optimizations.

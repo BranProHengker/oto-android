@@ -45,10 +45,11 @@ object AppModule {
     fun provideInternalDatabase(
         @ApplicationContext context: Context,
     ): InternalDatabase {
-        co.oto.music.db.InternalDatabase.migrateLegacyDatabase(context)
+        val dbName = co.oto.music.link.tv.TvProfiles.databaseName(context)
+        co.oto.music.db.InternalDatabase.migrateLegacyDatabase(context, dbName)
         return Room
             // on a tv each profile has its own library; everywhere else this is the one database
-            .databaseBuilder(context, InternalDatabase::class.java, co.oto.music.link.tv.TvProfiles.databaseName(context))
+            .databaseBuilder(context, InternalDatabase::class.java, dbName)
         // The one list in MusicDatabase.kt. This copy used to be its own, stopped at 35 -> 36, and
         // every later version reached the phone as "no migration path" -> all tables dropped.
         .addMigrations(*co.oto.music.db.AllMigrations)
