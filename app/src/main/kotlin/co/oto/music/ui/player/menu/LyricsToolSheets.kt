@@ -76,6 +76,7 @@ import co.oto.music.utils.rememberPreference
 import co.oto.music.viewmodels.LyricsMenuViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import co.oto.music.ui.component.RemoteFocus
 

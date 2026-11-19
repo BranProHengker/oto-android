@@ -240,6 +240,7 @@ abstract class InternalDatabase : RoomDatabase() {
                     })
                     .build(),
             )
+        }
     }
 }
 

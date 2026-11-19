@@ -70,6 +70,7 @@ object AppModule {
             }
         })
         .build()
+    }
 
     @Singleton
     @Provides
