@@ -791,26 +791,22 @@ fun ProfileScreen(navController: NavController) {
                         Spacer(Modifier.height(24.dp))
                         ListeningTimeCard(totalListeningMs, onViewStats = { navController.navigate("stats") })
                         Spacer(Modifier.height(16.dp))
-                        val openDevSpace: (Int) -> Unit = { personIndex ->
-                            zoomOutState.dismissAll()
-                            navController.navigate("developer_space?person=$personIndex")
-                        }
                         val hasUpdate = updateState is co.oto.music.core.updater.UpdateState.Available
                         VersionCard(
                             updateHeadline = if (hasUpdate) UpdateHeadline else null,
-                            onCardClick = { zoomOutState.showUpdateSheet(updateState, onOpenDevSpace = openDevSpace) },
+                            onCardClick = { zoomOutState.showUpdateSheet(updateState) },
                             onPillClick = {
                                 if (hasUpdate) {
-                                    zoomOutState.showUpdateSheet(updateState, onOpenDevSpace = openDevSpace)
+                                    zoomOutState.showUpdateSheet(updateState)
                                 } else {
-                                    zoomOutState.showAboutSheet(onOpenDevSpace = openDevSpace)
+                                    zoomOutState.showAboutSheet()
                                 }
                             },
                         )
-                        Spacer(Modifier.height(16.dp))
-                        DeveloperCard(onClick = { navController.navigate("developer_space") })
-                        Spacer(Modifier.height(16.dp))
-                        DiscordCard(onClick = { context.openDevUrl(DiscordUrl) })
+                        if (DiscordUrl.isNotBlank()) {
+                            Spacer(Modifier.height(16.dp))
+                            DiscordCard(onClick = { context.openDevUrl(DiscordUrl) })
+                        }
                         Spacer(Modifier.height(28.dp))
                         Text(stringResource(R.string.profile_settings_title), style = PageTitle.copy(fontSize = 15.sp), modifier = Modifier.padding(start = 2.dp, bottom = 10.dp))
                         OpenSettingsRow(onClick = { navController.navigate("oto_settings") })

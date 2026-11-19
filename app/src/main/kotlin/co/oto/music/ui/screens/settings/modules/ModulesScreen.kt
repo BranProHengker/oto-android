@@ -63,7 +63,7 @@ const val ModuleRoutePattern = "module/{id}"
 fun moduleRoute(id: String) = "module/$id"
 
 /** how to make a module, the guide on oto's wiki */
-const val ModuleDocsUrl = "https://realidkroo.github.io/Oto-Music/wiki/#modules-types"
+const val ModuleDocsUrl = "https://github.com/BranProHengker/oto-android/tree/main/modules"
 
 private val CardShape = RoundedCornerShape(26.dp)
 

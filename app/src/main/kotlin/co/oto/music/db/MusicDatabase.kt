@@ -152,8 +152,71 @@ abstract class InternalDatabase : RoomDatabase() {
     companion object {
         const val DB_NAME = "oto.db"
 
-        fun newInstance(context: Context): MusicDatabase =
-            MusicDatabase(
+        fun migrateLegacyDatabase(context: Context) {
+            try {
+                val oldDb = context.getDatabasePath("mochy.db")
+                val newDb = context.getDatabasePath(DB_NAME)
+                if (!oldDb.exists()) return
+
+                var shouldMigrate = false
+                if (!newDb.exists()) {
+                    shouldMigrate = true
+                } else {
+                    try {
+                        val oldEvents = SQLiteDatabase.openDatabase(oldDb.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                            db.rawQuery("SELECT count(*) FROM event", null).use { c ->
+                                if (c.moveToFirst()) c.getInt(0) else 0
+                            }
+                        }
+                        val newEvents = SQLiteDatabase.openDatabase(newDb.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                            db.rawQuery("SELECT count(*) FROM event", null).use { c ->
+                                if (c.moveToFirst()) c.getInt(0) else 0
+                            }
+                        }
+                        val oldSongs = SQLiteDatabase.openDatabase(oldDb.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                            db.rawQuery("SELECT count(*) FROM song", null).use { c ->
+                                if (c.moveToFirst()) c.getInt(0) else 0
+                            }
+                        }
+                        val newSongs = SQLiteDatabase.openDatabase(newDb.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                            db.rawQuery("SELECT count(*) FROM song", null).use { c ->
+                                if (c.moveToFirst()) c.getInt(0) else 0
+                            }
+                        }
+                        if (oldEvents > newEvents || oldSongs > newSongs) {
+                            shouldMigrate = true
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("MusicDatabase").e(e, "Error checking db counts for migration")
+                        if (newDb.length() < oldDb.length()) {
+                            shouldMigrate = true
+                        }
+                    }
+                }
+
+                if (shouldMigrate) {
+                    val oldWal = java.io.File(oldDb.parentFile, "${oldDb.name}-wal")
+                    val oldShm = java.io.File(oldDb.parentFile, "${oldDb.name}-shm")
+                    val newWal = java.io.File(newDb.parentFile, "${newDb.name}-wal")
+                    val newShm = java.io.File(newDb.parentFile, "${newDb.name}-shm")
+
+                    if (newDb.exists()) newDb.delete()
+                    if (newWal.exists()) newWal.delete()
+                    if (newShm.exists()) newShm.delete()
+
+                    oldDb.copyTo(newDb, overwrite = true)
+                    if (oldWal.exists()) oldWal.copyTo(newWal, overwrite = true)
+                    if (oldShm.exists()) oldShm.copyTo(newShm, overwrite = true)
+                    Timber.tag("MusicDatabase").i("Migrated legacy mochy.db to oto.db successfully")
+                }
+            } catch (e: Exception) {
+                Timber.tag("MusicDatabase").e(e, "Failed to migrate legacy database")
+            }
+        }
+
+        fun newInstance(context: Context): MusicDatabase {
+            migrateLegacyDatabase(context)
+            return MusicDatabase(
                 delegate =
                 Room
                     .databaseBuilder(context, InternalDatabase::class.java, DB_NAME)

@@ -249,16 +249,37 @@ fun LyricsProviderSheet(onDismiss: () -> Unit) {
     val sources by viewModel.sources.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    val lrcPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri: android.net.Uri? ->
+        val metadata = mediaMetadata
+        if (uri != null && metadata != null) {
+            val content = co.oto.music.lyrics.SidecarLyrics.readFromUri(context, uri)
+            if (!content.isNullOrBlank()) {
+                viewModel.useLocalLyrics(metadata, content, co.oto.music.lyrics.SidecarLyrics.Provider)
+                onDismiss()
+            }
+        }
+    }
+
     var sidecarLyrics by remember { mutableStateOf<String?>(null) }
     var embeddedLyrics by remember { mutableStateOf<String?>(null) }
 
-    androidx.compose.runtime.LaunchedEffect(mediaMetadata?.localUri) {
-        val uriStr = mediaMetadata?.localUri
-        if (uriStr != null) {
-            val uri = android.net.Uri.parse(uriStr)
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                sidecarLyrics = co.oto.music.lyrics.SidecarLyrics.find(context, uri)
-                embeddedLyrics = co.oto.music.lyrics.readEmbeddedLyrics(context, uri)
+    androidx.compose.runtime.LaunchedEffect(mediaMetadata?.id, mediaMetadata?.localUri) {
+        val metadata = mediaMetadata
+        if (metadata != null) {
+            val uriStr = metadata.localUri ?: kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                viewModel.database.song(metadata.id).firstOrNull()?.song?.localUri
+            }
+            if (uriStr != null) {
+                val uri = android.net.Uri.parse(uriStr)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    sidecarLyrics = co.oto.music.lyrics.SidecarLyrics.find(context, uri)
+                    embeddedLyrics = co.oto.music.lyrics.readEmbeddedLyrics(context, uri)
+                }
+            } else {
+                sidecarLyrics = null
+                embeddedLyrics = null
             }
         } else {
             sidecarLyrics = null
@@ -305,16 +326,44 @@ fun LyricsProviderSheet(onDismiss: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(14.dp))
 
-            // your own file sits above every source and, like tapping one, takes over straight away
-            LyricsFileBox(
-                picked = null,
-                onPicked = { file ->
-                    mediaMetadata?.let { viewModel.saveLyrics(it.id, file.text) }
-                    TopToaster.show(text = addedText, iconRes = R.drawable.lyrics)
-                    closeSheet()
-                },
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+            // Action to pick custom .lrc file from storage
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MenuRowSurface)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = RemoteFocus,
+                    ) {
+                        lrcPicker.launch(arrayOf("*/*"))
+                    }
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.add),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Pick Local .lrc File",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Select .lrc from device storage",
+                        color = Color(0xFF9A9A9A),
+                        fontSize = 11.sp,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
 
             sidecarLyrics?.let { sidecarText ->
                 val isSidecarActive = active == co.oto.music.lyrics.SidecarLyrics.Provider

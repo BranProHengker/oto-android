@@ -228,7 +228,7 @@ if [ "$PUBLISH_RELEASE" = true ]; then
         gh release create dev "$OUTPUT_DIR"/oto-"$BASE_VERSION"-*.apk --title "$TITLE" --notes "$CHANGELOG_TEXT" --prerelease
     fi
 
-    echo "Release successfully published to https://github.com/realidkroo/Oto-Music/releases/tag/dev"
+    echo "Release successfully published to https://github.com/BranProHengker/oto-android/releases/tag/dev"
 fi
 
 # install and launch

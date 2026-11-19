@@ -37,7 +37,7 @@ object BetterLyrics {
             }
 
             // says who's asking so the server owner can reach us instead of blocking us
-            install(UserAgent) { agent = "Oto (+https://github.com/realidkroo/Oto-Music)" }
+            install(UserAgent) { agent = "Oto (+https://github.com/BranProHengker/oto-android)" }
 
             expectSuccess = false
         }

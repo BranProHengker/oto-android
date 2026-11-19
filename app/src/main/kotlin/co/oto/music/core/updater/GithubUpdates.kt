@@ -234,18 +234,7 @@ private suspend fun fetchReleases(): Result<List<ParsedRelease>> = withContext(D
 fun isNewerThanInstalled(candidateVersionText: String, publishedAt: String = ""): Boolean {
     val candidate = parseFullVersion(candidateVersionText)
     val installed = parseFullVersion(BuildConfig.VERSION_NAME)
-    if (candidate > installed) return true
-    if (candidate == installed && publishedAt.isNotBlank()) {
-        val publishedMillis = runCatching {
-            java.time.Instant.parse(publishedAt).toEpochMilli()
-        }.getOrNull()
-        if (publishedMillis != null && BuildConfig.BUILD_TIME_MILLIS > 0L &&
-            publishedMillis > (BuildConfig.BUILD_TIME_MILLIS + 60_000L)
-        ) {
-            return true
-        }
-    }
-    return false
+    return candidate > installed
 }
 
 suspend fun downloadApk(

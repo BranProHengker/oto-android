@@ -160,22 +160,22 @@ private const val IconCircleRadius = 80f / 288f * 235f
 
 // the system splash draws an icon with no background at 288dp, masked to a 192dp circle
 private val SplashIconSize = 288.dp
-private const val SplashViewport = 235f
+private const val SplashViewport = 256f
 private const val SplashMaskRadius = 96f / 288f * SplashViewport
 
-// ic_splash_mark and ic_oto_mark are the same shapes; the splash one sits 58,48 further in
-private val MarkOffset = Offset(58f, 48f)
-private const val MarkViewportWidth = 128f
-private const val MarkViewportHeight = 139f
+// ic_splash_mark and ic_oto_mark use the 256x256 viewport
+private val MarkOffset = Offset(0f, 0f)
+private const val MarkViewportWidth = 256f
+private const val MarkViewportHeight = 256f
 
 // the splash viewport's centre: the point the flight scales around
 private val Pivot = Offset(SplashViewport / 2f, SplashViewport / 2f)
 
-// everything the marks draw, plus room for the blur, in splash units
-private val ArtBounds = RectF(44f, 36f, 204f, 200f)
+// everything the mark draws, plus room for the blur, in splash units
+private val ArtBounds = RectF(0f, 0f, 256f, 256f)
 
-// the layer the blur runs on: the marks, and the anime icon's circle as it winds up
-private val LayerBounds = RectF(28f, 28f, 207f, 207f)
+// the layer the blur runs on: the mark, and the icon's circle as it winds up
+private val LayerBounds = RectF(0f, 0f, 256f, 256f)
 
 @Stable
 class LaunchIntroState internal constructor(
@@ -451,58 +451,22 @@ private fun Density.placementAt(state: LaunchIntroState, size: IntSize): MarkPla
     return MarkPlacement(origin = pivot - Pivot * unit, unit = unit)
 }
 
-/** the two marks, in the splash drawable's units, ready to draw at any scale */
+/** the Oto mark, in the splash drawable's units, ready to draw at any scale */
 private class LaunchMarkArt {
-    private val triangle = path(
-        "M163.5 96.3493C180.167 105.972 180.167 130.028 163.5 139.651L108 171.694C91.3333 181.316 " +
-            "70.5 169.288 70.5 150.043V85.9569C70.5 66.7119 91.3333 54.6838 108 64.3063L163.5 96.3493Z"
-    )
-    // the face: the little chevron and the smile under it
-    private val face = path("M97 112L108.5 98L120 112M110.325 125C111.871 133.439 121.868 148.704 142.944 149.92")
-    private val mask = Path().apply { addCircle(Pivot.x, Pivot.y, SplashMaskRadius, Path.Direction.CW) }
+    private val mark = path(
+        "M96,112C69.49,112 48,133.49 48,160C48,186.51 69.49,208 96,208C122.51,208 144,186.51 144,160L144,68C144,63.58 147.58,60 152,60C178,60 204,74 216,100C218,104.5 215,110 210,110C205.5,110 202.5,106.5 198,100C188,84 168,76 156,76L156,160C156,186.51 134.51,208 108,208C77.07,208 52,182.93 52,152C52,121.07 77.07,96 108,96C118,96 128,99 136,104L136,124C126,116.5 112,112 96,112ZM96,132C80.54,132 68,144.54 68,160C68,175.46 80.54,188 96,188C111.46,188 124,175.46 124,160C124,144.54 111.46,132 96,132Z"
+    ).apply { fillType = Path.FillType.EVEN_ODD }
 
-    // ic_splash_mark: a white shape with a dark outline and a dark face
     private val fill = paint(android.graphics.Color.WHITE) { style = Paint.Style.FILL }
-    private val darkOutline = paint(0xFF212121.toInt()) {
-        style = Paint.Style.STROKE
-        strokeWidth = 19f
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val darkFace = paint(0xFF212121.toInt()) {
-        style = Paint.Style.STROKE
-        strokeWidth = 11f
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-
-    // ic_oto_mark: the same outline and face, white, nothing filled
-    private val lightOutline = paint(android.graphics.Color.WHITE) {
-        style = Paint.Style.STROKE
-        strokeWidth = 19f
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val lightFace = paint(android.graphics.Color.WHITE) {
-        style = Paint.Style.STROKE
-        strokeWidth = 11f
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
 
     fun draw(canvas: android.graphics.Canvas, filledAlpha: Float, outlineAlpha: Float, filledScale: Float = 1f) {
-        // each mark is faded as a whole, so its overlapping strokes never show through each other
-        if (filledAlpha > 0.002f) {
-            canvas.saveLayerAlpha(LayerBounds, (filledAlpha * 255f).toInt())
-            canvas.scale(filledScale, filledScale, Pivot.x, Pivot.y)
-            canvas.clipPath(mask)
-            canvas.drawPath(triangle, fill)
-            canvas.drawPath(triangle, darkOutline)
-            canvas.drawPath(face, darkFace)
-            canvas.restore()
-        }
-        if (outlineAlpha > 0.002f) {
-            canvas.saveLayerAlpha(ArtBounds, (outlineAlpha * 255f).toInt())
-            canvas.drawPath(triangle, lightOutline)
-            canvas.drawPath(face, lightFace)
+        val alpha = maxOf(filledAlpha, outlineAlpha)
+        if (alpha > 0.002f) {
+            canvas.saveLayerAlpha(LayerBounds, (alpha * 255f).toInt())
+            if (filledScale != 1f) {
+                canvas.scale(filledScale, filledScale, Pivot.x, Pivot.y)
+            }
+            canvas.drawPath(mark, fill)
             canvas.restore()
         }
     }
