@@ -69,7 +69,7 @@ fun LyricsReadings(
             // the pieces first, so whoever sees the reading land finds its timing already there
             entry.romanizedWordsFlow.value = reading?.words
             entry.rubyFlow.value = reading?.ruby
-            entry.romanizedTextFlow.value = reading?.text
+            entry.romanizedTextFlow.value = reading?.text ?: entry.initialRomanizedText
         }
     }
 
@@ -242,14 +242,16 @@ suspend fun readSong(
 
     // one line after another, never a coroutine each: sixty kuromoji runs at once stalled the player opening a japanese song
     lines.forEachIndexed { index, entry ->
-        if (entry.text.isBlank()) {
-            onLine(index, null)
+        if (entry.text.isBlank() || LyricsUtils.isLatinOnly(entry.text)) {
+            val reading = entry.initialRomanizedText?.takeIf { !LyricsUtils.isEssentiallySame(it, entry.text) }
+            onLine(index, LineReading(reading, null, null))
         } else {
             // japanese and chinese get ruby over each word like furigana; alphabets only get a line underneath
             val ruby = LyricsUtils.rubyFor(entry.text, script)
             // the whole line's reading too, ruby or not: it's what the line says when the romanisation is shown as the line itself
             val romanized = if (ruby != null) LyricsUtils.readingLine(entry.text, ruby) else romanizeOne(entry.text)
-            val reading = romanized?.takeIf { it.isNotBlank() && it != entry.text }
+            val candidate = romanized ?: entry.initialRomanizedText
+            val reading = candidate?.takeIf { it.isNotBlank() && !LyricsUtils.isEssentiallySame(it, entry.text) }
             val pieces = entry.syllables ?: entry.words
             val words = if (reading != null && !pieces.isNullOrEmpty()) {
                 LyricsUtils.romanizedWords(entry.text, pieces, ruby) { romanizeOne(it) }
@@ -299,13 +301,17 @@ fun rememberShownLyric(entry: LyricsEntry): ShownLyric {
     val translated by entry.translatedTextFlow.collectAsState()
     val translation = translated?.takeIf { it.isNotBlank() }
     return remember(entry, asMain, romanized, romanizedWords, ruby, translation) {
-        val reading = romanized?.takeIf { it.isNotBlank() }
+        val reading = romanized?.takeIf { it.isNotBlank() && !LyricsUtils.isEssentiallySame(it, entry.text) }
+        val cleanTranslation = translation?.takeIf {
+            !LyricsUtils.isEssentiallySame(it, entry.text) && (reading == null || !LyricsUtils.isEssentiallySame(it, reading))
+        }
         if (asMain && reading != null) {
             // the romanised pieces carry the timing, so the line sings letter by letter the same way; without them it rises whole
-            ShownLyric(entry.copy(text = reading, words = romanizedWords, syllables = null), subLine = entry.text, ruby = null, translation = translation)
+            ShownLyric(entry.copy(text = reading, words = romanizedWords, syllables = null), subLine = entry.text, ruby = null, translation = cleanTranslation)
         } else {
             // ruby carries the reading over the words, so a line under it would only say it twice
-            ShownLyric(entry, subLine = if (ruby.isNullOrEmpty()) reading else null, ruby = ruby, translation = translation)
+            val subLine = if (ruby.isNullOrEmpty()) reading else null
+            ShownLyric(entry, subLine = subLine?.takeIf { !LyricsUtils.isEssentiallySame(it, entry.text) }, ruby = ruby, translation = cleanTranslation)
         }
     }
 }

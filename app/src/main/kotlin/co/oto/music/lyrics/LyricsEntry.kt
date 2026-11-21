@@ -41,6 +41,8 @@ data class LyricsEntry(
      * pieces. The main lyrics style sweeps along the line's own text and wants these.
      */
     val syllables: List<WordTimestamp>? = null,
+    val initialRomanizedText: String? = null,
+    val initialTranslation: String? = null,
 ) : Comparable<LyricsEntry> {
     override fun compareTo(other: LyricsEntry): Int = (time - other.time).toInt()
 

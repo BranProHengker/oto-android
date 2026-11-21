@@ -411,7 +411,8 @@ object LyricsUtils {
         } else {
             parseStandardLyrics(lines)
         }
-        return fixWordSpacing(parsed)
+        val merged = mergeBilingualLyrics(parsed)
+        return fixWordSpacing(merged)
     }
 
     // the last few songs' parsed lines, never handed out themselves, since each caller fills its own reading flows
@@ -425,9 +426,9 @@ object LyricsUtils {
             ?: parseLyrics(lyrics).also { parsed -> synchronized(parsedCache) { parsedCache[lyrics] = parsed } }
         return template.map { entry ->
             entry.copy(
-                romanizedTextFlow = MutableStateFlow(null),
+                romanizedTextFlow = MutableStateFlow(entry.initialRomanizedText),
                 rubyFlow = MutableStateFlow(null),
-                translatedTextFlow = MutableStateFlow(null),
+                translatedTextFlow = MutableStateFlow(entry.initialTranslation),
                 romanizedWordsFlow = MutableStateFlow(null),
             )
         }
@@ -645,8 +646,7 @@ object LyricsUtils {
                 val nextFractionPart = if (nextMatch.groupValues[3].length == 3) nextFraction / 1000.0 else nextFraction / 100.0
                 nextMinutes * 60.0 + nextSeconds + nextFractionPart
             } else {
-
-                val nextLineTime = getNextLineStartTime(currentIndex, allLines)
+                val nextLineTime = getNextLineStartTime(currentIndex, allLines, startTimeSeconds)
                 nextLineTime ?: (startTimeSeconds + 0.5)
             }
 
@@ -658,18 +658,111 @@ object LyricsUtils {
         return if (wordTimings.isNotEmpty()) wordTimings else null
     }
 
-    private fun getNextLineStartTime(currentIndex: Int, allLines: List<String>): Double? {
-        if (currentIndex + 1 >= allLines.size) return null
+    private fun getNextLineStartTime(currentIndex: Int, allLines: List<String>, currentLineTime: Double? = null): Double? {
+        for (i in (currentIndex + 1) until allLines.size) {
+            val nextLine = allLines[i].trim()
+            val matchResult = RICH_SYNC_LINE_REGEX.matchEntire(nextLine) ?: continue
 
-        val nextLine = allLines[currentIndex + 1].trim()
-        val matchResult = RICH_SYNC_LINE_REGEX.matchEntire(nextLine) ?: return null
+            val minutes = matchResult.groupValues[1].toLongOrNull() ?: continue
+            val seconds = matchResult.groupValues[2].toLongOrNull() ?: continue
+            val fraction = matchResult.groupValues[3].toLongOrNull() ?: 0L
+            val fractionPart = if (matchResult.groupValues[3].length == 3) fraction / 1000.0 else fraction / 100.0
+            val lineTime = minutes * 60.0 + seconds + fractionPart
+            if (currentLineTime == null || lineTime > currentLineTime) {
+                return lineTime
+            }
+        }
+        return null
+    }
 
-        val minutes = matchResult.groupValues[1].toLongOrNull() ?: return null
-        val seconds = matchResult.groupValues[2].toLongOrNull() ?: return null
-        val fraction = matchResult.groupValues[3].toLongOrNull() ?: 0L
+    fun isEssentiallySame(a: String?, b: String?): Boolean {
+        if (a.isNullOrBlank() || b.isNullOrBlank()) return false
+        val normA = a.filter { it.isLetterOrDigit() }.lowercase(java.util.Locale.ROOT)
+        val normB = b.filter { it.isLetterOrDigit() }.lowercase(java.util.Locale.ROOT)
+        return normA.isNotEmpty() && normA == normB
+    }
 
-        val fractionPart = if (matchResult.groupValues[3].length == 3) fraction / 1000.0 else fraction / 100.0
-        return minutes * 60.0 + seconds + fractionPart
+    fun isLatinOnly(text: String): Boolean {
+        val clean = text.filter { it.isLetter() }
+        return clean.isNotEmpty() && clean.all { it.code < 0x250 || it in '\u00C0'..'\u024F' }
+    }
+
+    fun hasNonLatin(text: String): Boolean {
+        return text.any { it.isLetter() && (it.code >= 0x250 && it !in '\u00C0'..'\u024F') }
+    }
+
+    internal fun mergeBilingualLyrics(entries: List<LyricsEntry>): List<LyricsEntry> {
+        if (entries.size < 2 || isUnsynced(entries)) return entries
+
+        val result = ArrayList<LyricsEntry>(entries.size)
+        var i = 0
+        while (i < entries.size) {
+            val cur = entries[i]
+            if (i + 1 < entries.size && cur.time == entries[i + 1].time) {
+                val next = entries[i + 1]
+                // If they have distinct singers or one is backing vocal, keep both
+                if (cur.isBackground || next.isBackground ||
+                    (cur.agent != null && next.agent != null && cur.agent != next.agent)
+                ) {
+                    result.add(cur)
+                    i++
+                    continue
+                }
+
+                // Determine primary vs secondary
+                val primary: LyricsEntry
+                val secondary: LyricsEntry
+                when {
+                    !cur.words.isNullOrEmpty() && next.words.isNullOrEmpty() -> {
+                        primary = cur
+                        secondary = next
+                    }
+                    cur.words.isNullOrEmpty() && !next.words.isNullOrEmpty() -> {
+                        primary = next
+                        secondary = cur
+                    }
+                    hasNonLatin(cur.text) && isLatinOnly(next.text) -> {
+                        primary = cur
+                        secondary = next
+                    }
+                    isLatinOnly(cur.text) && hasNonLatin(next.text) -> {
+                        primary = next
+                        secondary = cur
+                    }
+                    else -> {
+                        primary = cur
+                        secondary = next
+                    }
+                }
+
+                val secText = secondary.text.trim()
+                if (isEssentiallySame(primary.text, secText)) {
+                    // Exact duplicate text under the same timestamp - drop secondary
+                    result.add(primary)
+                } else if (hasNonLatin(primary.text) && isLatinOnly(secText)) {
+                    // Primary is non-Latin (e.g. Japanese Kanji/Kana), secondary is Latin (Romaji)
+                    result.add(
+                        primary.copy(
+                            initialRomanizedText = secText,
+                            romanizedTextFlow = MutableStateFlow(secText),
+                        )
+                    )
+                } else {
+                    // Secondary is a translation line
+                    result.add(
+                        primary.copy(
+                            initialTranslation = secText,
+                            translatedTextFlow = MutableStateFlow(secText),
+                        )
+                    )
+                }
+                i += 2
+            } else {
+                result.add(cur)
+                i++
+            }
+        }
+        return result
     }
 
     private fun parseStandardLyrics(lines: List<String>): List<LyricsEntry> {
