@@ -17,7 +17,7 @@
 </div>
 
 > [!NOTE]
-> **Oto Android** is the mobile companion to the [Oto Desktop](https://github.com/BranProHengker/oto) music player. Designed from the ground up for a fast, responsive, and privacy-respecting listening experience with zero accounts required.
+> **Oto Android** is the mobile companion to the [Oto Desktop](https://github.com/BranProHengker/oto) music player, forked from [Mochy Music](https://github.com/realidkroo/mochy-music) by realidkroo. Designed from the ground up for a fast, responsive, and privacy-respecting listening experience with zero accounts required.
 
 ---
 
@@ -80,7 +80,7 @@ Compiled APKs will be located at:
 Oto Android builds upon open-source foundations:
 
 - [Oto](https://github.com/BranProHengker/oto) — Original desktop music player (Rust & GPUI).
-- [Oto-Music](https://github.com/BranProHengker/oto-android) — Base Android player framework and UI foundations.
+- [Mochy Music](https://github.com/realidkroo/mochy-music) — Upstream Android player framework and UI foundations by realidkroo.
 - [ViviMusic](https://github.com/vivizzz007/vivi-music) — Upstream player architecture.
 - [Metrolist](https://github.com/mostafaalagamy/Metrolist) — Upstream base player foundations.
 - [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) — YouTube stream extraction.

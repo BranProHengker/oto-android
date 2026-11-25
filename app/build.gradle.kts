@@ -1,3 +1,4 @@
+// Started life as a fork of Mochy Music (https://github.com/realidkroo/mochy-music) by realidkroo.
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.android.build.api.dsl.ApplicationExtension
 import java.util.Properties

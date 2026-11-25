@@ -1,4 +1,5 @@
 // App.kt
+// Built on top of Mochy Music (https://github.com/realidkroo/mochy-music) by realidkroo.
 
 package co.oto.music
 
