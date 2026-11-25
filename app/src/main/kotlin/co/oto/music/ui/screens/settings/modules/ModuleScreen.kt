@@ -99,13 +99,29 @@ fun ModuleScreen(navController: NavController, id: String, viewModel: ModulesVie
                 Spacer(Modifier.height(BannerHeight))
                 return@Column
             }
-            ModuleBanner(entry)
+            ModuleBanner(entry.banner, entry.icon)
             Column(Modifier.padding(horizontal = 20.dp)) {
                 ModuleHeader(entry)
                 Spacer(Modifier.height(20.dp))
                 Box(Modifier.fillMaxWidth().padding(horizontal = 4.dp).height(1.dp).background(Color.White.copy(alpha = 0.3f)))
                 Spacer(Modifier.height(20.dp))
-                EnableCard(entry) { viewModel.setEnabled(id, it) }
+                EnableCard(entry) { turningOn ->
+                    val needsWarn = turningOn &&
+                        (entry.origin is co.oto.music.modules.ModuleOrigin.Code || entry.module is ItemListModule) &&
+                        !viewModel.hasAcknowledgedScriptWarning(id)
+                    if (needsWarn) {
+                        overlay.showScriptWarningSheet(
+                            targetName = entry.module.info.name,
+                            isCodeModule = entry.origin is co.oto.music.modules.ModuleOrigin.Code,
+                            onContinue = {
+                                viewModel.acknowledgeScriptWarning(id)
+                                viewModel.setEnabled(id, true)
+                            },
+                        )
+                    } else {
+                        viewModel.setEnabled(id, turningOn)
+                    }
+                }
                 Spacer(Modifier.height(10.dp))
                 InfoCard(entry, onRaise = { viewModel.raise(id) })
                 UpdateCard(
@@ -157,7 +173,7 @@ fun ModuleScreen(navController: NavController, id: String, viewModel: ModulesVie
 
 /** the module's banner, or its icon blown up and blurred when it has none, fading into the page */
 @Composable
-private fun ModuleBanner(entry: ModuleEntry) {
+internal fun ModuleBanner(banner: String?, icon: String?) {
     val fade = Brush.verticalGradient(0f to Color.Black, 0.55f to Color.Black, 1f to Color.Transparent)
     Box(
         Modifier
@@ -170,8 +186,6 @@ private fun ModuleBanner(entry: ModuleEntry) {
                 drawRect(fade, blendMode = BlendMode.DstIn)
             },
     ) {
-        val banner = entry.banner
-        val icon = entry.icon
         when {
             banner != null -> AsyncImage(
                 model = artModel(banner), contentDescription = null, contentScale = ContentScale.Crop,
@@ -203,7 +217,7 @@ private fun ModuleHeader(entry: ModuleEntry) {
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            info.description, fontFamily = InterFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+            builtInModuleDescription(entry), fontFamily = InterFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
             lineHeight = 20.sp, color = Color.White.copy(alpha = 0.92f),
         )
         Spacer(Modifier.height(8.dp))
@@ -212,14 +226,14 @@ private fun ModuleHeader(entry: ModuleEntry) {
 }
 
 // lays its content [by] higher than it would sit and takes that much less room, so it overlaps what's above
-private fun Modifier.pullUp(by: Dp): Modifier = layout { measurable, constraints ->
+internal fun Modifier.pullUp(by: Dp): Modifier = layout { measurable, constraints ->
     val placeable = measurable.measure(constraints)
     val lift = by.roundToPx()
     layout(placeable.width, (placeable.height - lift).coerceAtLeast(0)) { placeable.place(0, -lift) }
 }
 
 @Composable
-private fun BackButton(onClick: () -> Unit) {
+internal fun BackButton(onClick: () -> Unit) {
     val top = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     Box(
         modifier = Modifier

@@ -16,12 +16,16 @@ import co.oto.music.R
 import co.oto.music.scrobble.ScrobbleSite
 import co.oto.music.ui.component.SubSettingsScaffold
 import co.oto.music.ui.screens.settings.importsync.YouTubeSyncRoute
+import co.oto.music.ui.screens.settings.integrations.backup.BackupRoute
 import co.oto.music.ui.screens.settings.integrations.discord.DiscordRoute
 
 const val IntegrationsRoute = "integrations_settings"
 
 // the youtube music logo is a red disc, this fills its corners so it sits as a tile like the others
 private val YouTubeMusicRed = Color(0xFFFF0000)
+
+// backup has no brand of its own, so its white cloud sits on a plain blue tile
+private val BackupBlue = Color(0xFF2F7CF6)
 
 @Composable
 fun IntegrationsScreen(navController: NavController) {
@@ -54,6 +58,14 @@ fun IntegrationsScreen(navController: NavController) {
                 icon = R.drawable.provider_youtube_music,
                 iconBackground = YouTubeMusicRed,
                 onClick = { navController.navigate(YouTubeSyncRoute) },
+            )
+            IntegrationRow(
+                name = stringResource(R.string.integration_backup_name),
+                description = stringResource(R.string.integration_backup_desc),
+                icon = R.drawable.backup,
+                iconBackground = BackupBlue,
+                iconPadding = 7.dp,
+                onClick = { navController.navigate(BackupRoute) },
             )
         }
 

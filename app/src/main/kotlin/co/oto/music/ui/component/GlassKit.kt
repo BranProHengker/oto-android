@@ -47,6 +47,17 @@ class GlassState {
      */
     var renderNode by mutableStateOf<Any?>(null)
     var rootPosition by mutableStateOf(Offset.Zero)
+
+    // drops the recorded screen display list when the window hides so gpu textures can be reclaimed
+    fun discard() {
+        val node = renderNode ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) glassNodeDiscard(node)
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.Q)
+private fun glassNodeDiscard(node: Any) {
+    (node as RenderNode).discardDisplayList()
 }
 
 /*
@@ -232,7 +243,8 @@ internal fun glassDownscale(effectiveRadius: Float, low: Boolean = false): Int =
     // low quality drops a step sooner: a little softer, a quarter of the pixels to draw and blur
     low && effectiveRadius >= 32f -> 4
     effectiveRadius >= 16f -> 2
-    low && effectiveRadius >= 8f -> 2
+    // the faint first steps of a low progressive bar are its biggest, and drawn at full size they cost the most for a blur you can hardly see
+    low && effectiveRadius >= 2f -> 2
     else -> 1
 }
 
@@ -550,10 +562,10 @@ fun ProgressiveGlassBackground(
         }
         return
     }
-    val smooth = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-        LocalBlurQuality.current == co.oto.music.constants.BlurQuality.HIGH
+    // low quality too: its stacked steps each drew and blurred the list again, three to five times per scroll frame
+    val smooth = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
     if (smooth) {
-        // high quality: one pass whose radius grows row by row, faded in where the first step used to fade in
+        // one pass whose radius grows row by row, faded in where the first step used to fade in (low draws it in one band, see BandPlan)
         val fade = 1f / steps.coerceAtLeast(1)
         val mask = remember(direction, fade) {
             if (direction == BlurDirection.TopToBottom) {

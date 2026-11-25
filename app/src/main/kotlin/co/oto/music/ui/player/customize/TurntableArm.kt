@@ -176,9 +176,10 @@ fun TurntableArm(
     val failureLabel by co.oto.music.ui.player.rememberStreamFailureLabel(failureProgress)
 
     val measurer = rememberTextMeasurer(cacheSize = 16)
-    val labelStyle = remember {
+    val fontFamily = co.oto.music.ui.theme.InterFontFamily
+    val labelStyle = remember(fontFamily) {
         TextStyle(
-            fontFamily = co.oto.music.ui.theme.InterFontFamily,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = 11.sp,
             color = Color.White,

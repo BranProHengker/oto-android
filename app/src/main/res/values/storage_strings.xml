@@ -12,6 +12,7 @@
     <string name="storage_legend_cache">Cache</string>
     <string name="storage_legend_downloads">Downloaded music &amp; local</string>
     <string name="storage_legend_database">Database</string>
+    <string name="storage_legend_local_covers">Local song covers</string>
     <string name="storage_legend_app_data">App data</string>
 
     <!-- cutting the junk -->
@@ -33,6 +34,11 @@
     <string name="storage_clear_cache_title">Clear the cache?</string>
     <string name="storage_clear_cache_message">Songs kept from streaming and saved cover pictures are deleted. They come back as you play and browse. Your library and your downloads stay as they are.</string>
     <string name="storage_clear_cache_action">Clear cache</string>
+    <string name="storage_clear_local_covers">Clear local song covers</string>
+    <string name="storage_local_covers_detail">%1$s of pictures saved from your music files</string>
+    <string name="storage_clear_local_covers_title">Clear local song covers?</string>
+    <string name="storage_clear_local_covers_message">The pictures Oto saved from your music files are deleted. Your songs and the original files are not touched. A song gets its picture back when you play it, and Library → Local → Re-scan brings back all of them.</string>
+    <string name="storage_clear_local_covers_action">Clear covers</string>
     <string name="storage_manage_downloads">Manage downloads</string>
 
     <!-- where things are saved, and exporting songs -->
@@ -74,6 +80,11 @@
     <string name="storage_export_covers">Cover pictures</string>
     <string name="storage_export_lyrics">Lyrics</string>
     <string name="storage_export_pick">Pick a folder</string>
+    <string name="storage_export_destination">Where to export</string>
+    <string name="storage_export_to_card">Export to %1$s</string>
+    <string name="storage_export_card_detail">Saves into oto-preserve on your memory card</string>
+    <string name="storage_export_pick_folder">Another folder</string>
+    <string name="storage_export_pick_folder_detail">Choose any folder on this phone or a memory card</string>
     <string name="storage_export_progress">Exporting… %1$d of %2$d</string>
     <string name="storage_export_starting">Getting the songs ready…</string>
     <string name="storage_export_failed">The export stopped partway. Check the folder you picked and try again.</string>

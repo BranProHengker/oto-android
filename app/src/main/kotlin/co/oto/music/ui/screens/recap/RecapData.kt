@@ -5,7 +5,9 @@
 
 package co.oto.music.ui.screens.recap
 
+import android.content.Context
 import androidx.compose.runtime.Immutable
+import co.oto.music.R
 import co.oto.music.db.MusicDatabase
 import co.oto.music.db.RecapEventRow
 import co.oto.music.db.entities.Song
@@ -17,6 +19,7 @@ import java.time.LocalDateTime
 import java.time.Month
 import java.time.ZoneOffset
 import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -37,6 +40,9 @@ data class StatsRange(val kind: Kind, val year: Int, val month: Int = 1) {
 
     /** What the recap calls the period: "October", or "2026" for a whole year. */
     val label: String get() = if (kind == Kind.Month) monthName else "$year"
+
+    fun previous(): StatsRange =
+        if (kind == Kind.Month) monthOf(start.minusMonths(1)) else StatsRange(Kind.Year, year - 1)
 
     /** Days in the month, or 12 for a year: how many buckets [ListeningStats.bucketMs] has. */
     val bucketCount: Int get() = if (kind == Kind.Month) start.lengthOfMonth() else 12
@@ -69,6 +75,22 @@ data class RecapArtist(
     val topSong: RecapSong?,
 )
 
+// the one day a single song got played the most, if it's at least a few times
+@Immutable
+data class RepeatDay(val song: RecapSong, val date: LocalDate, val plays: Int)
+
+// when and how steadily the listening happened, for the habits card
+@Immutable
+data class ListeningHabits(
+    val activeDays: Int,
+    val elapsedDays: Int,
+    val longestStreak: Int,
+    val biggestDay: LocalDate?,
+    val biggestDayMs: Long,
+    val longestSessionMs: Long,
+    val longestSessionStart: LocalDateTime?,
+)
+
 @Immutable
 class ListeningStats(
     val range: StatsRange,
@@ -87,6 +109,15 @@ class ListeningStats(
     val hourMs: List<Long>,
     /** Listening time per day of the month, or per month of the year. */
     val bucketMs: List<Long>,
+    val habits: ListeningHabits? = null,
+    // songs never played before this period, best first, with how many there were and how long they played
+    val newSongs: List<RecapSong> = emptyList(),
+    val newSongCount: Int = 0,
+    val newMs: Long = 0L,
+    val repeat: RepeatDay? = null,
+    // the period before this one, null when nothing was played then; partial means only up to the same day
+    val previousTotalMs: Long? = null,
+    val previousIsPartial: Boolean = false,
 ) {
     val isEmpty: Boolean get() = plays == 0
 
@@ -100,17 +131,27 @@ class ListeningStats(
 sealed interface RecapAvailability {
     data class Ready(val stats: ListeningStats, val monthProgressPercent: Int) : RecapAvailability
 
-    /** Not unlocked yet; [comeBack] finishes "come back later ...". */
-    data class NotYet(val comeBack: String) : RecapAvailability
+    /** Not unlocked yet; [comeBackText] finishes "come back later ...". */
+    class NotYet(val comeBackText: (Context) -> String) : RecapAvailability
 }
 
 internal object RecapRepository {
 
     suspend fun load(db: MusicDatabase, range: StatsRange): ListeningStats = withContext(Dispatchers.IO) {
-        val events = db.recapEvents(range.start.toStoredMillis(), range.endExclusive.toStoredMillis())
+        val from = range.start.toStoredMillis()
+        val events = db.recapEvents(from, range.endExclusive.toStoredMillis())
         val ids = events.mapTo(LinkedHashSet()) { it.songId }.toList()
         val songs = ids.chunked(500).flatMap { db.getSongsByIds(it) }.associateBy { it.id }
-        withContext(Dispatchers.Default) { aggregate(range, events, songs) }
+        val playedBefore = ids.chunked(500).flatMapTo(HashSet()) { db.songsPlayedBefore(it, from) }
+        val today = LocalDate.now()
+        val previous = range.previous()
+        // a period still running is held against the same stretch of the one before, or every month would look like a slump
+        val running = !today.isBefore(range.start) && today.isBefore(range.endExclusive)
+        val previousEnd = if (running) minOf(previous.start.plusDays(ChronoUnit.DAYS.between(range.start, today) + 1), range.start) else range.start
+        val previousTotal = db.listeningTotal(previous.start.toStoredMillis(), previousEnd.toStoredMillis()).takeIf { it > 0 }
+        withContext(Dispatchers.Default) {
+            aggregate(range, events, songs, playedBefore, previousTotal, running, today)
+        }
     }
 
     /**
@@ -125,7 +166,7 @@ internal object RecapRepository {
             val stats = load(db, range)
             if (stats.songCount > 0) return RecapAvailability.Ready(stats, progressOf(range, today))
         }
-        return RecapAvailability.NotYet("once you've played a song")
+        return RecapAvailability.NotYet { context -> context.getString(R.string.recap_not_yet_single) }
     }
 
     private fun progressOf(range: StatsRange, today: LocalDate): Int = when {
@@ -143,10 +184,14 @@ internal object RecapRepository {
             val stats = load(db, previous)
             if (stats.songCount >= RecapMinSongs) return RecapAvailability.Ready(stats, 100)
             val unlock = today.withDayOfMonth(RecapFirstDay)
-            return RecapAvailability.NotYet(
-                "on ${unlock.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} $RecapFirstDay, " +
-                    "once you've played $RecapMinSongs songs",
-            )
+            return RecapAvailability.NotYet { context ->
+                context.getString(
+                    R.string.recap_not_yet_date,
+                    unlock.month.getDisplayName(TextStyle.FULL, Locale.getDefault()),
+                    RecapFirstDay,
+                    RecapMinSongs,
+                )
+            }
         }
         val stats = load(db, thisMonth)
         if (stats.songCount >= RecapMinSongs) {
@@ -154,9 +199,10 @@ internal object RecapRepository {
             return RecapAvailability.Ready(stats, percent)
         }
         val missing = RecapMinSongs - stats.songCount
-        return RecapAvailability.NotYet(
-            "when you've played $missing more ${if (missing == 1) "song" else "songs"} this month",
-        )
+        return RecapAvailability.NotYet { context ->
+            val word = if (missing == 1) context.getString(R.string.recap_song_singular) else context.getString(R.string.recap_song_plural)
+            context.getString(R.string.recap_not_yet_missing, missing, word)
+        }
     }
 
     /** First day anything was played, for the Stats timeline and as a fallback join date. */
@@ -164,7 +210,15 @@ internal object RecapRepository {
         db.firstEventTimestamp()?.let { storedMillisToDateTime(it).toLocalDate() }
     }
 
-    private fun aggregate(range: StatsRange, events: List<RecapEventRow>, songs: Map<String, Song>): ListeningStats {
+    private fun aggregate(
+        range: StatsRange,
+        events: List<RecapEventRow>,
+        songs: Map<String, Song>,
+        playedBefore: Set<String>,
+        previousTotalMs: Long?,
+        previousIsPartial: Boolean,
+        today: LocalDate,
+    ): ListeningStats {
         class Acc(var ms: Long = 0L, var plays: Int = 0)
 
         val perSong = HashMap<String, Acc>()
@@ -252,8 +306,113 @@ internal object RecapRepository {
             weekdayMs = weekday.toList(),
             hourMs = hour.toList(),
             bucketMs = buckets.toList(),
-        )
+        ).withExtras(events, allSongs.associateBy { it.id }, playedBefore, previousTotalMs, previousIsPartial, today)
     }
+}
+
+// the stats past the basics: habits, new finds, the song on repeat and last period, all from the same plays
+private fun ListeningStats.withExtras(
+    events: List<RecapEventRow>,
+    songsById: Map<String, RecapSong>,
+    playedBefore: Set<String>,
+    previousTotalMs: Long?,
+    previousIsPartial: Boolean,
+    today: LocalDate,
+): ListeningStats {
+    if (events.isEmpty()) return this
+    val dayMs = HashMap<LocalDate, Long>()
+    val daySongPlays = HashMap<LocalDate, HashMap<String, Int>>()
+    val sorted = events.sortedBy { it.timestamp }
+    for (e in sorted) {
+        val day = storedMillisToDateTime(e.timestamp).toLocalDate()
+        dayMs[day] = (dayMs[day] ?: 0L) + e.playTime.coerceAtLeast(0L)
+        val counts = daySongPlays.getOrPut(day) { HashMap() }
+        counts[e.songId] = (counts[e.songId] ?: 0) + 1
+    }
+
+    val habits = habitsOf(sorted, dayMs, today)
+
+    // a song counts as new when this period holds its very first play; songsById is already best first
+    val newSongs = songsById.values.filter { it.id !in playedBefore }
+
+    var repeat: RepeatDay? = null
+    for ((day, counts) in daySongPlays) {
+        for ((id, count) in counts) {
+            if (count < 3 || count <= (repeat?.plays ?: 0)) continue
+            val song = songsById[id] ?: continue
+            repeat = RepeatDay(song, day, count)
+        }
+    }
+
+    return ListeningStats(
+        range = range,
+        totalMs = totalMs,
+        plays = plays,
+        songCount = songCount,
+        artistCount = artistCount,
+        albumCount = albumCount,
+        topSongs = topSongs,
+        topArtists = topArtists,
+        weekdayMs = weekdayMs,
+        hourMs = hourMs,
+        bucketMs = bucketMs,
+        habits = habits,
+        newSongs = newSongs.take(10),
+        newSongCount = newSongs.size,
+        newMs = newSongs.sumOf { it.playTimeMs },
+        repeat = repeat,
+        previousTotalMs = previousTotalMs,
+        previousIsPartial = previousIsPartial,
+    )
+}
+
+// plays closer than this (on top of the song itself) count as one sitting
+private const val SessionGapMs = 10 * 60_000L
+
+private fun ListeningStats.habitsOf(sorted: List<RecapEventRow>, dayMs: Map<LocalDate, Long>, today: LocalDate): ListeningHabits {
+    val lastDay = minOf(range.endExclusive.minusDays(1), maxOf(today, range.start))
+    val elapsed = (lastDay.toEpochDay() - range.start.toEpochDay() + 1).toInt().coerceAtLeast(1)
+
+    var streak = 0
+    var best = 0
+    var previous: LocalDate? = null
+    for (day in dayMs.keys.sorted()) {
+        streak = if (previous != null && day == previous.plusDays(1)) streak + 1 else 1
+        best = maxOf(best, streak)
+        previous = day
+    }
+
+    // the stored time may be the start or the end of a play, so the gap allows for the longer of the two songs
+    var sessionMs = 0L
+    var sessionStart = sorted.first().timestamp
+    var longestMs = 0L
+    var longestStart = sessionStart
+    for ((i, e) in sorted.withIndex()) {
+        if (i > 0) {
+            val prev = sorted[i - 1]
+            val gap = e.timestamp - prev.timestamp
+            if (gap > maxOf(prev.playTime, e.playTime) + SessionGapMs) {
+                sessionMs = 0L
+                sessionStart = e.timestamp
+            }
+        }
+        sessionMs += e.playTime.coerceAtLeast(0L)
+        if (sessionMs > longestMs) {
+            longestMs = sessionMs
+            longestStart = sessionStart
+        }
+    }
+
+    val biggest = dayMs.maxByOrNull { it.value }
+    return ListeningHabits(
+        activeDays = dayMs.count { it.value > 0 },
+        elapsedDays = elapsed,
+        longestStreak = best,
+        biggestDay = biggest?.key,
+        biggestDayMs = biggest?.value ?: 0L,
+        longestSessionMs = longestMs,
+        longestSessionStart = storedMillisToDateTime(longestStart),
+    )
 }
 
 // The event table stores LocalDateTime.now() as if it were UTC (see Converters), so the wall clock

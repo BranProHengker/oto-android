@@ -15,12 +15,14 @@ import co.oto.music.modules.skin.SkinGlass
 import co.oto.music.modules.skin.SkinParser
 import co.oto.music.modules.skin.SkinSource
 import co.oto.music.modules.skin.appliedLook
+import co.oto.music.modules.web.FieldRange
+import co.oto.music.modules.web.FieldRanges
 import co.oto.music.modules.web.ManifestSettings
 import co.oto.music.modules.web.WebModuleManifest
 import co.oto.music.modules.web.resolveModuleArt
 import java.io.File
 
-internal class LocalModule(private val manifest: WebModuleManifest, files: File?) : LookModule, ModuleArt, ModuleFields, SkinSource {
+internal class LocalModule(private val manifest: WebModuleManifest, files: File?) : LookModule, ModuleArt, ModuleFields, SkinSource, FieldRanges {
 
     override val info = ModuleInfo(
         id = idFor(manifest),
@@ -30,7 +32,12 @@ internal class LocalModule(private val manifest: WebModuleManifest, files: File?
         author = manifest.author,
     )
 
-    override val skin: ModuleSkin? = SkinParser.parse(info.id, info.name, manifest.player, manifest.font, manifest.pages, files, base = null, manifest.actions, manifest.glass)
+    override val skin: ModuleSkin? = SkinParser.parse(
+        info.id, info.name, manifest.player, manifest.font, manifest.pages, files, base = null,
+        manifest.actions, manifest.glass, manifest.players, manifest.bar, manifest.mini,
+        floating = manifest.floating, background = manifest.background, appBackground = manifest.appBackground,
+        sheet = manifest.sheet, menu = manifest.menu,
+    )
 
     override val icon: String? = resolveModuleArt(manifest.icon, files, base = null)
 
@@ -39,6 +46,8 @@ internal class LocalModule(private val manifest: WebModuleManifest, files: File?
     private val settings = ManifestSettings(manifest)
 
     override val fields: List<ModuleField> get() = settings.fields
+
+    override val ranges: Map<String, FieldRange> get() = settings.ranges
 
     override fun onFields(values: Map<String, String>) {
         settings.values = values

@@ -7,11 +7,14 @@ import androidx.datastore.preferences.core.Preferences
 import co.oto.music.constants.DataSyncIdKey
 import co.oto.music.constants.DeeplApiKey
 import co.oto.music.constants.DiscordAccessTokenKey
+import co.oto.music.constants.DiscordLoginStateKey
+import co.oto.music.constants.DiscordLoginVerifierKey
 import co.oto.music.constants.DiscordRefreshTokenKey
 import co.oto.music.constants.InnerTubeCookieKey
 import co.oto.music.constants.LastFMSessionKey
 import co.oto.music.constants.LibreFmSessionKey
 import co.oto.music.constants.MonochromePlaybackApiTokenKey
+import co.oto.music.constants.MonochromeTurnstileJwtKey
 import co.oto.music.constants.OpenRouterApiKey
 import co.oto.music.constants.ProxyPasswordKey
 import co.oto.music.constants.TurnstileBypassTokenKey
@@ -29,48 +32,61 @@ class SecretPreferences(private val raw: DataStore<Preferences>) : DataStore<Pre
         return unseal(stored)
     }
 
-    // secrets written before the vault existed are still plain on disk; one pass at start-up seals them
+    // upgrade plain or old enc1 secrets to the new random-key vault on boot
     suspend fun sealLeftovers() {
         val stored = raw.data.first()
-        if (SecretKeys.none { key -> stored[key]?.let { !SecretVault.isSealed(it) } == true }) return
+        if (SecretKeys.none { key -> stored[key]?.let { SecretVault.needsUpgrade(it) } == true }) return
         raw.updateData { seal(unseal(it), it) }
     }
 
     companion object {
-        // the account cookie, the tokens and the api keys: everything that would let someone else be this user
+        // yt cookies, tokens, api keys — stuff nobody else should ever see
         val SecretKeys: List<Preferences.Key<String>> = listOf(
             InnerTubeCookieKey,
             VisitorDataKey,
             DataSyncIdKey,
             DiscordAccessTokenKey,
             DiscordRefreshTokenKey,
+            DiscordLoginStateKey,
+            DiscordLoginVerifierKey,
             LastFMSessionKey,
             LibreFmSessionKey,
             OpenRouterApiKey,
             DeeplApiKey,
             MonochromePlaybackApiTokenKey,
+            MonochromeTurnstileJwtKey,
             TurnstileBypassTokenKey,
             ProxyPasswordKey,
         )
 
-        // the stored preferences with every secret opened; one sealed by a key this phone doesn't have is dropped, so the user signs in again
+        // open secrets for the app and keep SecretGuard updated so modules can't smuggle them out
         fun unseal(stored: Preferences): Preferences {
             val out = stored.toMutablePreferences()
+            val active = ArrayList<String>(SecretKeys.size)
             for (key in SecretKeys) {
                 val value = stored[key] ?: continue
-                val plain = SecretVault.open(value)
-                if (plain == null) out.remove(key) else if (plain != value) out[key] = plain
+                val plain = SecretVault.open(value, SecretVault.SettingsDomain)
+                if (plain == null) {
+                    out.remove(key)
+                } else {
+                    if (plain != value) out[key] = plain
+                    if (key != VisitorDataKey && plain.isNotBlank()) active += plain
+                }
             }
+            co.oto.music.modules.security.SecretGuard.register("settings", *active.toTypedArray())
             return out
         }
 
-        // what goes to disk: a secret that didn't change keeps the sealed form it had, a new or changed one is sealed afresh
         fun seal(plain: Preferences, stored: Preferences): Preferences {
             val out = plain.toMutablePreferences()
             for (key in SecretKeys) {
                 val value = plain[key] ?: continue
                 val before = stored[key]
-                out[key] = if (before != null && SecretVault.isSealed(before) && SecretVault.open(before) == value) before else SecretVault.seal(value)
+                out[key] = if (before != null && !SecretVault.needsUpgrade(before) && SecretVault.open(before, SecretVault.SettingsDomain) == value) {
+                    before
+                } else {
+                    SecretVault.seal(value, SecretVault.SettingsDomain)
+                }
             }
             return out
         }

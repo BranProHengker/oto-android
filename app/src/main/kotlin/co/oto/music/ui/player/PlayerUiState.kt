@@ -31,7 +31,7 @@ class PlayerUiState(connection: PlayerConnection) {
             canSkipNext = canSkipNext,
             canSkipPrevious = canSkipPrevious,
         )
-    }.combine(connection.playbackState) { partial, playbackState ->
+    }.combine(connection.effectivePlaybackState) { partial, playbackState ->
         partial.copy(playbackState = playbackState)
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Lazily, TransportState())
 

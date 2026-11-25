@@ -12,8 +12,10 @@ import co.oto.music.constants.PlaylistSongSortType
 import co.oto.music.constants.PlaylistSongSortTypeKey
 import co.oto.music.db.MusicDatabase
 import co.oto.music.db.entities.PlaylistSong
+import co.oto.music.db.entities.PlaylistTransition
 import co.oto.music.extensions.reversed
 import co.oto.music.extensions.toEnum
+import co.oto.music.mixit.MixItFallbackMode
 import co.oto.music.playlistcover.PlaylistCovers
 import co.oto.music.utils.SyncUtils
 import co.oto.music.utils.dataStore
@@ -39,14 +41,41 @@ class LocalPlaylistViewModel
 @Inject
 constructor(
     @ApplicationContext context: Context,
-    database: MusicDatabase,
+    private val database: MusicDatabase,
     private val syncUtils: SyncUtils,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val playlistId = savedStateHandle.get<String>("playlistId")!!
+    val startInMixIt: Boolean = savedStateHandle.get<Boolean>("mixIt") ?: false
     val playlist =
         database
             .playlist(playlistId)
+            .stateIn(viewModelScope, SharingStarted.Lazily, null)
+
+    /** Custom Mix It transitions saved for consecutive song pairs in this playlist. */
+    val transitions: StateFlow<Map<Pair<String, String>, PlaylistTransition>> =
+        database
+            .playlistTransitions(playlistId)
+            .map { list -> list.associateBy { it.fromSongId to it.toSongId } }
+            .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
+
+    fun setMixItEnabled(enabled: Boolean) {
+        database.query { setPlaylistMixItEnabled(playlistId, enabled) }
+    }
+
+    fun setMixItFallback(fallback: MixItFallbackMode) {
+        val stored = if (fallback == MixItFallbackMode.APP_DEFAULT) null else fallback.name
+        database.query { setPlaylistMixItFallback(playlistId, stored) }
+    }
+
+    fun clearAllTransitions() {
+        database.query { clearPlaylistTransitions(playlistId) }
+    }
+
+    // where an imported playlist came from, for crediting whoever made it there
+    val imported =
+        database
+            .importedPlaylist(playlistId)
             .stateIn(viewModelScope, SharingStarted.Lazily, null)
     val playlistSongs: StateFlow<List<PlaylistSong>> =
         combine(

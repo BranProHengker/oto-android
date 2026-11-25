@@ -13,6 +13,7 @@ import co.oto.music.constants.BlurQualityKey
 import co.oto.music.constants.BlurStrengthPxKey
 import co.oto.music.constants.ChromeGlassStyle
 import co.oto.music.constants.ChromeGlassStyleKey
+import co.oto.music.constants.DisableBlurKey
 import co.oto.music.constants.DynamicThemeKey
 import co.oto.music.constants.ElementBlurKey
 import co.oto.music.constants.EnableProgressiveBlurKey
@@ -136,11 +137,13 @@ internal class ModuleLooks(private val context: Context) {
         fun number(raw: String, range: ClosedFloatingPointRange<Float>): Float? = raw.trim().toFloatOrNull()?.takeIf { it in range }
 
         val Settings: Map<String, Setting<*>> = mapOf(
-            LookSetting.PLAYER_STYLE to Setting(PlayerStyleKey) { enumName<PlayerStyle>(it) },
+            LookSetting.PLAYER_STYLE to Setting(PlayerStyleKey) { PlayerStyle.fromStored(it.trim().uppercase())?.name ?: enumName<PlayerStyle>(it) },
             LookSetting.HOME_STYLE to Setting(HomeStyleKey) { enumName<HomeStyle>(it) },
             LookSetting.PLAYLIST_STYLE to Setting(PlaylistStyleKey) { enumName<PlaylistStyle>(it) },
             LookSetting.COVER_ROUNDING to Setting(ThumbnailCornerRadiusKey) { number(it, 0f..45f) },
             LookSetting.LYRICS_MOTION to Setting(LyricsMotionStyleKey) { enumName<LyricsMotionStyle>(it) },
+            // blur "true" turns DisableBlurKey off; restoring writes the original DisableBlurKey boolean back directly
+            LookSetting.BLUR to Setting(DisableBlurKey, saved = ::bool) { bool(it)?.not() },
             LookSetting.BLUR_QUALITY to Setting(BlurQualityKey) { enumName<BlurQuality>(it) },
             LookSetting.BLUR_STRENGTH to Setting(BlurStrengthPxKey) { number(it, 10f..50f) },
             LookSetting.PROGRESSIVE_BLUR to Setting(EnableProgressiveBlurKey) { bool(it) },

@@ -79,6 +79,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import co.oto.music.ui.component.RemoteFocus
+import co.oto.music.ui.component.sheetHandleRoom
 
 // ---------------------------------------------------------------------------------------------
 // Editor
@@ -315,6 +316,7 @@ fun LyricsProviderSheet(onDismiss: () -> Unit) {
         Column(
             modifier = Modifier
                 .verticalScroll(rememberScrollState())
+                .padding(top = sheetHandleRoom())
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
                 .padding(top = 16.dp, bottom = 24.dp)
@@ -683,6 +685,7 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
         Column(
             modifier = Modifier
                 .verticalScroll(rememberScrollState())
+                .padding(top = sheetHandleRoom())
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
                 .padding(top = 16.dp, bottom = 24.dp)

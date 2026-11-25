@@ -149,10 +149,20 @@ private fun SongShareDialog(
             snapshotFlow { ((session.background as? SongBackground.Still)?.background as? ShareBackground.Picture)?.uri }
                 .collect { uri -> if (uri != null) loadPictureArt(context, session, uri) }
         }
-        // lining the music video up means listening to both; it only happens once the music video is picked
+        // lining the music video up means listening to both; it only happens once the music video is picked (full canvas or card only)
         LaunchedEffect(session) {
-            snapshotFlow { (session.background as? SongBackground.Video)?.source == ShareVideoSource.MusicVideo }.first { it }
+            snapshotFlow { session.activeVideoSource == ShareVideoSource.MusicVideo }.first { it }
             matchMusicVideo(session, playerConnection?.service)
+        }
+        // if the user picks a YouTube video from search that happens to match the song's audio, line it up automatically too
+        LaunchedEffect(session) {
+            var matchedId: String? = null
+            snapshotFlow { session.pickedYouTubeVideo.found?.videoId }.collectLatest { videoId ->
+                if (videoId != null && videoId != matchedId) {
+                    matchedId = videoId
+                    matchPickedYouTubeVideo(session, videoId, playerConnection?.service)
+                }
+            }
         }
         MovesThePlayhead(session)
         SongPreviewAudio(session)

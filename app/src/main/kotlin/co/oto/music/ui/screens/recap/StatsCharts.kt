@@ -78,8 +78,15 @@ private val TooltipBg = Color(0xFF2C2C2C)
 internal val GenreColors = listOf(Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500), Color(0xFFD55181))
 internal val GenreOther = Color(0xFF5A5A5A)
 
-private val AxisStyle = TextStyle(fontFamily = InterFontFamily, fontSize = 11.sp, color = StatsInkMuted)
-private val TipStyle = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = StatsInk)
+private val AxisStyleCache = co.oto.music.ui.theme.globalTextStyle(
+    TextStyle(fontSize = 11.sp, color = StatsInkMuted),
+)
+private val AxisStyle: TextStyle get() = AxisStyleCache.current()
+
+private val TipStyleCache = co.oto.music.ui.theme.globalTextStyle(
+    TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = StatsInk),
+)
+private val TipStyle: TextStyle get() = TipStyleCache.current()
 
 /** "3h 05m" for a tooltip, "45m" when under an hour. */
 internal fun shortDuration(ms: Long): String {
@@ -276,16 +283,17 @@ internal fun RankList(
                     Spacer(Modifier.width(12.dp))
                 }
                 Column(modifier = Modifier.weight(1f)) {
+                    // two lines each, so long titles and artist lists read in full instead of stopping at one
                     Text(
                         row.title,
                         style = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = StatsInk),
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         row.detail,
                         style = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp, color = StatsInkMuted),
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(6.dp))

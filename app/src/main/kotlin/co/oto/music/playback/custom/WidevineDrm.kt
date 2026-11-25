@@ -27,7 +27,12 @@ import java.util.concurrent.TimeUnit
 object WidevineDrm {
 
     private val client by lazy {
-        OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
+        OkHttpClient.Builder()
+            .dispatcher(co.oto.music.utils.AppProxy.dispatcher)
+            .connectionPool(co.oto.music.utils.AppProxy.connectionPool)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
     }
 
     fun sessionManager(license: LicenseServer): DrmSessionManager =

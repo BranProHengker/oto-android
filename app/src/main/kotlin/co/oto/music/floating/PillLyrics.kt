@@ -4,6 +4,8 @@ package co.oto.music.floating
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -29,6 +31,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -54,6 +57,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import co.oto.music.modules.skin.ActiveFloating
+import co.oto.music.modules.skin.ActiveSkin
 import co.oto.music.ui.player.KaraokeHead
 import co.oto.music.ui.player.LyricsAlignment
 import co.oto.music.ui.player.WordWaitDrop
@@ -65,6 +70,7 @@ import co.oto.music.ui.player.rememberWordMotionModifier
 import co.oto.music.ui.player.sweepHeadX
 import co.oto.music.ui.player.withLetterMotionFeatures
 import co.oto.music.ui.theme.InterFontFamily
+import co.oto.music.ui.theme.LookFont
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
@@ -73,6 +79,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.roundToInt
 import kotlin.math.sign
 
 // room between the bubble's edge and the text, where a long line fades out
@@ -87,6 +94,13 @@ private const val PillMotionScale = 0.62f
 // a long line slides along so the sweep stays about this far into the bubble
 private const val SweepKeep = 0.62f
 private const val SlideFollowSec = 0.28f
+
+// a long line with no timed words rests this long at each end of its time and glides to its end in between
+private const val GlideRestMs = 700L
+
+// a title or artist too long for the bubble rests this long, then reads along to its end at this pace, and back
+private const val BrowseRestMs = 2_500L
+private val BrowsePerSecond = 36.dp
 
 // the sweep's soft edge behind its head, as a share of the text size, and how far it reaches ahead
 private const val SweepSoftEm = 0.55f
@@ -116,19 +130,19 @@ private enum class RowLook { SUNG, SOFT, WAITING }
 @Immutable
 internal class PreparedScript(val script: PillScript, val layouts: List<TextLayoutResult>)
 
-private fun rowStyle(font: FontFamily, small: Boolean) = TextStyle(
+private fun rowStyle(font: FontFamily, small: Boolean, baseSize: Float? = null, customWeight: FontWeight? = null) = TextStyle(
     fontFamily = font,
-    fontWeight = if (small) FontWeight.SemiBold else FontWeight.Bold,
-    fontSize = if (small) 13.sp else 15.sp,
-    lineHeight = if (small) 17.sp else 19.sp,
+    fontWeight = customWeight ?: if (small) FontWeight.SemiBold else FontWeight.Bold,
+    fontSize = (baseSize?.let { if (small) (it - 2f).coerceAtLeast(10f) else it } ?: if (small) 13f else 15f).sp,
+    lineHeight = (baseSize?.let { if (small) (it + 2f) else (it + 4f) } ?: if (small) 17f else 19f).sp,
     letterSpacing = (-0.03).em,
 ).withLetterMotionFeatures(true)
 
 // every row measured once, off the main thread, so a line change never lays text out mid-animation
-private suspend fun prepare(script: PillScript, measurer: TextMeasurer, font: FontFamily): PreparedScript =
+private suspend fun prepare(script: PillScript, measurer: TextMeasurer, font: FontFamily, baseSize: Float?, customWeight: FontWeight?): PreparedScript =
     withContext(Dispatchers.Default) {
-        val big = rowStyle(font, small = false)
-        val small = rowStyle(font, small = true)
+        val big = rowStyle(font, small = false, baseSize = baseSize, customWeight = customWeight)
+        val small = rowStyle(font, small = true, baseSize = baseSize, customWeight = customWeight)
         val layouts = script.rows.map { row ->
             measurer.measure(
                 text = row.text,
@@ -143,19 +157,28 @@ private suspend fun prepare(script: PillScript, measurer: TextMeasurer, font: Fo
 
 // the bubble's lyrics: the line being sung on top, what comes next under it, each sliding into its place as the song goes
 @Composable
-internal fun PillLyrics(state: PillState, width: Dp, modifier: Modifier = Modifier) {
+internal fun PillLyrics(
+    state: PillState,
+    width: Dp,
+    activeFloating: ActiveFloating? = null,
+    transparentEdge: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     val song = state.song
     val script = state.script
     val resolver = LocalFontFamilyResolver.current
     val density = LocalDensity.current
     val direction = LocalLayoutDirection.current
-    val font = InterFontFamily
-    val prepared by produceState<PreparedScript?>(null, script, song?.id, font) {
+    val skin = activeFloating?.floating
+    val font = activeFloating?.skin?.moduleId?.let(ActiveSkin::playerFont) ?: LookFont.family ?: InterFontFamily
+    val baseSize = skin?.fontSize
+    val customWeight = skin?.weight
+    val prepared by produceState<PreparedScript?>(null, script, song?.id, font, baseSize, customWeight) {
         val shown = script ?: PillScript.info(song?.title.orEmpty(), song?.artists?.joinToString { it.name }.orEmpty())
-        value = prepare(shown, TextMeasurer(resolver, density, direction, 0), font)
+        value = prepare(shown, TextMeasurer(resolver, density, direction, 0), font, baseSize, customWeight)
     }
     Crossfade(targetState = prepared, animationSpec = tween(320), modifier = modifier, label = "pillLyrics") { ready ->
-        if (ready != null) PillRows(ready, state, width, appRtl = direction == LayoutDirection.Rtl)
+        if (ready != null) PillRows(ready, state, width, appRtl = direction == LayoutDirection.Rtl, transparentEdge = transparentEdge)
     }
 }
 
@@ -193,7 +216,7 @@ private class RowGeometry(
 }
 
 @Composable
-private fun PillRows(prepared: PreparedScript, state: PillState, width: Dp, appRtl: Boolean) {
+private fun PillRows(prepared: PreparedScript, state: PillState, width: Dp, appRtl: Boolean, transparentEdge: Boolean = false) {
     val script = prepared.script
     var top by remember(script) { mutableIntStateOf(script.stops[script.stopAt(state.lyricsClock())].top) }
     var dotsLit by remember(script) { mutableIntStateOf(-1) }
@@ -250,18 +273,38 @@ private fun PillRows(prepared: PreparedScript, state: PillState, width: Dp, appR
         Modifier
             .fillMaxSize()
             .clipToBounds()
-            .drawWithCache {
-                // the fog sits in the inset, so a long line fades at the bubble's edge instead of being cut
-                val fog = geometry.slotLeft
-                val bubble = tint.bubble
-                val left = Brush.horizontalGradient(0f to bubble, 1f to bubble.copy(alpha = 0f), startX = 0f, endX = fog)
-                val right = Brush.horizontalGradient(0f to bubble.copy(alpha = 0f), 1f to bubble, startX = size.width - fog, endX = size.width)
-                onDrawWithContent {
-                    drawContent()
-                    drawRect(left, size = Size(fog, size.height))
-                    drawRect(right, topLeft = Offset(size.width - fog, 0f), size = Size(fog, size.height))
-                }
-            },
+            .then(
+                if (transparentEdge) {
+                    Modifier
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithCache {
+                            val fog = geometry.slotLeft
+                            val mask = Brush.horizontalGradient(
+                                0f to Color.Transparent,
+                                (fog / size.width.coerceAtLeast(1f)).coerceIn(0.01f, 0.2f) to Color.Black,
+                                (1f - fog / size.width.coerceAtLeast(1f)).coerceIn(0.8f, 0.99f) to Color.Black,
+                                1f to Color.Transparent,
+                            )
+                            onDrawWithContent {
+                                drawContent()
+                                drawRect(mask, blendMode = BlendMode.DstIn)
+                            }
+                        }
+                } else {
+                    Modifier.drawWithCache {
+                        // the fog sits in the inset, so a long line fades at the bubble's edge instead of being cut
+                        val fog = geometry.slotLeft
+                        val bubble = tint.bubble
+                        val left = Brush.horizontalGradient(0f to bubble, 1f to bubble.copy(alpha = 0f), startX = 0f, endX = fog)
+                        val right = Brush.horizontalGradient(0f to bubble.copy(alpha = 0f), 1f to bubble, startX = size.width - fog, endX = size.width)
+                        onDrawWithContent {
+                            drawContent()
+                            drawRect(left, size = Size(fog, size.height))
+                            drawRect(right, topLeft = Offset(size.width - fog, 0f), size = Size(fog, size.height))
+                        }
+                    }
+                },
+            ),
     ) {
         val first = (top - 1).coerceAtLeast(0)
         val last = (top + script.slots).coerceAtMost(script.rows.lastIndex)
@@ -284,6 +327,7 @@ private fun PillRows(prepared: PreparedScript, state: PillState, width: Dp, appR
                     row = row,
                     layout = prepared.layouts[index],
                     position = { index - (lead.value + (trail.value - lead.value) * weight) },
+                    current = inLine,
                     live = row.sweeps && !showsDots && inLine,
                     look = look,
                     showsDots = showsDots,
@@ -302,6 +346,7 @@ private fun PillLyricRow(
     row: PillRow,
     layout: TextLayoutResult,
     position: () -> Float,
+    current: Boolean,
     live: Boolean,
     look: RowLook,
     showsDots: Boolean,
@@ -310,14 +355,30 @@ private fun PillLyricRow(
     tint: PillTint,
     state: PillState,
 ) {
-    val slide = remember(row) { mutableFloatStateOf(0f) }
+    val width = layout.size.width
+    val height = layout.size.height
+    // a line too long for the bubble with no timed words to follow slides along by itself, or its end never shows
+    val overflow = (width - geometry.slotWidth).coerceAtLeast(0f)
+    val glides = overflow > 0f && !row.sweeps
+    val slide = remember(row, overflow) {
+        mutableFloatStateOf(if (glides && !row.isInfo) glideAt(row, state.lyricsClock(), overflow) else 0f)
+    }
+    if (glides) {
+        val browsePx = with(LocalDensity.current) { BrowsePerSecond.toPx() }
+        LaunchedEffect(row, overflow, current) {
+            snapshotFlow { state.playing to state.seekTick }.collectLatest { (playing, _) ->
+                when {
+                    !row.isInfo -> glide(row, slide, overflow, state, playing)
+                    current && playing -> browse(slide, overflow, browsePx)
+                }
+            }
+        }
+    }
     val dots = animateFloatAsState(if (showsDots) 1f else 0f, tween(320), label = "dots")
     val lit = animateFloatAsState(dotsLit.coerceAtLeast(0).toFloat(), tween(420), label = "dotsLit")
     // a row that stops waiting eases into its colour instead of flicking
     val waiting = animateFloatAsState(if (look == RowLook.WAITING) 1f else 0f, tween(300), label = "rowWaiting")
     val rtlText = remember(layout) { row.text.isNotEmpty() && layout.isRtlLine(0) }
-    val width = layout.size.width
-    val height = layout.size.height
     val next = animateFloatAsState(
         if (look == RowLook.WAITING && (row.kind == PillRowKind.LEAD || row.kind == PillRowKind.TITLE)) 1f else 0f,
         NextSpring,
@@ -498,6 +559,52 @@ private fun MutableFloatState.follow(target: Float, dt: Float): Boolean {
     }
     floatValue = now + (target - now) * (1f - exp(-dt / SlideFollowSec))
     return true
+}
+
+// the rest at each end of a line's time, shorter for a quick line so it still has room to glide
+private fun glideRest(row: PillRow): Long = minOf(GlideRestMs, (row.endMs - row.startMs) / 6)
+
+// how far a long line with no timed words has slid at positionMs: none while it rests at the start, all of it by the rest at the end
+private fun glideAt(row: PillRow, positionMs: Long, overflow: Float): Float {
+    val rest = glideRest(row)
+    val span = (row.endMs - row.startMs - rest * 2).coerceAtLeast(1L)
+    val through = ((positionMs - row.startMs - rest).toFloat() / span).coerceIn(0f, 1f)
+    return overflow * through * through * (3f - 2f * through)
+}
+
+// keeps a long line where the clock says it should be; it sleeps until its glide starts and stops asking for frames once it's done
+private suspend fun glide(row: PillRow, slide: MutableFloatState, overflow: Float, state: PillState, playing: Boolean) {
+    val from = row.startMs + glideRest(row)
+    val to = row.endMs - glideRest(row)
+    var lastFrame = -1L
+    while (true) {
+        val position = state.lyricsClock()
+        if (playing && position < from && slide.floatValue == glideAt(row, position, overflow)) {
+            delay(((from - position) / state.speed()).toLong().coerceAtLeast(MinStepMs))
+            lastFrame = -1L
+            continue
+        }
+        val moving = withFrameNanos { now ->
+            val dt = if (lastFrame < 0L) 0.016f else ((now - lastFrame) / 1_000_000_000f).coerceIn(0f, 0.064f)
+            lastFrame = now
+            val at = state.lyricsClock()
+            // a seek eases over to the new spot instead of jumping there
+            val settling = slide.follow(glideAt(row, at, overflow), dt)
+            settling || (playing && at in from until to)
+        }
+        if (!moving && (!playing || state.lyricsClock() >= to)) break
+    }
+}
+
+// a title too long for the bubble rests, reads along to its end, rests, and goes back, for as long as the song plays
+private suspend fun browse(slide: MutableFloatState, overflow: Float, pxPerSecond: Float) {
+    val spec = tween<Float>((overflow / pxPerSecond * 1000f).roundToInt().coerceAtLeast(400), easing = FastOutSlowInEasing)
+    while (true) {
+        delay(BrowseRestMs)
+        animate(slide.floatValue, overflow, animationSpec = spec) { value, _ -> slide.floatValue = value }
+        delay(BrowseRestMs)
+        animate(slide.floatValue, 0f, animationSpec = spec) { value, _ -> slide.floatValue = value }
+    }
 }
 
 // the sung colour up to the head, fading into the waiting grey just past it; one gradient for the whole line, made again only when the head moves

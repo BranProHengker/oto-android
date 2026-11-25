@@ -116,7 +116,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.util.UUID
 
-private val CoverRoutes = listOf("album/", "local_playlist/", "online_playlist/", "auto_playlist/")
+private val CoverRoutes = listOf("album/", "local_playlist/", "online_playlist/", "auto_playlist/", "module_store/")
 
 private fun String?.opensFromCover(): Boolean = this != null && CoverRoutes.any { startsWith(it) }
 
@@ -198,7 +198,11 @@ private fun NavGraphBuilder.composable(
     exitTransition = { motionExit { exitTransition?.invoke(this) } },
     popEnterTransition = { motionEnter { popEnterTransition?.invoke(this) } },
     popExitTransition = { motionExit { popExitTransition?.invoke(this) } },
-    content = content,
+    // a module's page can stand in for any page here, every route at once (ModuleTakeover)
+    content = { entry ->
+        val scope = this
+        co.oto.music.ui.screens.settings.modules.ModuleTakeover(route, entry) { scope.content(entry) }
+    },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -314,6 +318,14 @@ fun NavGraphBuilder.navigationBuilder(
         co.oto.music.ui.screens.library.LibraryRecentlyAddedScreen(navController = navController)
     }
 
+    // one genre from the Library's Genres tab: the songs on the phone tagged with it
+    coverSourceComposable(
+        route = "local_genre/{name}",
+        arguments = listOf(navArgument("name") { type = NavType.StringType }),
+    ) {
+        co.oto.music.ui.screens.library.LibraryGenreScreen(navController = navController)
+    }
+
     // The Library's Local and Cached tabs open these: the same pages again, counting only that
     // tab's songs. "library/local/albums", "library/cached/albums" and so on.
     co.oto.music.viewmodels.LibraryShelfKind.entries.forEach { shelf ->
@@ -424,6 +436,10 @@ fun NavGraphBuilder.navigationBuilder(
         co.oto.music.ui.screens.settings.integrations.discord.DiscordScreen(navController = navController)
     }
 
+    composable(co.oto.music.ui.screens.settings.integrations.backup.BackupRoute) {
+        co.oto.music.ui.screens.settings.integrations.backup.BackupScreen(navController = navController)
+    }
+
     composable(
         route = co.oto.music.ui.screens.settings.integrations.ScrobbleServiceRoute,
         arguments = listOf(navArgument("site") { type = NavType.StringType }),
@@ -529,6 +545,10 @@ fun NavGraphBuilder.navigationBuilder(
         co.oto.music.ui.screens.audiolab.AudioFxScreen(navController = navController)
     }
 
+    composable("audio_stage") {
+        co.oto.music.ui.screens.audiolab.stage.StageScreen(navController = navController)
+    }
+
     composable("audio_quality") {
         co.oto.music.ui.screens.audiolab.AudioQualityScreen(navController = navController)
     }
@@ -540,8 +560,27 @@ fun NavGraphBuilder.navigationBuilder(
     composable(co.oto.music.ui.screens.settings.modules.ModulesRoute) {
         co.oto.music.ui.screens.settings.modules.ModulesScreen(navController = navController)
     }
-    composable(co.oto.music.ui.screens.settings.modules.ModuleBrowserRoute) {
+    // a module's card grows into its store page like a playlist's cover, and the store recedes behind it
+    coverSourceComposable(co.oto.music.ui.screens.settings.modules.ModuleBrowserRoute) {
         co.oto.music.ui.screens.settings.modules.ModuleBrowserScreen(navController = navController)
+    }
+    composable(
+        route = co.oto.music.ui.screens.settings.modules.ModuleStoreRoutePattern,
+        arguments = listOf(navArgument("post") { type = NavType.StringType }),
+        enterTransition = { fadeIn(tween(300)) },
+        popExitTransition = {
+            scaleOut(animationSpec = tween(260), targetScale = 0.82f, transformOrigin = TransformOrigin(0.5f, 0.22f)) + fadeOut(tween(180))
+        },
+    ) { entry ->
+        // the store page borrows the browser's list, so opening a module never waits on the feed again
+        val browser = remember(entry) { navController.getBackStackEntry(co.oto.music.ui.screens.settings.modules.ModuleBrowserRoute) }
+        CompositionLocalProvider(LocalNavAnimatedContentScope provides this) {
+            co.oto.music.ui.screens.settings.modules.ModuleStoreScreen(
+                navController = navController,
+                post = entry.arguments?.getString("post").orEmpty(),
+                viewModel = hiltViewModel(browser),
+            )
+        }
     }
 
     composable(
@@ -727,10 +766,14 @@ fun NavGraphBuilder.navigationBuilder(
     }
 
     composable(
-        route = "local_playlist/{playlistId}",
+        route = "local_playlist/{playlistId}?mixIt={mixIt}",
         arguments = listOf(
             navArgument("playlistId") {
                 type = NavType.StringType
+            },
+            navArgument("mixIt") {
+                type = NavType.BoolType
+                defaultValue = false
             },
         ),
         enterTransition = { fadeIn(tween(300)) },

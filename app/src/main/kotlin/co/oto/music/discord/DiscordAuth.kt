@@ -4,7 +4,6 @@ package co.oto.music.discord
 
 import android.content.Context
 import android.net.Uri
-import android.util.Base64
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -16,6 +15,7 @@ import co.oto.music.constants.DiscordLoginVerifierKey
 import co.oto.music.constants.DiscordProfileKey
 import co.oto.music.constants.DiscordRefreshTokenKey
 import co.oto.music.constants.DiscordTokenExpiresAtKey
+import co.oto.music.utils.Pkce
 import co.oto.music.utils.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -39,7 +39,6 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.contentOrNull
 import timber.log.Timber
 import java.security.MessageDigest
-import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -85,10 +84,10 @@ class DiscordAuth @Inject constructor(
      * Android may close Oto while the browser is in front.
      */
     suspend fun loginUri(): Uri {
-        val state = randomCode(24)
-        val verifier = randomCode(64)
+        val state = Pkce.randomCode(24)
+        val verifier = Pkce.randomCode(64)
         context.dataStore.edit {
-            it[DiscordLoginStateKey] = state
+            it[DiscordLoginStateKey] = "${System.currentTimeMillis()}|$state"
             it[DiscordLoginVerifierKey] = verifier
         }
         _login.value = DiscordLogin.InBrowser
@@ -98,7 +97,7 @@ class DiscordAuth @Inject constructor(
             .appendQueryParameter("redirect_uri", RedirectUri)
             .appendQueryParameter("scope", Scopes)
             .appendQueryParameter("state", state)
-            .appendQueryParameter("code_challenge", challengeOf(verifier))
+            .appendQueryParameter("code_challenge", Pkce.challengeOf(verifier))
             .appendQueryParameter("code_challenge_method", "S256")
             .build()
     }
@@ -111,10 +110,21 @@ class DiscordAuth @Inject constructor(
     /** The user came back from the browser, ready or not. */
     suspend fun finish(redirect: Uri) {
         val prefs = context.dataStore.data.first()
-        val expectedState = prefs[DiscordLoginStateKey]
+        val storedState = prefs[DiscordLoginStateKey]
         val verifier = prefs[DiscordLoginVerifierKey]
-        // a link that doesn't belong to the login we started is ignored, not trusted
-        if (expectedState == null || verifier == null || redirect.getQueryParameter("state") != expectedState) {
+        val (createdAt, expectedState) = parsePendingState(storedState)
+        val expired = createdAt > 0L && System.currentTimeMillis() - createdAt > OAuthStateTtlMs
+        val givenState = redirect.getQueryParameter("state")
+        // a link that doesn't belong to the login we started is ignored without aborting an active login
+        if (expectedState == null || verifier == null || expired || givenState == null ||
+            !MessageDigest.isEqual(expectedState.toByteArray(Charsets.UTF_8), givenState.toByteArray(Charsets.UTF_8))
+        ) {
+            if (expired) {
+                context.dataStore.edit {
+                    it.remove(DiscordLoginStateKey)
+                    it.remove(DiscordLoginVerifierKey)
+                }
+            }
             _login.value = DiscordLogin.Failed("That sign-in link had expired. Try logging in again.")
             return
         }
@@ -161,7 +171,15 @@ class DiscordAuth @Inject constructor(
 
     /** The user closed the browser without finishing; the page goes back to its button. */
     fun cancelWaiting() {
-        if (_login.value == DiscordLogin.InBrowser) _login.value = DiscordLogin.Idle
+        if (_login.value == DiscordLogin.InBrowser) {
+            _login.value = DiscordLogin.Idle
+            scope.launch {
+                context.dataStore.edit {
+                    it.remove(DiscordLoginStateKey)
+                    it.remove(DiscordLoginVerifierKey)
+                }
+            }
+        }
     }
 
     fun dismissProblem() {
@@ -216,15 +234,25 @@ class DiscordAuth @Inject constructor(
             .onSuccess { profile -> context.dataStore.edit { it[DiscordProfileKey] = profile.toJson() } }
     }
 
-    /** Signs out here and tells Discord to forget the token too. */
+    /** Signs out here and tells Discord to forget both the refresh and access tokens too. */
     suspend fun logOut() {
-        val token = context.dataStore.data.first()[DiscordAccessTokenKey]
+        val prefs = context.dataStore.data.first()
+        val accessToken = prefs[DiscordAccessTokenKey]
+        val refreshToken = prefs[DiscordRefreshTokenKey]
         signOutHere()
-        if (token != null) {
+        if (refreshToken != null) {
             runCatching {
                 DiscordHttp.postForm(
                     "/oauth2/token/revoke",
-                    mapOf("client_id" to ClientId, "token" to token, "token_type_hint" to "access_token"),
+                    mapOf("client_id" to ClientId, "token" to refreshToken, "token_type_hint" to "refresh_token"),
+                )
+            }
+        }
+        if (accessToken != null) {
+            runCatching {
+                DiscordHttp.postForm(
+                    "/oauth2/token/revoke",
+                    mapOf("client_id" to ClientId, "token" to accessToken, "token_type_hint" to "access_token"),
                 )
             }
         }
@@ -263,16 +291,6 @@ class DiscordAuth @Inject constructor(
         return access
     }
 
-    private fun randomCode(bytes: Int): String {
-        val raw = ByteArray(bytes).also { SecureRandom().nextBytes(it) }
-        return Base64.encodeToString(raw, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
-    }
-
-    private fun challengeOf(verifier: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII))
-        return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
-    }
-
     companion object {
         private const val LogTag = "DiscordAuth"
 
@@ -288,6 +306,16 @@ class DiscordAuth @Inject constructor(
 
         /** renew a little before Discord's deadline, so a long song never meets an expired token */
         private const val RenewEarlyMs = 10 * 60_000L
+        private const val OAuthStateTtlMs = 15 * 60_000L
+
+        private fun parsePendingState(raw: String?): Pair<Long, String?> {
+            if (raw.isNullOrBlank()) return 0L to null
+            val sep = raw.indexOf('|')
+            if (sep <= 0) return 0L to raw
+            val ts = raw.substring(0, sep).toLongOrNull() ?: return 0L to raw
+            val state = raw.substring(sep + 1).takeIf { it.isNotEmpty() } ?: return 0L to null
+            return ts to state
+        }
 
         private val LegacyKeys: List<Preferences.Key<*>> = listOf(
             "discordToken", "discordUsername", "discordName", "discordAvatar", "discordStatus",

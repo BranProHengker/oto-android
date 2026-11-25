@@ -279,7 +279,7 @@ fun ProfileScreen(navController: NavController) {
     }
     val cardNumber = cardNumberPref.ifBlank { "00000000000" }
     val joinedDate = if (joinedEpochDay >= 0L) LocalDate.ofEpochDay(joinedEpochDay) else LocalDate.now()
-    val joinedText = stringResource(R.string.profile_joined_at, joinedDate.format(DateLong)) + joinedDate.format(DateLong)
+    val joinedText = stringResource(R.string.profile_joined_at, joinedDate.format(DateLong))
     val photo: Any? = profilePicUri.takeIf { it.isNotBlank() }?.let { if (it.contains("://")) it else "file://$it" }
 
     // ---- header state -------------------------------------------------------------------------
@@ -754,7 +754,7 @@ fun ProfileScreen(navController: NavController) {
                             )
                             if (invalid) {
                                 Text(
-                                    text = (recap as? RecapAvailability.NotYet)?.comeBack.orEmpty(),
+                                    text = (recap as? RecapAvailability.NotYet)?.comeBackText?.invoke(context).orEmpty(),
                                     style = PageTitle.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.6f)),
                                     modifier = Modifier.padding(top = 6.dp),
                                 )
@@ -817,7 +817,8 @@ fun ProfileScreen(navController: NavController) {
             }
 
             // ---- the glass top bar, a sibling of the glassRoot box (never inside it) ------------------
-            if (collapseProgress > 0.005f && stage == HeaderStage.Collapsed) {
+            val showTopBarGlass by remember { derivedStateOf { collapseProgress > 0.005f && stage == HeaderStage.Collapsed } }
+            if (showTopBarGlass) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -827,7 +828,7 @@ fun ProfileScreen(navController: NavController) {
                     ProgressiveGlassBackground(
                         state = glassState,
                         maxBlurRadius = { 55f * collapseProgress },
-                        foundationColor = Color.Black.copy(alpha = 0.55f * collapseProgress),
+                        foundationColor = Color.Black.copy(alpha = 0.55f),
                         direction = BlurDirection.BottomToTop,
                         steps = 3,
                         modifier = Modifier
@@ -838,15 +839,18 @@ fun ProfileScreen(navController: NavController) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(
-                                if (progressiveBar) {
+                            .drawWithCache {
+                                val fade = if (progressiveBar) {
                                     Brush.verticalGradient(
-                                        listOf(Color.Black, Color.Black.copy(alpha = 0.85f * collapseProgress), Color.Transparent),
+                                        listOf(Color.Black, Color.Black.copy(alpha = 0.85f), Color.Transparent),
                                     )
                                 } else {
                                     androidx.compose.ui.graphics.SolidColor(Color.Black.copy(alpha = co.oto.music.ui.component.FlatBarScrimAlpha))
-                                },
-                            ),
+                                }
+                                onDrawBehind {
+                                    drawRect(brush = fade, alpha = collapseProgress)
+                                }
+                            },
                     )
                 }
             }
@@ -866,7 +870,8 @@ fun ProfileScreen(navController: NavController) {
                         transformOrigin = TransformOrigin(0f, 0.5f)
                     },
             )
-            if (collapseProgress > 0.01f) {
+            val showTopBarGreeting by remember { derivedStateOf { collapseProgress > 0.01f } }
+            if (showTopBarGreeting) {
                 Text(
                     text = stringResource(R.string.profile_greeting_format, stringResource(OtoGreeting.currentRes), accountName.ifBlank { stringResource(R.string.profile_greeting_fallback) }),
                     style = PageTitle.copy(fontSize = 18.sp),
@@ -1001,13 +1006,10 @@ private fun Modifier.clipBottomRounded(radius: () -> Float): Modifier = drawWith
     }
 }
 
-private val PageTitle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 23.sp,
-    letterSpacing = (-0.6).sp,
-    color = Color.White,
+private val PageTitleCache = co.oto.music.ui.theme.headingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 23.sp, letterSpacing = (-0.6).sp, color = Color.White),
 )
+private val PageTitle: TextStyle get() = PageTitleCache.current()
 
 private val MonoSmall = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
 
@@ -1123,7 +1125,7 @@ private fun VersionCard(
  */
 @Composable
 private fun VersionCapsule(update: Boolean, onAbout: () -> Unit) {
-    val shown = if (update) "Update" else stringResource(R.string.profile_capsule_about)
+    val shown = if (update) stringResource(R.string.profile_capsule_update) else stringResource(R.string.profile_capsule_about)
 
     // the pop: a quick squash, then a spring that carries past full size and settles
     val pop = remember { Animatable(1f) }

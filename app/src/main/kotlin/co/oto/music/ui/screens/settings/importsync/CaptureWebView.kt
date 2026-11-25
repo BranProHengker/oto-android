@@ -12,9 +12,11 @@ import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import java.util.concurrent.atomic.AtomicReference
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -47,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebSettingsCompat
@@ -248,7 +251,16 @@ fun CaptureWebContent(
     val currentOnLoadingChange by rememberUpdatedState(onLoadingChange)
     var mainWebView by remember { mutableStateOf<WebView?>(null) }
     var popupWebView by remember { mutableStateOf<WebView?>(null) }
-    val bridge = remember { CaptureBridge { name, value, url -> currentOnHeader(name, value, url) } }
+    val currentMainUrl = remember { AtomicReference<String?>(null) }
+    val bridge = remember(playerOrigins) {
+        CaptureBridge { name, value, url ->
+            // Verify both the actual WebView main-frame URL and the reported request URL against playerOrigins
+            val activeUrl = currentMainUrl.get()
+            if (playerOrigins.isEmpty() || (isPlayerPage(activeUrl, playerOrigins) && isPlayerPage(url, playerOrigins))) {
+                currentOnHeader(name, value, url)
+            }
+        }
+    }
     val documentStartSupported = remember { WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) }
 
     fun WebView.configure(isPopup: Boolean) {
@@ -256,6 +268,14 @@ fun CaptureWebContent(
         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        // lock down file/content urls so a sketchy sign-in page can't read local app files
+        settings.allowFileAccess = false
+        settings.allowContentAccess = false
+        @Suppress("DEPRECATION")
+        settings.allowFileAccessFromFileURLs = false
+        @Suppress("DEPRECATION")
+        settings.allowUniversalAccessFromFileURLs = false
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         settings.javaScriptCanOpenWindowsAutomatically = true
         settings.setSupportMultipleWindows(true)
         settings.useWideViewPort = true
@@ -276,8 +296,14 @@ fun CaptureWebContent(
         }
 
         webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                val scheme = request.url?.scheme?.lowercase()
+                return scheme != "https" && request.url?.toString() != "about:blank"
+            }
+
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 if (!isPopup) {
+                    currentMainUrl.set(url)
                     currentOnLoadingChange(true)
                     url?.let(currentOnUrlChange)
                 }
@@ -287,6 +313,7 @@ fun CaptureWebContent(
 
             override fun onPageFinished(view: WebView, url: String?) {
                 if (!isPopup) {
+                    currentMainUrl.set(url)
                     currentOnLoadingChange(false)
                     url?.let(currentOnUrlChange)
                 }
@@ -303,9 +330,9 @@ fun CaptureWebContent(
                 if (request.isForMainFrame) Timber.tag(LOG_TAG).w("page answered HTTP %s: %s", response.statusCode, request.url?.host)
             }
 
-            // a second way to see request headers, for requests the page hook misses
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url?.toString().orEmpty()
+                if (playerOrigins.isNotEmpty() && !isPlayerPage(url, playerOrigins)) return null
                 request.requestHeaders?.forEach { (name, value) ->
                     if (name.lowercase() in SESSION_HEADERS) currentOnHeader(name, value, url)
                 }
@@ -332,8 +359,10 @@ fun CaptureWebContent(
 
             // the web players check for DRM before they start; WebView refuses it unless the app agrees
             override fun onPermissionRequest(request: PermissionRequest) {
+                val origin = request.origin?.toString()
+                val originAllowed = playerOrigins.isEmpty() || isPlayerPage(origin, playerOrigins)
                 val protectedMedia = arrayOf(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID)
-                if (request.resources.any { it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID }) {
+                if (originAllowed && request.resources.any { it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID }) {
                     request.grant(protectedMedia)
                 } else {
                     request.deny()
@@ -424,7 +453,7 @@ fun WebLoginHeader(title: String, subtitle: String, onBack: () -> Unit) {
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(painterResource(R.drawable.arrow_back), contentDescription = "Back", tint = Color.White)
+            Icon(painterResource(R.drawable.arrow_back), contentDescription = stringResource(R.string.back_content_desc), tint = Color.White)
         }
         Spacer(Modifier.width(4.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -434,8 +463,27 @@ fun WebLoginHeader(title: String, subtitle: String, onBack: () -> Unit) {
     }
 }
 
-private fun isPlayerPage(url: String?, playerOrigins: Set<String>): Boolean =
-    url != null && playerOrigins.any { url.startsWith(it) }
+// exact origin check so "https://music.apple.com.evil.com" never matches "https://music.apple.com"
+private fun isPlayerPage(url: String?, playerOrigins: Set<String>): Boolean {
+    if (url.isNullOrBlank()) return false
+    val target = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+    val tScheme = target.scheme?.lowercase() ?: return false
+    val tHost = target.host?.lowercase() ?: return false
+    val tPort = if (target.port > 0) target.port else defaultPort(tScheme)
+    return playerOrigins.any { raw ->
+        val allowed = runCatching { java.net.URI(raw) }.getOrNull() ?: return@any false
+        val aScheme = allowed.scheme?.lowercase() ?: return@any false
+        val aHost = allowed.host?.lowercase() ?: return@any false
+        val aPort = if (allowed.port > 0) allowed.port else defaultPort(aScheme)
+        tScheme == aScheme && tHost == aHost && tPort == aPort
+    }
+}
+
+private fun defaultPort(scheme: String): Int = when (scheme) {
+    "https" -> 443
+    "http" -> 80
+    else -> -1
+}
 
 private const val LOG_TAG = "SignInWeb"
 
@@ -488,7 +536,9 @@ fun clearWebSession(origins: List<String>) {
             val name = pair.substringBefore('=').trim()
             if (name.isNotEmpty()) {
                 cookies.setCookie(origin, "$name=; Max-Age=0; Path=/")
+                cookies.setCookie(origin, "$name=; Max-Age=0; Path=/; Secure")
                 cookies.setCookie(origin, "$name=; Max-Age=0; Path=/; Domain=.$parentDomain")
+                cookies.setCookie(origin, "$name=; Max-Age=0; Path=/; Domain=.$parentDomain; Secure")
             }
         }
         // web players keep their session in local storage too

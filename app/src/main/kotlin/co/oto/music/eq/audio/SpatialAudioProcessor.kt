@@ -50,6 +50,7 @@ class SpatialAudioProcessor(private val service: AudioFxService) : AudioProcesso
 
     private var amount = 0f
     private var monoAmount = 0f
+    private var frame = FloatArray(0)
     private var crossfeed: Crossfeed? = null
     private var head: HeadRenderer? = null
     private var headAngle = Float.NaN
@@ -93,19 +94,28 @@ class SpatialAudioProcessor(private val service: AudioFxService) : AudioProcesso
 
         if (surround) {
             val renderer = head ?: HeadRenderer(sampleRate, surroundAzimuths(inChannels)).also { head = it }
+            val gain = surroundGain(inChannels)
+            val mono = params.mono
             val out = replaceOutputBuffer(frames * 4)
-            val frame = FloatArray(inChannels)
             for (f in 0 until frames) {
                 for (c in 0 until inChannels) frame[c] = inputBuffer.getShort() * scale
                 renderer.render(frame)
-                out.putShort(toPcm(renderer.left * SurroundGain))
-                out.putShort(toPcm(renderer.right * SurroundGain))
+                var l = renderer.left * gain
+                var r = renderer.right * gain
+                if (mono) {
+                    val m = (l + r) * 0.5f
+                    l = m
+                    r = m
+                }
+                out.putShort(toPcm(l))
+                out.putShort(toPcm(r))
             }
             out.flip()
             return
         }
 
-        val target = if (params.enabled) params.amount.coerceIn(0f, 1f) else 0f
+        // 3d sims already places the song for two ears; crossfeed on top would smear it
+        val target = if (params.enabled && !service.stage.enabled) params.amount.coerceIn(0f, 1f) else 0f
         val monoTarget = if (params.mono) 1f else 0f
         val out = replaceOutputBuffer(bytes)
         if (target == 0f && amount == 0f && monoTarget == 0f && monoAmount == 0f) {
@@ -137,7 +147,6 @@ class SpatialAudioProcessor(private val service: AudioFxService) : AudioProcesso
                 val angle = params.speakerAngle.coerceIn(5f, 90f)
                 val renderer = head?.takeIf { headAngle == angle }
                     ?: HeadRenderer(sampleRate, floatArrayOf(-angle, angle)).also { head = it; headAngle = angle }
-                val frame = FloatArray(2)
                 for (f in 0 until frames) {
                     var l = inputBuffer.getShort() * scale
                     var r = inputBuffer.getShort() * scale
@@ -194,6 +203,7 @@ class SpatialAudioProcessor(private val service: AudioFxService) : AudioProcesso
                 sampleRate = format.sampleRate
                 inChannels = format.channelCount
                 surround = pendingSurround
+                frame = FloatArray(inChannels)
                 crossfeed = null
                 head = null
                 headAngle = Float.NaN
@@ -321,8 +331,9 @@ class SpatialAudioProcessor(private val service: AudioFxService) : AudioProcesso
             }
             val earliest = raw.minOrNull() ?: 0.0
             for (i in 0 until n * 2) {
-                delay[i] = if (azimuths[i / 2].isNaN()) 0f else ((raw[i] - earliest) * sampleRate).toFloat()
-                    .coerceIn(0f, (DelaySize - 2).toFloat())
+                // lfe aligns with the centre speaker instead of zero delay so deep bass arrives in phase with the front channels
+                val target = if (azimuths[i / 2].isNaN()) 0.0 else raw[i]
+                delay[i] = ((target - earliest) * sampleRate).toFloat().coerceIn(0f, (DelaySize - 2).toFloat())
             }
         }
 
@@ -377,8 +388,14 @@ class SpatialAudioProcessor(private val service: AudioFxService) : AudioProcesso
         private val EMPTY_BUFFER: ByteBuffer = ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder())
         private const val ToggleSeconds = 0.15f
         private const val SpeakerGain = 0.6f
-        private const val SurroundGain = 0.28f
         private const val Knee = 0.9f
+
+        // scales surround mixes to match stereo loudness without crushing dynamics; the soft knee catches peaks
+        private fun surroundGain(channels: Int): Float = when {
+            channels <= 4 -> 0.70f
+            channels <= 6 -> 0.55f
+            else -> 0.48f
+        }
 
         /** android's channel order: fl fr fc lfe bl br sl sr (fewer channels drop from the end) */
         private fun surroundAzimuths(channels: Int): FloatArray = when (channels) {

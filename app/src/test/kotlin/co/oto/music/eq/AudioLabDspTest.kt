@@ -3,6 +3,8 @@ package co.oto.music.eq
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import co.oto.music.eq.audio.CustomEqualizerAudioProcessor
+import co.oto.music.eq.audio.EightDAudioProcessor
+import co.oto.music.eq.audio.EightDParams
 import co.oto.music.eq.audio.LoudnessAudioProcessor
 import co.oto.music.eq.audio.LoudnessParams
 import co.oto.music.eq.audio.ReverbAudioProcessor
@@ -167,6 +169,27 @@ class AudioLabDspTest {
     }
 
     @Test
+    fun `8D panning bypasses unsupported formats and smooths live enable changes`() {
+        val fx = AudioFxService()
+        val processor = EightDAudioProcessor(fx)
+        configure(processor)
+        val input = sine(440.0, 0.4, rate)
+        assertArrayEquals(input, run(processor, input))
+
+        fx.eightD = EightDParams(enabled = true, rotationSpeedHz = 0.15f, depth = 0.85f)
+        val output = run(processor, input)
+        assertTrue("enabled panning changes the signal", !input.contentEquals(output))
+        assertTrue("fade-in remains smooth", maxStep(output) < maxStep(input) * 3)
+
+        val mono = EightDAudioProcessor(AudioFxService())
+        assertEquals(AudioProcessor.AudioFormat.NOT_SET, configure(mono, channels = 1))
+        assertEquals(
+            AudioProcessor.AudioFormat.NOT_SET,
+            mono.configure(AudioProcessor.AudioFormat(rate, 2, C.ENCODING_PCM_FLOAT)),
+        )
+    }
+
+    @Test
     fun `loudness gets quiet music louder and loud music never past the ceiling`() {
         val fx = AudioFxService()
         val loud = LoudnessAudioProcessor(fx)
@@ -219,11 +242,41 @@ class AudioLabDspTest {
         assertEquals(2, format.channelCount)
         val six = ShortArray(rate * 6) { i -> if (i % 6 == 2) (8000 * sin(2 * PI * 440.0 * (i / 6) / rate)).toInt().toShort() else 0 }
         val out = run(on, six, channels = 6, outChannels = 2)
-        // the centre channel arrives in both ears, equally
+        // the centre channel arrives in both ears, equally and at a healthy level
         val left = ShortArray(out.size / 2) { out[it * 2] }
         val right = ShortArray(out.size / 2) { out[it * 2 + 1] }
         assertEquals(rmsDb(left), rmsDb(right), 0.5)
-        assertTrue(rmsDb(left) > -40)
+        assertTrue("surround centre too quiet: ${rmsDb(left)} dB", rmsDb(left) > -26)
+    }
+
+    @Test
+    fun `surround aligns lfe with centre and honours mono folddown`() {
+        val fx = AudioFxService()
+        fx.spatial = SpatialParams(surround = true)
+        val processor = SpatialAudioProcessor(fx)
+        configure(processor, channels = 6)
+
+        val centreOnly = ShortArray(rate * 6) { i ->
+            if (i % 6 == 2) (10000 * sin(2 * PI * 80.0 * (i / 6) / rate)).toInt().toShort() else 0
+        }
+        val centreAndLfe = ShortArray(rate * 6) { i ->
+            if (i % 6 == 2 || i % 6 == 3) (10000 * sin(2 * PI * 80.0 * (i / 6) / rate)).toInt().toShort() else 0
+        }
+        val outCentre = run(processor, centreOnly, channels = 6, outChannels = 2)
+        processor.flush()
+        val outBoth = run(processor, centreAndLfe, channels = 6, outChannels = 2)
+        // in-phase lfe must reinforce the centre bass instead of cancelling or arriving early
+        assertTrue("centre+lfe (${rmsDb(outBoth)}) should beat centre alone (${rmsDb(outCentre)})", rmsDb(outBoth) > rmsDb(outCentre) + 2.0)
+
+        fx.spatial = SpatialParams(surround = true, mono = true)
+        processor.flush()
+        val backLeftOnly = ShortArray(rate / 2 * 6) { i ->
+            if (i % 6 == 4) (12000 * sin(2 * PI * 300.0 * (i / 6) / rate)).toInt().toShort() else 0
+        }
+        val monoOut = run(processor, backLeftOnly, channels = 6, outChannels = 2)
+        for (i in monoOut.size / 2 until monoOut.size step 2) {
+            assertEquals(monoOut[i].toInt(), monoOut[i + 1].toInt())
+        }
     }
 
     @Test

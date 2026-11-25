@@ -13,13 +13,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -96,10 +96,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.LottieCompositionSpec
-import com.airbnb.lottie.compose.animateLottieCompositionAsState
-import com.airbnb.lottie.compose.rememberLottieComposition
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -129,6 +125,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.navigation.NavHostController
@@ -161,7 +158,6 @@ import co.oto.music.constants.DynamicThemeKey
 import co.oto.music.constants.EnableHighRefreshRateKey
 import co.oto.music.constants.MiniPlayerBottomSpacing
 import co.oto.music.constants.MiniPlayerHeight
-import co.oto.music.constants.NavigationBarAnimationSpec
 import co.oto.music.constants.NavigationBarHeight
 import co.oto.music.constants.SlimNavBarHeight
 import co.oto.music.constants.SlimNavBarKey
@@ -189,6 +185,7 @@ import co.oto.music.playback.MusicService.MusicBinder
 import co.oto.music.playback.PlayerConnection
 import co.oto.music.playback.queues.YouTubeQueue
 import co.oto.music.ui.component.AppNavigationBar
+import co.oto.music.ui.component.navigateToTab
 import co.oto.music.ui.component.onTabTapped
 import co.oto.music.ui.component.LocalBottomSheetPageState
 import co.oto.music.ui.component.LocalMenuState
@@ -307,6 +304,7 @@ class MainActivity : ComponentActivity() {
     // keeps the app's animation speed following android's own animation scale while we're open
     private var systemScaleObserver: android.database.ContentObserver? = null
     private var introPlays = false
+    private var rootGlassState: GlassState? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -352,8 +350,10 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         playerConnection?.isUiVisible?.value = true
-        // paired phones are checked on, and a steered device asked what it plays, only while oto is on screen
-        if (!isTelevision()) phoneLink.get().appShown()
+        // paired phones are checked on only when at least one device is paired, keeping PhoneLinkHost lazy otherwise
+        if (!isTelevision() && co.oto.music.link.phone.PhoneLinkHost.hasPairedDevices(this)) {
+            phoneLink.get().appShown()
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -370,7 +370,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         playerConnection?.isUiVisible?.value = false
-        if (!isTelevision()) phoneLink.get().appHidden()
+        if (!isTelevision() && co.oto.music.link.phone.PhoneLinkHost.hasPairedDevices(this)) {
+            phoneLink.get().appHidden()
+        }
+        // drop the recorded backdrop display list and idle video players while the window is hidden
+        rootGlassState?.discard()
+        co.oto.music.ui.player.video.YouTubeVideoSessions.releaseIdle()
         unbindService(serviceConnection)
         super.onStop()
     }
@@ -384,14 +389,25 @@ class MainActivity : ComponentActivity() {
             isFinishing
         ) {
             stopService(Intent(this, MusicService::class.java))
-            unbindService(serviceConnection)
+            // onStop already unbound serviceConnection, so guard against a double unbind aborting cleanup below
+            runCatching { unbindService(serviceConnection) }
         }
+        rootGlassState?.discard()
+        rootGlassState = null
         // the service outlives us, so take our listener off its player or a recreate leaves the old one firing
         co.oto.music.link.LinkPlayer.release(playerConnection)
         playerConnection?.dispose()
         playerConnection = null
         // closed for good while the music plays on: the covers decoded for this screen have nothing left to show on
         if (isFinishing) coil3.SingletonImageLoader.get(this).memoryCache?.clear()
+    }
+
+    // home can show the same playlist in two rows, so the card under the finger claims the page's grow animation before the tap lands
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            co.oto.music.ui.component.claimContainerTransformAt(androidx.compose.ui.geometry.Offset(ev.x, ev.y))
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -581,30 +597,34 @@ class MainActivity : ComponentActivity() {
                 return@LaunchedEffect
             }
 
-            playerConnection.service.currentMediaMetadata.collectLatest { song ->
-                if (song?.thumbnailUrl != null) {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            val result = imageLoader.execute(
-                                ImageRequest.Builder(this@MainActivity)
-                                    .data(song.thumbnailUrl)
-                                    .allowHardware(false)
-                                    .memoryCachePolicy(CachePolicy.ENABLED)
-                                    .diskCachePolicy(CachePolicy.ENABLED)
-                                    .networkCachePolicy(CachePolicy.ENABLED)
-                                    .crossfade(false)
-                                    .build()
-                            )
-                            themeColor = result.image?.toBitmap()?.extractThemeColor() ?: selectedThemeColor
-                        } catch (e: Exception) {
+            // pause dynamic theme extraction while the activity is stopped so background track changes don't decode covers or recompose hidden ui
+            lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                playerConnection.service.currentMediaMetadata.collectLatest { song ->
+                    if (song?.thumbnailUrl != null) {
+                        withContext(Dispatchers.IO) {
+                            try {
+                                val result = imageLoader.execute(
+                                    ImageRequest.Builder(this@MainActivity)
+                                        .data(song.thumbnailUrl)
+                                        .size(112, 112)
+                                        .allowHardware(false)
+                                        .memoryCachePolicy(CachePolicy.DISABLED)
+                                        .diskCachePolicy(CachePolicy.ENABLED)
+                                        .networkCachePolicy(CachePolicy.ENABLED)
+                                        .crossfade(false)
+                                        .build()
+                                )
+                                themeColor = result.image?.toBitmap()?.extractThemeColor() ?: selectedThemeColor
+                            } catch (e: Exception) {
 
-                            themeColor = selectedThemeColor
+                                themeColor = selectedThemeColor
+                            }
                         }
+                    } else {
+                        themeColor = selectedThemeColor
                     }
-                } else {
-                    themeColor = selectedThemeColor
+                    themeSettled = true
                 }
-                themeSettled = true
             }
         }
 
@@ -617,7 +637,7 @@ class MainActivity : ComponentActivity() {
                     .fillMaxSize()
                     .background(if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface)
             ) {
-                val glassState = remember { GlassState() }
+                val glassState = remember { GlassState().also { rootGlassState = it } }
                 val hideAppChrome = remember { mutableStateOf(false) }
                 val detailAccentColor = remember { mutableStateOf<Color?>(null) }
                 val focusManager = LocalFocusManager.current
@@ -714,76 +734,44 @@ class MainActivity : ComponentActivity() {
                         currentRoute?.startsWith("search/") == true
                     }
                 }
-                val navigationItemRoutes = remember(navigationItems) {
-                    navigationItems.map { it.route }.toSet()
+                // "module/page" while one of a module's pages is open, so a look's own bar can keep it as a tab
+                val currentModulePage by remember {
+                    derivedStateOf {
+                        navBackStackEntry?.takeIf { it.destination.route == co.oto.music.ui.screens.settings.modules.ModulePageRoutePattern }
+                            ?.arguments?.let { "${it.getString("id")}/${it.getString("page")}" }
+                    }
                 }
-
-                val shouldShowNavigationBar = remember(currentRoute, navigationItemRoutes) {
-                    currentRoute == null ||
-                        navigationItemRoutes.contains(currentRoute) ||
-                        currentRoute!!.startsWith("search/") ||
-
-                        currentRoute!!.startsWith("genre/") ||
-                        currentRoute!!.startsWith("local_playlist/") ||
-                        currentRoute!!.startsWith("online_playlist/") ||
-                        currentRoute!!.startsWith("auto_playlist/") ||
-                        // the bar stays while a page from the Library, an album or an artist is open
-                        currentRoute!!.startsWith("library/") ||
-                        currentRoute!!.startsWith("album/") ||
-                        currentRoute!!.startsWith("artist/") ||
-
-                        currentRoute in SubSettingsRoutes
-                }
-
                 // a phone on its side or a tablet: the mini player and the tabs share one pill along the bottom
                 val wideBar = if (isWideLayout()) {
                     co.oto.music.ui.component.rememberWideBar(maxWidth, maxHeight, navigationItems.size)
                 } else null
-                val miniPill = when {
-                    wideBar == null -> co.oto.music.ui.component.PhoneMiniPill
-                    shouldShowNavigationBar -> wideBar.miniFrame
-                    else -> wideBar.miniAloneFrame
-                }
+                val miniPill = wideBar?.miniFrame ?: co.oto.music.ui.component.PhoneMiniPill
 
                 // the row the tabs take along the bottom: the wide bar's shrinks with a short screen
                 val navRowHeight = wideBar?.rowHeight ?: NavigationBarHeight
-                val navPadding = if (shouldShowNavigationBar) {
-                    if (slimNav && wideBar == null) SlimNavBarHeight else navRowHeight
-                } else {
-                    0.dp
-                }
-
-                val navigationBarHeight by animateDpAsState(
-                    targetValue = if (shouldShowNavigationBar) navRowHeight else 0.dp,
-                    animationSpec = NavigationBarAnimationSpec,
-                    label = "navBarHeight",
-                )
+                val navPadding = if (slimNav && wideBar == null) SlimNavBarHeight else navRowHeight
 
                 val playerBottomSheetState = rememberBottomSheetState(
                     dismissedBound = 0.dp,
-                    collapsedBound = when {
+                    collapsedBound = if (wideBar != null) {
                         // level with the tabs, in the same pill
-                        wideBar != null && shouldShowNavigationBar -> bottomInset + navPadding - wideBar.pillGap
-                        shouldShowNavigationBar -> bottomInset + navPadding + MiniPlayerHeight
-                        else -> bottomInset + MiniPlayerHeight
+                        bottomInset + navPadding - wideBar.pillGap
+                    } else {
+                        bottomInset + navPadding + MiniPlayerHeight
                     },
                     expandedBound = maxHeight,
                 )
 
                 PlayerSystemBarsSync(playerBottomSheetState)
 
-                val sharedBarRow = wideBar != null && shouldShowNavigationBar
+                val sharedBarRow = wideBar != null
                 val playerAwareWindowInsets = remember(
                     bottomInset,
                     navRowHeight,
-                    shouldShowNavigationBar,
                     playerBottomSheetState.isDismissed,
                     sharedBarRow,
                 ) {
-                    var bottom = bottomInset
-                    if (shouldShowNavigationBar) {
-                        bottom += navRowHeight
-                    }
+                    var bottom = bottomInset + navRowHeight
                     // in the wide bar the mini player shares the tabs' row, so it takes no room of its own
                     if (!playerBottomSheetState.isDismissed && !sharedBarRow) bottom += MiniPlayerHeight
                     windowsInsets
@@ -1014,7 +1002,7 @@ class MainActivity : ComponentActivity() {
                                                         if (profilePicStr.isNotEmpty()) {
                                                             coil3.compose.AsyncImage(
                                                                 model = if (profilePicStr.startsWith("file://")) profilePicStr else "file://$profilePicStr",
-                                                                contentDescription = "Profile",
+                                                                contentDescription = stringResource(R.string.profile_label),
                                                                 modifier = Modifier
                                                                     .size(32.dp)
                                                                     .clip(CircleShape),
@@ -1099,42 +1087,22 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 }
                                                 .graphicsLayer {
-                                                    val navBarHeightPx = navigationBarHeight.toPx()
-                                                    val totalHeightPx = navBarTotalHeight.toPx()
-
-                                                    translationY = if (navBarHeightPx == 0f) {
-                                                        totalHeightPx
-                                                    } else {
-                                                        val progress = playerBottomSheetState.progress.coerceIn(0f, 1f)
-                                                        val slideOffset = totalHeightPx * progress
-                                                        val hideOffset = totalHeightPx * (1 - navBarHeightPx / navRowHeight.toPx())
-                                                        slideOffset + hideOffset
-                                                    }
+                                                    val progress = playerBottomSheetState.progress.coerceIn(0f, 1f)
+                                                    translationY = navBarTotalHeight.toPx() * progress
                                                 }
                                         )
 
                                         }
 
                                         if (!hideAppChrome.value) {
-                                        // the bar slides away as the player opens or a page without tabs comes up, every piece of it together
+                                        // the bar slides away as the player opens, every piece of it together
                                         val barMotion = Modifier
                                             .align(Alignment.BottomCenter)
                                             .launchRise(order = 3)
                                             .height(bottomInset + navPadding)
                                             .graphicsLayer {
-                                                val navBarHeightPx = navigationBarHeight.toPx()
-                                                val totalHeightPx = navBarTotalHeight.toPx()
-
                                                 val progress = playerBottomSheetState.progress.coerceIn(0f, 1f)
-
-                                                translationY = if (navBarHeightPx == 0f) {
-                                                    totalHeightPx
-                                                } else {
-                                                    val slideOffset = totalHeightPx * progress
-                                                    val hideOffset = totalHeightPx * (1 - navBarHeightPx / navRowHeight.toPx())
-                                                    slideOffset + hideOffset
-                                                }
-
+                                                translationY = navBarTotalHeight.toPx() * progress
                                                 alpha = (1f - progress / 0.6f).coerceIn(0f, 1f)
                                             }
                                         // the wide pill shrinks onto the tabs while nothing is playing, read while laying out
@@ -1188,6 +1156,12 @@ class MainActivity : ComponentActivity() {
                                                 pureBlack = pureBlack,
                                                 slimNav = slimNav,
                                                 onSearchDoubleTap = onSearchDoubleTap,
+                                                currentPage = currentModulePage,
+                                                onOpenRoute = { route ->
+                                                    if (playerBottomSheetState.isExpanded) playerBottomSheetState.collapseSoft()
+                                                    navController.navigateToTab(route)
+                                                },
+                                                obscured = { playerBottomSheetState.progress > 0.001f },
                                                 modifier = barMotion,
                                             )
                                         }
@@ -1242,17 +1216,24 @@ class MainActivity : ComponentActivity() {
                                     CompositionLocalProvider(
                                         LocalSharedTransitionScope provides this,
                                         LocalAppContentObscured provides appContentObscured,
+                                        // a module page standing in for one of mochy's opens things the way the page it replaces would
+                                        co.oto.music.ui.screens.settings.modules.LocalModuleNavController provides navController,
                                     ) {
                                     // the settings list stays at the left of a wide screen while its pages open beside it
                                     val settingsPane = isWideLayout() &&
                                         co.oto.music.ui.screens.settings.showsSettingsPane(backStack, currentRoute)
-                                    // one glass capture for both panes so the bar frosts what's under it, clear of a sideways phone's side nav bar (its shown size, so hiding it moves nothing)
-                                    Row(
+                                    // one glass capture for both panes so the bar frosts what's under it (including any app-wide module background)
+                                    Box(
                                         Modifier
                                             .fillMaxSize()
                                             .windowInsetsPadding(WindowInsets.stableSystemBars.only(WindowInsetsSides.Horizontal))
-                                            .glassRoot(glassState, isActive = { true })
+                                            .glassRoot(glassState, isActive = { playerBottomSheetState.progress < 0.999f })
                                     ) {
+                                    co.oto.music.ui.screens.settings.modules.ModuleAppBackground(
+                                        currentRoute = currentRoute,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                    Row(Modifier.fillMaxSize()) {
                                     if (settingsPane) {
                                         co.oto.music.ui.screens.settings.SettingsListPane(
                                             navController = navController,
@@ -1340,6 +1321,7 @@ class MainActivity : ComponentActivity() {
                                             activity = this@MainActivity,
                                             snackbarHostState = snackbarHostState
                                         )
+                                    }
                                     }
                                     }
                                     }
@@ -1579,29 +1561,32 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(Intent.EXTRA_TEXT)
         val coroutineScope = lifecycle.coroutineScope
 
+        fun safeRouteId(raw: String?): String? =
+            raw?.trim()?.takeIf { it.isNotEmpty() && it.length <= 256 && !it.contains('/') && !it.contains("..") && !it.contains('?') && !it.contains('#') && !it.any(Char::isWhitespace) }
+
         when (val path = uri.pathSegments.firstOrNull()) {
-            "playlist" -> uri.getQueryParameter("list")?.let { playlistId ->
+            "playlist" -> safeRouteId(uri.getQueryParameter("list"))?.let { playlistId ->
                 if (playlistId.startsWith("OLAK5uy_")) {
                     coroutineScope.launch(Dispatchers.IO) {
                         YouTube.albumSongs(playlistId).onSuccess { songs ->
-                            songs.firstOrNull()?.album?.id?.let { browseId ->
+                            safeRouteId(songs.firstOrNull()?.album?.id)?.let { browseId ->
                                 withContext(Dispatchers.Main) {
-                                    navController.navigate("album/$browseId")
+                                    navController.navigate("album/${android.net.Uri.encode(browseId)}")
                                 }
                             }
                         }.onFailure { reportException(it) }
                     }
                 } else {
-                    navController.navigate("online_playlist/$playlistId")
+                    navController.navigate("online_playlist/${android.net.Uri.encode(playlistId)}")
                 }
             }
 
-            "browse" -> uri.lastPathSegment?.let { browseId ->
-                navController.navigate("album/$browseId")
+            "browse" -> safeRouteId(uri.lastPathSegment)?.let { browseId ->
+                navController.navigate("album/${android.net.Uri.encode(browseId)}")
             }
 
-            "channel", "c" -> uri.lastPathSegment?.let { artistId ->
-                navController.navigate("artist/$artistId")
+            "channel", "c" -> safeRouteId(uri.lastPathSegment)?.let { artistId ->
+                navController.navigate("artist/${android.net.Uri.encode(artistId)}")
             }
 
             "search" -> {
@@ -1669,32 +1654,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-val SubSettingsRoutes = setOf(
-    "experimental_settings",
-    "cipher_settings",
-    "playback_diagnostics",
-    "oto_settings",
-    "import_sync",
-    "import_providers",
-    "import_tunemymusic",
-    "import_progress",
-    "youtube_sync",
-    "stats",
-    "developer_space",
-    "developer_playground",
-    "storage_settings",
-    "gesture_settings",
-    "customisation_settings",
-    // Audio Lab keeps the bar, as in its designs
-    "audio_lab",
-    "equalizer",
-    "audio_fx",
-    "audio_quality",
-    "crossmix_settings",
-    "modules",
-    "module/{id}",
-)
 
 val LocalDatabase = staticCompositionLocalOf<MusicDatabase> { error("No database provided") }
 val LocalPlayerConnection = staticCompositionLocalOf<PlayerConnection?> { error("No PlayerConnection provided") }

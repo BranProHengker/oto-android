@@ -325,8 +325,18 @@ object LyricsUtils {
         "Ѓ", "ѓ", "Ѕ", "ѕ", "Ќ", "ќ"
     )
 
-    private val kuromojiTokenizer: Tokenizer by lazy {
-        Tokenizer()
+    // built on demand and dropped on memory trims so the japanese ipadic tables (~20 mb) don't stay pinned in ram
+    @Volatile
+    private var kuromojiInstance: Tokenizer? = null
+    private val kuromojiLock = Any()
+
+    private val kuromojiTokenizer: Tokenizer
+        get() = kuromojiInstance ?: synchronized(kuromojiLock) {
+            kuromojiInstance ?: Tokenizer().also { kuromojiInstance = it }
+        }
+
+    fun releaseKuromoji() {
+        synchronized(kuromojiLock) { kuromojiInstance = null }
     }
 
     private val HEX_ENTITY_REGEX = "&#x([0-9a-fA-F]+);".toRegex()
@@ -434,12 +444,17 @@ object LyricsUtils {
         }
     }
 
-    // parse in the background as soon as a song's lyrics land, so opening the player finds them ready
+    // set by the lyrics page once it has laid lines out: works out where each of a song's lines wraps, off the main thread
+    @Volatile
+    var lineWarmer: ((List<LyricsEntry>) -> Unit)? = null
+
+    // parse in the background as soon as a song's lyrics land, so opening the player finds them ready, wraps and all
     fun warmParsedLyrics(lyrics: String?) {
         if (lyrics.isNullOrBlank() || lyrics == LyricsEntity.LYRICS_NOT_FOUND) return
-        if (synchronized(parsedCache) { parsedCache.containsKey(lyrics) }) return
-        val parsed = runCatching { parseLyrics(lyrics) }.getOrNull() ?: return
-        synchronized(parsedCache) { parsedCache[lyrics] = parsed }
+        val parsed = synchronized(parsedCache) { parsedCache[lyrics] }
+            ?: runCatching { parseLyrics(lyrics) }.getOrNull()?.also { synchronized(parsedCache) { parsedCache[lyrics] = it } }
+            ?: return
+        lineWarmer?.invoke(parsed)
     }
 
     /**
@@ -1087,6 +1102,9 @@ object LyricsUtils {
 
     /** Whether a payload carries `{agent:…}` voice tags — i.e. can drive left/right duet layout. */
     fun hasVoiceTags(rawLyrics: String): Boolean = rawLyrics.contains("{agent:")
+
+    // lines tagged {bg} are the backing vocals the lyrics page draws small under the lead line
+    fun hasBackgroundVocals(rawLyrics: String): Boolean = rawLyrics.contains("{bg}")
 
     /**
      * Whether a payload would actually lay out on both sides: two or more voices among its lead

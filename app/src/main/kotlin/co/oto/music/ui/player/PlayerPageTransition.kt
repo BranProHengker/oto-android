@@ -28,6 +28,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -454,7 +455,7 @@ internal fun ExpandingCardSurface(
     transition: PlayerPageTransition,
     morph: CardMorphState,
     modifier: Modifier = Modifier,
-    look: PlayerCardLook = ClassicCardLook,
+    look: PlayerCardLook = FlagshipCardLook,
 ) {
     val active by remember {
         derivedStateOf {
@@ -504,7 +505,9 @@ internal fun Modifier.pageTransitionLayer(
     page: PlayerPage,
     transition: PlayerPageTransition,
     morph: CardMorphState,
-    look: PlayerCardLook = ClassicCardLook,
+    look: PlayerCardLook = FlagshipCardLook,
+    // the fade goes onto each row instead of one buffer, which would cut soft-lit lyrics off from the background
+    modulateAlpha: Boolean = false,
     crossfadeProgress: () -> Float,
 ): Modifier {
     val cardClip = remember { InsetRoundRectShape() }
@@ -527,6 +530,7 @@ internal fun Modifier.pageTransitionLayer(
         } else {
             val p = crossfadeProgress()
             alpha = (p / 0.45f).coerceIn(0f, 1f)
+            if (modulateAlpha) compositingStrategy = CompositingStrategy.ModulateAlpha
             val s = 0.88f + 0.12f * p
             scaleX = s
             scaleY = s

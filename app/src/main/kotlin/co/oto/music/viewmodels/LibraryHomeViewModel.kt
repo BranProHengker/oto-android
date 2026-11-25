@@ -20,6 +20,7 @@ import co.oto.music.importer.ImportSource
 import co.oto.music.importer.MusicImportService
 import co.oto.music.importer.LocalSongRepair
 import co.oto.music.importer.groupLocalAlbums
+import co.oto.music.importer.readLocalGenres
 import co.oto.music.playback.CachedSongs
 import co.oto.music.ui.component.TopToaster
 import co.oto.music.utils.ArtistImageResolver
@@ -196,6 +197,8 @@ constructor(
                 .onFailure { timber.log.Timber.w(it, "Repairing local song names failed") }
             runCatching { groupLocalAlbums(context, database) }
                 .onFailure { timber.log.Timber.w(it, "Grouping local albums failed") }
+            runCatching { readLocalGenres(context, database) }
+                .onFailure { timber.log.Timber.w(it, "Reading local genres failed") }
         }
 
         // Local artists are included: a downloaded song that never went into the library has

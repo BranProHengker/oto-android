@@ -3,6 +3,9 @@
 package co.oto.music.ui.player
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import co.oto.music.applecanvas.AppleMusicCanvasProvider
 import co.oto.music.canvas.CanvasArtwork
 import co.oto.music.canvas.MonochromeApiCanvas
@@ -16,6 +19,25 @@ import co.oto.music.utils.dataStore
 import co.oto.music.utils.get
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+// the animated cover on the player right now, so the player's menu only offers its quality while one plays
+object PlayerCanvasPlayback {
+    // the short side of the picture playing, 0 when no animated cover is up
+    var playingSide by mutableIntStateOf(0)
+        private set
+    private var owner: Any? = null
+
+    // the cover that reported a picture last owns the value, so the song swiping away can't clear the new one's
+    fun report(owner: Any, side: Int) {
+        if (side > 0) {
+            this.owner = owner
+            playingSide = side
+        } else if (this.owner === owner) {
+            this.owner = null
+            playingSide = 0
+        }
+    }
+}
 
 object CanvasArtworkPlaybackCache {
     private const val defaultMaxSize = 256
@@ -87,6 +109,14 @@ internal suspend fun findCanvas(
             }?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
         }
     }
+}
+
+// the song's animated cover from the cache, else from the sources, kept for next time; the names are cleaned off the main thread
+internal suspend fun findCanvasCached(context: Context, mediaId: String, title: String, artist: String, durationSec: Int?): CanvasArtwork? {
+    CanvasArtworkPlaybackCache.get(mediaId)?.let { return it }
+    val (cleanTitle, cleanArtist) = withContext(Dispatchers.Default) { normalizeCanvasSongTitle(title) to normalizeCanvasArtistName(artist) }
+    if (cleanTitle.length < 2 || cleanArtist.length < 2) return null
+    return findCanvas(context, cleanTitle, cleanArtist, durationSec = durationSec)?.also { CanvasArtworkPlaybackCache.put(mediaId, it) }
 }
 
 internal fun normalizeCanvasSongTitle(raw: String): String {

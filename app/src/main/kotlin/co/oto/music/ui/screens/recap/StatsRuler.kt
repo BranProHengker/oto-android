@@ -37,14 +37,17 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.oto.music.R
 import co.oto.music.ui.component.HomeContentInset
 import co.oto.music.ui.theme.InterFontFamily
 import kotlinx.coroutines.launch
@@ -68,12 +71,10 @@ private val MinorTick = 22.dp
 private val HighlightTick = 44.dp
 private val EdgeFade = 40.dp
 
-private val BigLabel = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 30.sp,
-    letterSpacing = (-1.1).sp,
+private val BigLabelCache = co.oto.music.ui.theme.headingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 30.sp, letterSpacing = (-1.1).sp),
 )
+private val BigLabel: TextStyle get() = BigLabelCache.current()
 
 // the other names are the same text drawn at this share of the size
 private const val SmallLabelScale = 0.48f
@@ -87,6 +88,7 @@ internal fun StatsRuler(
     available: Set<StatsRange>,
     today: LocalDate,
     onSelect: (StatsRange) -> Unit,
+    labelStart: Dp,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -103,7 +105,8 @@ internal fun StatsRuler(
             (first..today.year + 1).map { StatsRange(StatsRange.Kind.Year, it) }
         }
     }
-    val labels = remember(items, measurer) { items.map { measurer.measure(labelOf(it), BigLabel) } }
+    val labelStyle = BigLabel
+    val labels = remember(items, measurer, labelStyle) { items.map { measurer.measure(labelOf(it), labelStyle) } }
 
     val committed = items.indexOf(selected).coerceAtLeast(0)
     val currentCommitted by rememberUpdatedState(committed)
@@ -136,11 +139,13 @@ internal fun StatsRuler(
         if (target != currentCommitted) currentOnSelect(items[target])
     }
 
+    val rulerDescription = stringResource(R.string.platform_stats_ruler_description, labelOf(selected))
+
     Canvas(
         modifier = modifier
             .fillMaxWidth()
             .height(RulerHeight)
-            .semantics { contentDescription = "Showing ${labelOf(selected)}. Drag to pick another." }
+            .semantics { contentDescription = rulerDescription }
             .pointerInput(items) {
                 val tracker = VelocityTracker()
                 detectHorizontalDragGestures(
@@ -207,13 +212,14 @@ internal fun StatsRuler(
                 )
             }
 
-            // its name, centred over its first tick; the one under the highlight grows to full size
+            // its name, centred over its first tick; the chosen one grows and, at rest, lines up with the page title
             val near = (1f - abs(i - p)).coerceIn(0f, 1f)
             val layout = labels[i]
             val k = lerpF(SmallLabelScale, 1f, near)
             val w = layout.size.width * k
             val h = layout.size.height * k
-            val left = max(x0 - w / 2f, 6.dp.toPx())
+            val aligned = x0 - (RestAnchor.toPx() - labelStart.toPx())
+            val left = max(lerpF(x0 - w / 2f, aligned, near * (1f - lift.value)), 6.dp.toPx())
             val color = if (open) lerp(StatsInkMuted, StatsInk, near) else lerp(GreyLabel, GreyLabelLit, near)
             val alpha = max(edge(x0), near)
             if (alpha > 0.01f) {

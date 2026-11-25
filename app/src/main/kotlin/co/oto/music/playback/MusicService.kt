@@ -18,6 +18,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.PresetReverb
 import android.net.ConnectivityManager
 import android.os.Binder
 import android.os.Build
@@ -53,6 +54,7 @@ import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.decoder.ffmpeg.FfmpegFallbackRenderer
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -89,6 +91,7 @@ import co.oto.music.R
 import co.oto.music.car.CarLyrics
 import co.oto.music.car.CarLyricsPlayer
 import co.oto.music.car.CarLyricsSource
+import co.oto.music.widget.WidgetLyricTracker
 import co.oto.music.constants.AudioNormalizationKey
 import co.oto.music.constants.AudioOffload
 import co.oto.music.constants.AudioQualityKey
@@ -185,6 +188,7 @@ import co.oto.music.eq.EqualizerService
 import co.oto.music.eq.audio.CustomEqualizerAudioProcessor
 import co.oto.music.eq.audio.LoudnessAudioProcessor
 import co.oto.music.eq.audio.ReverbAudioProcessor
+import co.oto.music.eq.audio.EightDAudioProcessor
 import co.oto.music.eq.audio.SpatialAudioProcessor
 import co.oto.music.extensions.SilentHandler
 import co.oto.music.extensions.collect
@@ -227,6 +231,7 @@ import android.os.VibratorManager
 import android.os.VibrationEffect
 import co.oto.music.playback.queues.EmptyQueue
 import co.oto.music.playback.queues.ListQueue
+import kotlinx.coroutines.cancel
 import co.oto.music.playback.queues.Queue
 import co.oto.music.playback.queues.YouTubeQueue
 import co.oto.music.playback.queues.filterExplicit
@@ -398,6 +403,7 @@ class MusicService :
                 failed.removeListener(this)
                 playerCrossmixProcessors.remove(failed)
                 playerSilenceProcessors.remove(failed)
+                playerReplayGain.remove(failed)
                 unregisterEqualizer(failed)
                 failed.release()
             }
@@ -422,6 +428,8 @@ class MusicService :
     val streamFailure = MutableStateFlow<StreamFailure?>(null)
     private var failureJob: Job? = null
     private val isNetworkConnected = MutableStateFlow(false)
+    // tracks live playback so background timers rest completely while paused
+    private val isPlayingFlow = MutableStateFlow(false)
 
     private lateinit var audioQuality: co.oto.music.constants.AudioQuality
     private lateinit var ipVersion: IpVersion
@@ -583,10 +591,101 @@ class MusicService :
     private var loudnessEnhancerSessionId = C.AUDIO_SESSION_ID_UNSET
     // set while Crossmix replays the song-change hooks for the song it just handed over to
     private var promotingCrossmix = false
+    private var crossmixAnalysisInit = false
     private val crossmixAnalysisRepository by lazy {
+        crossmixAnalysisInit = true
         CrossmixAnalysisRepository(applicationContext) { createDataSourceFactory() }
     }
     private val crossmixDirector by lazy { CrossmixDirector(scope, CrossmixHost(), crossmixAnalysisRepository) }
+    private var mixItPreviewInit = false
+    private val mixItPreview by lazy {
+        mixItPreviewInit = true
+        MixItPreviewController(scope, MixItPreviewHost())
+    }
+    /** live preview playhead & playback state for the Mix It Transition Editor */
+    val mixItPreviewState: kotlinx.coroutines.flow.StateFlow<MixItPreviewState>
+        get() = mixItPreview.state
+
+    // active playlist's Mix It configuration, kept hot in memory from Room so schedule() never blocks
+    private var activePlaylistId: String? = null
+    private var mixItObserverJob: kotlinx.coroutines.Job? = null
+    @Volatile private var activePlaylistMixItEnabled = false
+    @Volatile private var activePlaylistFallback = co.oto.music.mixit.MixItFallbackMode.APP_DEFAULT
+    @Volatile private var activePlaylistTransitions: Map<Pair<String, String>, co.oto.music.db.entities.PlaylistTransition> = emptyMap()
+
+    private fun observeActivePlaylistMixIt(playlistId: String?) {
+        if (activePlaylistId == playlistId && (playlistId == null || mixItObserverJob?.isActive == true)) return
+        activePlaylistId = playlistId
+        mixItObserverJob?.cancel()
+        mixItObserverJob = null
+        activePlaylistMixItEnabled = false
+        activePlaylistFallback = co.oto.music.mixit.MixItFallbackMode.APP_DEFAULT
+        activePlaylistTransitions = emptyMap()
+        if (playlistId == null) return
+        mixItObserverJob = scope.launch {
+            kotlinx.coroutines.flow.combine(
+                database.playlist(playlistId),
+                database.playlistTransitions(playlistId),
+            ) { playlist, transitions ->
+                Triple(
+                    playlist?.playlist?.mixItEnabled == true,
+                    co.oto.music.mixit.MixItFallbackMode.fromName(playlist?.playlist?.mixItFallback),
+                    transitions.associateBy { it.fromSongId to it.toSongId },
+                )
+            }.collect { (enabled, fallback, map) ->
+                activePlaylistMixItEnabled = enabled
+                activePlaylistFallback = fallback
+                activePlaylistTransitions = map
+                // Custom DSP transitions require offload disabled so the audio processor receives PCM
+                if (enabled) runCatching { player.setOffloadEnabled(false) }
+                crossmixDirector.onSettingsChanged()
+                scheduleCrossfade()
+            }
+        }
+    }
+
+    fun startMixItPreview(
+        outItem: MediaItem,
+        inItem: MediaItem,
+        transition: co.oto.music.db.entities.PlaylistTransition,
+        outDurationMs: Long,
+        inDurationMs: Long,
+        outAnalysis: co.oto.music.crossmix.TrackAnalysis?,
+        inAnalysis: co.oto.music.crossmix.TrackAnalysis?,
+    ) {
+        mixItPreview.start(outItem, inItem, transition, outDurationMs, inDurationMs, outAnalysis, inAnalysis)
+    }
+
+    fun stopMixItPreview() {
+        if (mixItPreviewInit) mixItPreview.stop()
+    }
+
+    suspend fun analyzeTrackForMixIt(item: MediaItem): co.oto.music.crossmix.TrackAnalysis? =
+        crossmixAnalysisRepository.analyze(item, wholeTrack = true)
+
+    fun cachedTrackAnalysis(mediaId: String): co.oto.music.crossmix.TrackAnalysis? =
+        crossmixAnalysisRepository.cachedFromDisk(mediaId)
+
+    suspend fun fetchLyricsForMixIt(item: MediaItem): String? = withContext(Dispatchers.IO) {
+        val stored = runCatching { database.lyrics(item.mediaId).first()?.lyrics }.getOrNull()
+        if (stored != null) return@withContext stored.takeUnless { it == LyricsEntity.LYRICS_NOT_FOUND }
+        val metadata = item.metadata ?: return@withContext null
+        val found = kotlinx.coroutines.withTimeoutOrNull(10_000L) {
+            runCatching { lyricsHelper.getLyrics(metadata) }.getOrNull()
+        } ?: return@withContext null
+        if (found.provider == co.oto.music.lyrics.LyricsHelper.NoConnectionProvider) return@withContext null
+        runCatching {
+            database.query { upsert(LyricsEntity(id = metadata.id, lyrics = found.lyrics, provider = found.provider)) }
+        }
+        found.lyrics.takeUnless { it == LyricsEntity.LYRICS_NOT_FOUND }
+    }
+
+    fun notifyMixItChanged(playlistId: String) {
+        if (activePlaylistId == playlistId) {
+            crossmixDirector.onSettingsChanged()
+            scheduleCrossfade()
+        }
+    }
     // fades and layered effects for pause, play and skips; the app's buttons and the media session both go through it
     val transport by lazy { TransportTransitions({ scope }, TransportHost()) }
     /** Crossmix is playing two songs together right now, for the player's "Mixing…" note */
@@ -604,7 +703,9 @@ class MusicService :
     private val listeningOnlyStreams: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     // matches a song's recording against its music video's, for the video background and for a music video's lyrics
+    private var videoAudioSyncInit = false
     private val videoAudioSync by lazy {
+        videoAudioSyncInit = true
         co.oto.music.lyrics.VideoAudioSync({ createDataSourceFactory() }, listeningOnlyStreams)
     }
 
@@ -622,7 +723,9 @@ class MusicService :
     }
 
     /** Lyrics auto offset; the lyrics offset sheet starts it and shows how it's going. */
+    private var lyricsAutoSyncInit = false
     val lyricsAutoSync by lazy {
+        lyricsAutoSyncInit = true
         co.oto.music.lyrics.LyricsAutoSync(
             dataSourceFactory = { createDataSourceFactory() },
             saveOffset = { songId, offsetMs -> database.query { updateLyricsOffset(songId, offsetMs) } },
@@ -704,6 +807,8 @@ class MusicService :
 
     private var isAudioEffectSessionOpened = false
     private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var eightDReverb: PresetReverb? = null
+    private var eightDReverbSessionId = C.AUDIO_SESSION_ID_UNSET
     private lateinit var hapticAudioProcessor: HapticAudioProcessor
 
     /** When a play counts for Last.fm and Libre.fm; the scrobbler skips services that aren't signed in. */
@@ -750,6 +855,41 @@ class MusicService :
 
     var castConnectionHandler: CastConnectionHandler? = null
         private set
+
+    private var selfControllerFuture: com.google.common.util.concurrent.ListenableFuture<MediaController>? = null
+    private var unregisterMemoryTrim: (() -> Unit)? = null
+
+    private fun trimServiceCaches() {
+        val now = System.currentTimeMillis()
+        val keepIds = HashSet<String>(4)
+        runCatching {
+            player.currentMediaItem?.mediaId?.let(keepIds::add)
+            val next = player.nextMediaItemIndex
+            if (next in 0 until player.mediaItemCount) {
+                keepIds.add(player.getMediaItemAt(next).mediaId)
+            }
+        }
+        synchronized(songUrlCache) {
+            songUrlCache.entries.removeIf { (id, entry) -> id !in keepIds && entry.second <= now }
+            if (songUrlCache.size > 64) {
+                songUrlCache.keys.retainAll(keepIds)
+            }
+        }
+        songStreamHeaders.keys.retainAll(keepIds)
+        moduleStreamHeaders.keys.removeIf { key -> keepIds.none { key.endsWith("|$it") || key == it } }
+        resolvedStreamSources.keys.retainAll(keepIds)
+        resolvedSourceIds.keys.retainAll(keepIds)
+        failedSources.keys.retainAll(keepIds)
+        failedSourcesAt.keys.retainAll(keepIds)
+        decoderNotices.keys.retainAll(keepIds)
+        playingStreams.keys.retainAll(keepIds)
+        recoveredSongs.retainAll(keepIds)
+        currentMediaIdRetryCount.keys.retainAll(keepIds)
+        if (usedInfiniteSeeds.size > 64) usedInfiniteSeeds.clear()
+        if (failedInfiniteSeeds.size > 64) failedInfiniteSeeds.clear()
+        streamFacts.update { all -> all.filterKeys { it in keepIds } }
+        if (crossmixAnalysisInit) crossmixAnalysisRepository.trimMemory()
+    }
 
     private val audioDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
@@ -824,7 +964,11 @@ class MusicService :
         audioPass.start()
         player = createExoPlayer()
         player.addListener(this@MusicService)
+        scope.launch {
+            audioLab.eightD.collect(::updateEightDReverb)
+        }
         observeOutputSettings()
+        dropLocalSongCopies()
         sleepTimer = SleepTimer(scope, player)
         player.addListener(sleepTimer)
 
@@ -904,7 +1048,15 @@ class MusicService :
 
         val sessionToken = SessionToken(this, ComponentName(this, MusicService::class.java))
         val controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        controllerFuture.addListener({ controllerFuture.get() }, MoreExecutors.directExecutor())
+        selfControllerFuture = controllerFuture
+        controllerFuture.addListener({ runCatching { controllerFuture.get() } }, MoreExecutors.directExecutor())
+
+        // prune unbounded per-track caches when the ui hides while leaving playback and dac intact
+        unregisterMemoryTrim = co.oto.music.utils.AppMemory.register { level ->
+            if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+                scope.launch { trimServiceCaches() }
+            }
+        }
 
         connectivityManager = getSystemService()!!
         connectivityObserver = NetworkConnectivityObserver(this)
@@ -1056,7 +1208,10 @@ class MusicService :
             audioLab.spatial,
             audioLab.playback,
             audioLab.volume,
-        ) { (eq, reverb, loudness), spatial, playback, volume -> LabSound(eq, reverb, loudness, spatial, playback, volume) }
+            audioLab.stage,
+        ) { (eq, reverb, loudness), spatial, playback, volume, stage ->
+            LabSound(eq, reverb, loudness, spatial, playback, volume, stage.enabled)
+        }
         combine(dataStore.data, labSound, playerVolume) { prefs, lab, volume -> passBlockersOf(prefs, lab, volume) }
             .distinctUntilChanged()
             .collect(scope) { _passBlockers.value = it }
@@ -1333,19 +1488,11 @@ class MusicService :
             }
         }
 
-        // the timed saves only write what changed: a queue edit (they're the only thing that saves one), or the place in the song
+        // save playback position only while playing, so a paused service causes zero background wakeups
         scope.launch {
             while (isActive) {
+                isPlayingFlow.first { it }
                 delay(30.seconds)
-                if (dataStore.get(PersistentQueueKey, true)) {
-                    saveQueueToDisk(onlyChanges = true)
-                }
-            }
-        }
-
-        scope.launch {
-            while (isActive) {
-                delay(10.seconds)
                 if (dataStore.get(PersistentQueueKey, true) && player.isPlaying) {
                     saveQueueToDisk(onlyChanges = true)
                 }
@@ -1359,9 +1506,12 @@ class MusicService :
         // this player's song's ReplayGain, read from its file's tags when its tracks change
         val replayGain = co.oto.music.eq.audio.ReplayGainTags()
         val fxProcessors = arrayOf<androidx.media3.common.audio.AudioProcessor>(
+            // first, so a surround song reaches the room with its own channels
+            co.oto.music.eq.audio.StageAudioProcessor(audioFx),
             SpatialAudioProcessor(audioFx),
             ReverbAudioProcessor(audioFx),
             LoudnessAudioProcessor(audioFx),
+            EightDAudioProcessor(audioFx),
         )
 
         val silenceProcessor = SilenceDetectorAudioProcessor { handleLongSilenceDetected() }
@@ -1420,17 +1570,24 @@ class MusicService :
             }
         }
 
-        runBlocking {
-            val skipSilence = dataStore.get(SkipSilenceKey, false)
-            val instantSkip = dataStore.get(SkipSilenceInstantKey, false)
-            silenceProcessor.instantModeEnabled = skipSilence && instantSkip
-        }
+        val skipSilence = dataStore.get(SkipSilenceKey, false)
+        val instantSkip = dataStore.get(SkipSilenceInstantKey, false)
+        silenceProcessor.instantModeEnabled = skipSilence && instantSkip
+
+        // 15-25 s instead of media3's 50 s, and time wins over the 6 mb cap so a 24/192 dac stream still keeps its full 15 s instead of stopping at ~8
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(15_000, 25_000, 1_500, 3_000)
+            .setTargetBufferBytes(6 * 1024 * 1024)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
 
         val player = ExoPlayer.Builder(this)
+            .setLoadControl(loadControl)
             .setMediaSourceFactory(createMediaSourceFactory())
             .setRenderersFactory(createRenderersFactory(eqProcessor, fxProcessors, silenceProcessor, hapticAudioProcessor, crossmixProcessor, replayGain, spectrum, inspector))
             .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
+            // local wake lock keeps background audio smooth without locking the wifi radio out of power-save mode
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -1461,6 +1618,7 @@ class MusicService :
                 } else if (mediaId != null && format != null && tracks.isTypeSupported(C.TRACK_TYPE_AUDIO, true)) {
                     announceDecoderNotice(mediaId)
                 }
+                if (player === this@MusicService.player) updateEightDReverb(audioLab.eightD.value)
             }
         })
         playerReplayGain[player] = replayGain
@@ -1473,12 +1631,11 @@ class MusicService :
         player.setPreferredAudioDevice(audioOutputs.preferredDevice())
 
         player.apply {
-                runBlocking {
-                    val offload = dataStore.get(AudioOffload, false)
-                    val transitions = transitionModeOf(dataStore.data.first()) != CrossmixMode.OFF
-                    setOffloadEnabled(if (transitions) false else offload)
-                    skipSilenceEnabled = dataStore.get(SkipSilenceKey, false)
-                }
+                val prefs = co.oto.music.utils.PreferencesCache.current(dataStore)
+                val offload = prefs[AudioOffload] ?: false
+                val transitions = transitionModeOf(prefs) != CrossmixMode.OFF
+                setOffloadEnabled(if (transitions) false else offload)
+                skipSilenceEnabled = prefs[SkipSilenceKey] ?: false
                 addAnalyticsListener(PlaybackStatsListener(false, this@MusicService))
 
             }
@@ -1506,6 +1663,15 @@ class MusicService :
         combine(wantsFloat, audioLab.shapesSound, audioLab.playback) { wants, shapesSound, playback ->
             wants && !shapesSound && playback.speed == 1f && playback.pitch == 1f
         }.distinctUntilChanged().collect(scope) { audioOutputs.floatAllowed = it }
+
+        // 3d sims plays differently on headphones and on a speaker, so it follows wherever the music goes
+        audioOutputs.devices.collect(scope) {
+            audioLab.setStageOutput(co.oto.music.eq.stage.StageOutput.of(this, audioOutputs.activeDevice()))
+        }
+        // the room renders at 48 khz at most: at 192 khz it would cost sixteen times the work for nothing anyone hears
+        audioLab.stage.map { it.enabled }.distinctUntilChanged().collect(scope) { on ->
+            audioOutputs.effectRateCap = if (on) 48_000 else null
+        }
     }
 
     private fun setupAudioFocusRequest() {
@@ -1684,6 +1850,7 @@ class MusicService :
             items = items.mapIndexed { i, item -> if (i in manual) item.withManualQueued(true) else item },
             startIndex = startIndex,
             position = position,
+            playlistId = playlistId,
         )
     }
 
@@ -1861,15 +2028,16 @@ class MusicService :
 
     private var lastPlaybackError: PlaybackException? = null
 
-    private fun isLocalTrack(item: MediaItem?): Boolean {
-        if (item == null) return false
-        val scheme = item.localConfiguration?.uri?.scheme
-        return scheme == "content" || scheme == "file" ||
-            item.mediaId.startsWith("LOCAL_") || item.metadata?.localUri != null
-    }
+    // set when a song on the phone failed for a reason worth saying plainly (the file's gone, its access was lost), for the next failure toast
+    private var localFileProblem: LocalFileProblem? = null
 
     /** The top toast for a stream that couldn't be played, with a plain reason. */
     private fun announceStreamFailure() {
+        localFileProblem?.let { problem ->
+            localFileProblem = null
+            co.oto.music.ui.component.TopToaster.error(getString(problem.message))
+            return
+        }
         val e = lastPlaybackError
         val localTrack = isLocalTrack(player.currentMediaItem)
         // no decoder for it here, and nowhere else had it: that's the whole reason
@@ -2126,6 +2294,7 @@ class MusicService :
         manual: List<MediaItem> = upcomingManualItems(),
     ) {
         currentQueue = queue
+        observeActivePlaylistMixIt((queue as? ListQueue)?.playlistId)
         queueTitle = null
         resetQueueRunway()
         val generation = queueGeneration
@@ -2254,7 +2423,7 @@ class MusicService :
      */
     private fun scheduleRunwayRetry(generation: Int) {
         if (runwayRetries >= MAX_RUNWAY_RETRIES || co.oto.music.utils.OfflineMode.isOn) return
-        val canGrow = (dataStore.get(AutoLoadMoreKey, true) && currentQueue.hasNextPage()) ||
+        val canGrow = currentQueue.hasOwnNextPage() ||
             (isInfiniteQueueEnabled() && player.repeatMode == REPEAT_MODE_OFF)
         if (!canGrow) return
         val delayMs = RUNWAY_RETRY_BASE_MS shl runwayRetries
@@ -2332,9 +2501,13 @@ class MusicService :
     private fun wantsAutoplayPreview(): Boolean {
         if (!isInfiniteQueueEnabled() || player.repeatMode != REPEAT_MODE_OFF) return false
         if (android.os.SystemClock.elapsedRealtime() < autoplayPreviewRetryAt) return false
-        if (dataStore.get(AutoLoadMoreKey, true) && currentQueue.hasNextPage()) return false
+        if (currentQueue.hasOwnNextPage()) return false
         return upcomingAutoplayStart() == player.mediaItemCount
     }
+
+    // more of what you picked, not an album's radio, which is autoplay and waits for its switch
+    private fun Queue.hasOwnNextPage(): Boolean =
+        !continuesAsRadio && hasNextPage() && dataStore.get(AutoLoadMoreKey, true)
 
     /** Drops the Autoplay songs still to come, e.g. when infinite queue is switched off. */
     private fun removeUpcomingAutoplay() {
@@ -2461,7 +2634,7 @@ class MusicService :
         val hideVideos = dataStore.get(HideVideoSongsKey, false)
 
         val queue = currentQueue
-        if (dataStore.get(AutoLoadMoreKey, true) && queue.hasNextPage()) {
+        if (queue.hasOwnNextPage()) {
             val rawPage = runCatching { withContext(Dispatchers.IO) { queue.nextPage() } }
                 .onFailure { Timber.tag(TAG).w(it, "Failed to load next queue page") }
                 .getOrDefault(emptyList())
@@ -2487,7 +2660,8 @@ class MusicService :
         val hidden = NotRecommended.songs
         fun List<MediaItem>.fresh() = filter { it.mediaId !in queued && it.mediaId !in hidden }
 
-        infiniteSource?.takeIf { it.hasNextPage() }?.let { source ->
+        // an album's own radio goes first, it follows the whole album better than a radio of its last song
+        (infiniteSource ?: currentQueue.takeIf { it.continuesAsRadio })?.takeIf { it.hasNextPage() }?.let { source ->
             runCatching { withContext(Dispatchers.IO) { source.nextPage() } }
                 .onFailure { Timber.tag(TAG).w(it, "Failed to load next infinite queue page") }
                 .getOrNull()
@@ -2592,25 +2766,49 @@ class MusicService :
         title: String,
         generation: Int,
     ) {
+        if (currentMediaId.startsWith("LOCAL_")) {
+            showBanner(getString(R.string.radio_failed))
+            return
+        }
+        val currentArtistId = withContext(Dispatchers.Main) {
+            player.currentMetadata?.artists?.firstNotNullOfOrNull { it.id }
+        }
         // the song's own station, the same one youtube music's "start radio" plays, not whatever "up next" happened to be
         val radioQueue = YouTubeQueue(WatchEndpoint(videoId = currentMediaId, playlistId = "RDAMVM$currentMediaId"))
         val hideExplicit = dataStore.get(HideExplicitKey, false)
         val hideVideoSongs = dataStore.get(HideVideoSongsKey, false)
         var moreFrom: Queue = radioQueue
-        val loaded = try {
-            withContext(Dispatchers.IO) {
-                radioQueue.getInitialStatus()
-                    .filterExplicit(hideExplicit)
-                    .filterVideoSongs(hideVideoSongs)
-                    .items
-            }
-        } catch (e: Exception) {
-            Timber.tag(TAG).w(e, "The radio for $currentMediaId didn't load, trying its related songs")
-            // the station's pages don't follow related songs, so infinite queue carries these on instead
-            moreFrom = EmptyQueue
-            relatedSongs(currentMediaId, hideExplicit, hideVideoSongs)
+        fun List<MediaItem>.cleanRadio(): List<MediaItem> {
+            val noSelf = filter { it.mediaId != currentMediaId && it.mediaId !in NotRecommended }
+            val noExplicit = noSelf.filterExplicit(hideExplicit)
+            val noVideo = noExplicit.filterVideoSongs(hideVideoSongs)
+            return noVideo.ifEmpty { noExplicit }.distinctBy { it.mediaId }
         }
-        val radioItems = loaded.filter { it.mediaId != currentMediaId && it.mediaId !in NotRecommended }
+
+        var radioItems = runCatching {
+            withContext(Dispatchers.IO) { radioQueue.getInitialStatus().items }
+        }.onFailure {
+            Timber.tag(TAG).w(it, "The radio for $currentMediaId didn't load, trying its related songs")
+        }.getOrDefault(emptyList()).cleanRadio()
+
+        // RDAMVM can succeed with just the seed song itself (no exception thrown); fall through to
+        // Related songs and then artist songs whenever no similar tracks came back.
+        if (radioItems.isEmpty()) {
+            moreFrom = EmptyQueue
+            radioItems = relatedSongs(currentMediaId, hideExplicit, hideVideoSongs).cleanRadio()
+        }
+        if (radioItems.isEmpty() && currentArtistId != null) {
+            moreFrom = EmptyQueue
+            radioItems = runCatching {
+                withContext(Dispatchers.IO) {
+                    YouTube.artist(currentArtistId).getOrNull()?.sections.orEmpty()
+                        .flatMap { it.items }
+                        .filterIsInstance<SongItem>()
+                        .map { it.toMediaItem() }
+                }
+            }.getOrDefault(emptyList()).cleanRadio()
+        }
+
         if (generation != queueGeneration) return
         // the song moved on while the station loaded, so this isn't its radio any more
         if (player.currentMediaItem?.mediaId != currentMediaId) return
@@ -2638,10 +2836,10 @@ class MusicService :
         withContext(Dispatchers.IO) {
             val related = YouTube.next(WatchEndpoint(videoId = songId)).getOrNull()?.relatedEndpoint
                 ?: return@withContext emptyList()
-            YouTube.related(related).getOrNull()?.songs.orEmpty()
+            val raw = YouTube.related(related).getOrNull()?.songs.orEmpty()
                 .map { it.toMediaItem() }
                 .filterExplicit(hideExplicit)
-                .filterVideoSongs(hideVideoSongs)
+            raw.filterVideoSongs(hideVideoSongs).ifEmpty { raw }
         }
 
     fun getAutomixAlbum(albumId: String) {
@@ -2898,31 +3096,11 @@ class MusicService :
     }
 
     private fun setupLoudnessEnhancer() {
-        val audioSessionId = player.audioSessionId
-
-        if (audioSessionId == C.AUDIO_SESSION_ID_UNSET || audioSessionId <= 0) {
-            Timber.tag(TAG).w("setupLoudnessEnhancer: invalid audioSessionId ($audioSessionId), cannot create effect yet")
-            return
-        }
-
-        if (loudnessEnhancer != null && loudnessEnhancerSessionId != audioSessionId) {
-            // the player changed (a crossfade): the old enhancer stays with the outgoing song,
-            // at its own gain, until that player is let go
-            fadingLoudnessEnhancer?.runCatching { release() }
-            fadingLoudnessEnhancer = loudnessEnhancer
-            loudnessEnhancer = null
-        }
-        if (loudnessEnhancer == null) {
-            try {
-                loudnessEnhancerSessionId = audioSessionId
-                loudnessEnhancer = LoudnessEnhancer(audioSessionId)
-                Timber.tag(TAG).d("LoudnessEnhancer created for sessionId=$audioSessionId")
-            } catch (e: Exception) {
-                reportException(e)
-                loudnessEnhancer = null
-                return
-            }
-        }
+        // Release any previously attached native LoudnessEnhancer: attaching an AudioEffect to the
+        // audio session causes Android 11 AudioFlinger on several OEMs (e.g. Realme/Unisoc) to ignore
+        // Android's built-in Accessibility Audio Balance. YouTube normalization is applied purely in-app
+        // (attenuation in CrossmixClockSink, small positive boost + soft limiter in LoudnessAudioProcessor).
+        if (loudnessEnhancer != null) releaseLoudnessEnhancer()
 
         scope.launch {
             try {
@@ -2933,12 +3111,13 @@ class MusicService :
                 val normalizeAudio = withContext(Dispatchers.IO) {
                     dataStore.data.map { it[AudioNormalizationKey] ?: true }.first()
                 }
+                audioFx.normalize = normalizeAudio
 
                 // YouTube's loudness numbers describe YouTube's stream: a song from a module plays
                 // another master, and evens out by its own ReplayGain in the sink instead
                 val fromModule = currentMediaId != null &&
                     resolvedSourceIds[currentMediaId].let { it != null && it != co.oto.music.modules.SourceModules.YouTubeId }
-                // android's loudness enhancer only handles stereo; on multichannel dolby tracks it distorts the surround channels
+                // multichannel dolby tracks keep their own mastering gain
                 val multichannel = withContext(Dispatchers.Main) { (player.audioFormat?.channelCount ?: 2) > 2 }
                 if (normalizeAudio && currentMediaId != null && !fromModule && !multichannel) {
                     val format = withContext(Dispatchers.IO) {
@@ -2951,41 +3130,32 @@ class MusicService :
                     val loudness = format?.loudnessDb ?: format?.perceptualLoudnessDb
 
                     withContext(Dispatchers.Main) {
+                        // Ignore stale lookup if track changed while querying DB
+                        if (player.currentMediaItem?.mediaId != currentMediaId) return@withContext
                         if (loudness != null) {
-                            val loudnessDb = loudness.toFloat()
-                            val targetGain = (-loudnessDb * 100).toInt()
-                            val clampedGain = targetGain.coerceIn(MIN_GAIN_MB, MAX_GAIN_MB)
-
-                            Timber.tag(TAG).d("Calculated raw normalization gain: $targetGain mB (from loudness: $loudnessDb)")
-
-                            try {
-                                loudnessEnhancer?.setTargetGain(clampedGain)
-                                loudnessEnhancer?.enabled = true
-                                Timber.tag(TAG).i("LoudnessEnhancer gain applied: $clampedGain mB")
-                            } catch (e: Exception) {
-                                Timber.tag(TAG).e(e, "Failed to apply loudness enhancement")
-                                reportException(e)
-                                releaseLoudnessEnhancer()
-                            }
+                            val clampedDb = (-loudness.toFloat()).coerceIn(MIN_GAIN_MB / 100f, MAX_GAIN_MB / 100f)
+                            audioFx.setTrackNormalizationDb(clampedDb)
+                            Timber.tag(TAG).i("In-app track normalization applied: $clampedDb dB (from loudness: $loudness)")
                         } else {
-                            loudnessEnhancer?.enabled = false
+                            audioFx.setTrackNormalizationDb(0f)
                             Timber.tag(TAG).w("Normalization enabled but no loudness data available - no normalization applied")
                         }
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        loudnessEnhancer?.enabled = false
+                        audioFx.setTrackNormalizationDb(0f)
                         Timber.tag(TAG).d("setupLoudnessEnhancer: normalization disabled or mediaId unavailable")
                     }
                 }
             } catch (e: Exception) {
                 reportException(e)
-                releaseLoudnessEnhancer()
+                audioFx.setTrackNormalizationDb(0f)
             }
         }
     }
 
     private fun releaseLoudnessEnhancer() {
+        audioFx.setTrackNormalizationDb(0f)
         try {
             loudnessEnhancer?.release()
             Timber.tag(TAG).d("LoudnessEnhancer released")
@@ -2997,10 +3167,52 @@ class MusicService :
         }
     }
 
+    private fun updateEightDReverb(settings: co.oto.music.eq.EightDSettings) {
+        val level = settings.reverbLevel.coerceIn(0f, 1f)
+        val sessionId = player.audioSessionId
+        if (!settings.enabled || level <= 0f || player.playbackState == Player.STATE_IDLE ||
+            player.playbackState == Player.STATE_ENDED || sessionId <= 0 || sessionId == C.AUDIO_SESSION_ID_UNSET
+        ) {
+            releaseEightDReverb()
+            return
+        }
+
+        try {
+            if (eightDReverb != null && eightDReverbSessionId != sessionId) releaseEightDReverb()
+            val effect = eightDReverb ?: PresetReverb(0, sessionId).also {
+                eightDReverb = it
+                eightDReverbSessionId = sessionId
+            }
+            effect.preset = when {
+                level < 0.4f -> PresetReverb.PRESET_SMALLROOM
+                level < 0.75f -> PresetReverb.PRESET_MEDIUMROOM
+                else -> PresetReverb.PRESET_LARGEHALL
+            }.toShort()
+            effect.enabled = true
+        } catch (e: Exception) {
+            reportException(e)
+            Timber.tag(TAG).e(e, "Failed to configure 8D room reverb")
+            releaseEightDReverb()
+        }
+    }
+
+    private fun releaseEightDReverb() {
+        try {
+            eightDReverb?.release()
+        } catch (e: Exception) {
+            reportException(e)
+            Timber.tag(TAG).e(e, "Failed to release 8D room reverb")
+        } finally {
+            eightDReverb = null
+            eightDReverbSessionId = C.AUDIO_SESSION_ID_UNSET
+        }
+    }
+
     private fun openAudioEffectSession() {
         if (isAudioEffectSessionOpened) return
         isAudioEffectSessionOpened = true
         setupLoudnessEnhancer()
+        updateEightDReverb(audioLab.eightD.value)
         sendBroadcast(
             Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION).apply {
                 putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
@@ -3018,6 +3230,19 @@ class MusicService :
             Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION).apply {
                 putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
                 putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+            },
+        )
+    }
+
+    // system equalizers (dolby, the phone's own sound settings) follow one audio session: after a crossfade or mix the song plays from another player, so the new one is announced and the one let go is closed
+    private fun announceEffectSession(sessionId: Int, open: Boolean) {
+        if (!isAudioEffectSessionOpened || sessionId <= 0) return
+        val action = if (open) AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION else AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION
+        sendBroadcast(
+            Intent(action).apply {
+                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
+                putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+                if (open) putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
             },
         )
     }
@@ -3043,7 +3268,7 @@ class MusicService :
         prefetchNeighbours()
 
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-            val repeatMode = runBlocking { dataStore.get(RepeatModeKey, REPEAT_MODE_OFF) }
+            val repeatMode = dataStore.get(RepeatModeKey, REPEAT_MODE_OFF)
             if (repeatMode == REPEAT_MODE_ONE &&
                 previousMediaItemIndex != C.INDEX_UNSET &&
                 previousMediaItemIndex != player.currentMediaItemIndex) {
@@ -3057,6 +3282,7 @@ class MusicService :
         mediaItem?.mediaId?.let { announceMusicVideoAudio(it) }
 
         setupLoudnessEnhancer()
+        updateEightDReverb(audioLab.eightD.value)
 
         scrobbleTimer.onSongStop()
         playReporter.onSongStop()
@@ -3091,11 +3317,13 @@ class MusicService :
     override fun onPlaybackStateChanged(
         @Player.State playbackState: Int,
     ) {
+        updateEightDReverb(audioLab.eightD.value)
+
         // IDLE is where a failed stream sits; anything else means it's loading or playing again
         if (playbackState != Player.STATE_IDLE) clearStreamFailure()
 
         if (playbackState == Player.STATE_ENDED) {
-            val repeatMode = runBlocking { dataStore.get(RepeatModeKey, REPEAT_MODE_OFF) }
+            val repeatMode = dataStore.get(RepeatModeKey, REPEAT_MODE_OFF)
             if (repeatMode == REPEAT_MODE_ALL && player.mediaItemCount > 0) {
                 player.seekTo(0, 0)
                 player.prepare()
@@ -3177,6 +3405,7 @@ class MusicService :
         }
 
         if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED)) {
+            isPlayingFlow.value = player.isPlaying
             updateWidgetUI(player.isPlaying)
             if (player.isPlaying) {
                 startWidgetUpdates()
@@ -3489,6 +3718,13 @@ class MusicService :
             failStream()
             return
         }
+        // a file on the phone that's gone, lost its access or isn't a kind the player reads: clearing the cache and retrying never changed that, so it says why and moves on
+        LocalFileProblem.of(this, player.currentMediaItem, error)?.let { problem ->
+            Timber.tag(TAG).w(error, "Couldn't play ${player.currentMediaItem?.mediaId} from the phone: $problem")
+            localFileProblem = problem
+            failStream()
+            return
+        }
         val mediaId = player.currentMediaItem?.mediaId
         Timber.tag(TAG).w(error, "Player error occurred for $mediaId: errorCode=${error.errorCode}, message=${error.message}, causes=${generateSequence<Throwable>(error) { it.cause }.joinToString(" <- ") { it.javaClass.simpleName + ":" + it.message }}")
         reportException(error)
@@ -3568,6 +3804,8 @@ class MusicService :
 
         try {
             playerCache.removeResource(mediaId)
+            // custom module streams live under module|<id>|<mediaId>, so a bad cached stream stayed corrupt without this
+            dropModuleCache(mediaId)
             Timber.tag(TAG).d("Cleared player cache for $mediaId")
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to clear player cache for $mediaId")
@@ -3586,6 +3824,14 @@ class MusicService :
     private fun isContainerParseError(error: PlaybackException) =
         error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
             error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
+
+    // imported files used to be copied into the song cache as they played; they're read straight from the phone now, so the old copies only take up room
+    private fun dropLocalSongCopies() {
+        scope.launch(Dispatchers.IO) {
+            playerCache.keys.filter { it.startsWith("LOCAL_") }
+                .forEach { key -> runCatching { playerCache.removeResource(key) } }
+        }
+    }
 
     /** Every source module's cached copy of [mediaId], which lives under its own key. */
     private fun dropModuleCache(mediaId: String) {
@@ -3638,6 +3884,8 @@ class MusicService :
             try {
 
                 player.pause()
+                // a stuck usb dac mixer setting would make the retry fail with the same audiotrack error
+                audioOutputs.releaseMixer()
                 Timber.tag(TAG).d("Paused playback due to AudioTrack error")
 
                 delay(RETRY_DELAY_MS * 3)
@@ -3805,6 +4053,22 @@ class MusicService :
         }
     }
 
+    // one shared okhttp client for every track, prefetch and analyzer instead of spawning a new pool per song
+    private val streamHttpClient: OkHttpClient by lazy {
+        co.oto.music.utils.AppProxy.sharedClient.newBuilder()
+            .dns(object : Dns {
+                override fun lookup(hostname: String): List<InetAddress> {
+                    val addresses = Dns.SYSTEM.lookup(hostname)
+                    return when (this@MusicService.ipVersion) {
+                        IpVersion.IPV4 -> addresses.filter { it is Inet4Address }.ifEmpty { addresses }
+                        IpVersion.IPV6 -> addresses.filter { it is Inet6Address }.ifEmpty { addresses }
+                        IpVersion.AUTO -> addresses
+                    }
+                }
+            })
+            .build()
+    }
+
     private fun createCacheDataSource(): CacheDataSource.Factory =
         CacheDataSource
             .Factory()
@@ -3816,22 +4080,7 @@ class MusicService :
                     .setUpstreamDataSourceFactory(
                         DefaultDataSource.Factory(
                             this,
-                            OkHttpDataSource.Factory(
-                                OkHttpClient
-                                    .Builder()
-                                    .dns(object : Dns {
-                                        override fun lookup(hostname: String): List<InetAddress> {
-                                            val addresses = Dns.SYSTEM.lookup(hostname)
-                                            return when (this@MusicService.ipVersion) {
-                                                IpVersion.IPV4 -> addresses.filter { it is Inet4Address }.ifEmpty { addresses }
-                                                IpVersion.IPV6 -> addresses.filter { it is Inet6Address }.ifEmpty { addresses }
-                                                IpVersion.AUTO -> addresses
-                                            }
-                                        }
-                                    })
-                                    .followAppProxy()
-                                    .build(),
-                            ),
+                            OkHttpDataSource.Factory(streamHttpClient),
                         ),
                     ),
             ).setCacheWriteDataSinkFactory(null)
@@ -3880,6 +4129,23 @@ class MusicService :
         }
     }
 
+    // artists the library has no picture for come from youtube once, so the artist artwork is not the song cover again
+    private val artistPhotos = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val artistPhotoAsked = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private fun artistPhotoFor(artists: List<co.oto.music.db.entities.ArtistEntity>?): String? {
+        val artist = artists?.firstOrNull { it.isYouTubeArtist } ?: return null
+        artistPhotos[artist.id]?.let { return it }
+        if (artistPhotoAsked.add(artist.id)) {
+            scope.launch {
+                val url = withContext(Dispatchers.IO) { YouTube.artist(artist.id).getOrNull()?.artist?.thumbnail } ?: return@launch
+                artistPhotos[artist.id] = url
+                publishPresence()
+            }
+        }
+        return null
+    }
+
     /** Tells the Discord status what's playing; it ignores this when Discord isn't signed in or is off. */
     private fun publishPresence() {
         val metadata = player.currentMetadata
@@ -3898,7 +4164,7 @@ class MusicService :
                 artist = metadata.artists.joinToString { it.name },
                 album = metadata.album?.title ?: song?.song?.albumName,
                 artworkUrl = metadata.thumbnailUrl,
-                artistArtworkUrl = song?.artists?.firstNotNullOfOrNull { it.thumbnailUrl },
+                artistArtworkUrl = song?.artists?.firstNotNullOfOrNull { it.thumbnailUrl } ?: artistPhotoFor(song?.artists),
                 durationMs = player.duration.takeIf { it > 0 } ?: (metadata.duration * 1000L),
                 positionMs = player.currentPosition,
                 readAtMs = System.currentTimeMillis(),
@@ -4010,8 +4276,9 @@ class MusicService :
     fun shareDataSourceFactory(): DataSource.Factory = createDataSourceFactory()
 
     private fun createDataSourceFactory(): DataSource.Factory {
-        val localFactory = DefaultDataSource.Factory(this)
-        val cachedFactory = ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
+        // songs already on the phone are read straight from their file; only what comes over the network goes through the caches
+        val upstream = LocalBypassDataSource.Factory(DefaultDataSource.Factory(this), createCacheDataSource())
+        return ResolvingDataSource.Factory(upstream) { dataSpec ->
             // a stream a source module or backend resolved to a real URL (an HLS playlist, given
             // as a data: URI when the module rewrote it, and its segments) carries no media id:
             // it's fetched as it is
@@ -4310,6 +4577,7 @@ class MusicService :
         android.util.Log.i("SourceModules", "Force playback: ${sourceModules.nameOf(failed)} failed on $mediaId, trying ${sourceModules.nameOf(next)}")
         resolvedStreamSources.remove(mediaId)
         songUrlCache.remove(mediaId)
+        dropModuleCache(mediaId)
         val index = player.currentMediaItemIndex
         val position = player.currentPosition
         val wasPlaying = player.playWhenReady
@@ -4407,35 +4675,45 @@ class MusicService :
         inspector: StreamInspector,
     ) =
         object : DefaultRenderersFactory(this) {
-            // the renderer below tells it which file each song comes from, so it can tell a lossless song from a lossy one
+            // the renderer below tells both the router and precision sink which file each song comes from,
+            // so float is only requested for >16-bit sources and lossless checks know the container format
             private var router: PassRouterSink? = null
+            private var precision: co.oto.music.playback.audio.PrecisionSink? = null
 
             override fun buildAudioSink(
                 context: Context,
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
-            ) = CrossmixClockSink(PassRouterSink(co.oto.music.playback.audio.PrecisionSink(DefaultAudioSink
-                .Builder(this@MusicService)
-                // float is only ever let through by PrecisionSink, while nothing it would skip is on
-                .setEnableFloatOutput(true)
-                // speed and pitch go to the audio track: through sonic, every change drained and flushed every processor in front of it (equalizer, effects, crossmix), a cut in the sound each time and a crash when a slider was dragged
-                .setEnableAudioTrackPlaybackParams(true)
-                .setAudioProcessorChain(
-                    DefaultAudioSink.DefaultAudioProcessorChain(
+            ): AudioSink {
+                val precisionSink = co.oto.music.playback.audio.PrecisionSink(
+                    DefaultAudioSink
+                        .Builder(this@MusicService)
+                        // float is only ever let through by PrecisionSink, while nothing it would skip is on
+                        .setEnableFloatOutput(true)
+                        // speed and pitch go to the audio track: through sonic, every change drained and flushed every processor in front of it (equalizer, effects, crossmix), a cut in the sound each time and a crash when a slider was dragged
+                        .setEnableAudioTrackPlaybackParams(true)
+                        .setAudioProcessorChain(
+                            DefaultAudioSink.DefaultAudioProcessorChain(
 
-                        // Audio Lab first (equalizer, then spatial, reverb, loudness), so Crossmix
-                        // blends the two songs as they're heard
-                        arrayOf(
-                            eqProcessor,
-                            *fxProcessors,
-                            silenceProcessor,
-                            hapticProcessor,
-                            crossmixProcessor,
-                        ),
-                        SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
-                        SonicAudioProcessor(),
-                    ),
-                ).build(), audioOutputs, inspector), PassSink(audioPass), audioPass).also { router = it }, crossmixProcessor, audioFx, replayGain, spectrum)
+                                // Audio Lab first (equalizer, then 3d sims, spatial, reverb, loudness), so Crossmix
+                                // blends the two songs as they're heard
+                                arrayOf(
+                                    eqProcessor,
+                                    *fxProcessors,
+                                    silenceProcessor,
+                                    hapticProcessor,
+                                    crossmixProcessor,
+                                ),
+                                SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
+                                SonicAudioProcessor(),
+                            ),
+                        ).build(),
+                    audioOutputs,
+                    inspector,
+                ).also { precision = it }
+                val passRouter = PassRouterSink(precisionSink, PassSink(audioPass), audioPass).also { router = it }
+                return CrossmixClockSink(passRouter, crossmixProcessor, audioFx, replayGain, spectrum)
+            }
 
             // media3's own audio renderer, built the same way, that hands the router each song's file format before its decoder starts
             override fun buildAudioRenderers(
@@ -4449,12 +4727,32 @@ class MusicService :
                 out: ArrayList<Renderer>,
             ) {
                 val songs = router
+                val prec = precision
+                // prefer standard AOSP/FFmpeg decoders over Samsung's c2.sec.*/OMX.SEC.* for FLAC/ALAC so 16-bit and 24-bit files don't distort
+                val audioCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+                    val decoders = mediaCodecSelector.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+                    val ffmpegHandles = runCatching { FfmpegLibrary.isAvailable() && FfmpegLibrary.supportsFormat(mimeType) }.getOrDefault(false)
+                    co.oto.music.playback.audio.AudioDecoderPolicy.selectDecoders(mimeType, decoders, ffmpegHandles)
+                }
                 out.add(object : MediaCodecAudioRenderer(
-                    context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener, audioSink,
+                    context, codecAdapterFactory, audioCodecSelector, enableDecoderFallback, eventHandler, eventListener, audioSink,
                 ) {
                     override fun onInputFormatChanged(formatHolder: FormatHolder): DecoderReuseEvaluation? {
                         songs?.sourceFormat = formatHolder.format
+                        prec?.sourceFormat = formatHolder.format
                         return super.onInputFormatChanged(formatHolder)
+                    }
+
+                    override fun getMediaFormat(
+                        format: Format,
+                        codecMimeType: String,
+                        codecMaxInputSize: Int,
+                        codecOperatingRate: Float,
+                    ): android.media.MediaFormat {
+                        // refresh sourceFormat right before MediaCodecAudioRenderer queries audioSink for float support
+                        songs?.sourceFormat = format
+                        prec?.sourceFormat = format
+                        return super.getMediaFormat(format, codecMimeType, codecMaxInputSize, codecOperatingRate)
                     }
 
                     // the loop sleeps half the audio buffer, and speed on the audio track sizes that for 8x, so it slept a whole second and the position went that stale
@@ -4465,6 +4763,7 @@ class MusicService :
                 out.add(object : FfmpegFallbackRenderer(eventHandler, eventListener, audioSink) {
                     override fun onSourceFormat(format: Format) {
                         songs?.sourceFormat = format
+                        prec?.sourceFormat = format
                     }
 
                     override fun getDurationToProgressUs(positionUs: Long, elapsedRealtimeUs: Long): Long =
@@ -4628,6 +4927,10 @@ class MusicService :
 
     override fun onDestroy() {
         isRunning = false
+        unregisterMemoryTrim?.invoke()
+        unregisterMemoryTrim = null
+        selfControllerFuture?.let { MediaController.releaseFuture(it) }
+        selfControllerFuture = null
 
         audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
         audioOutputs.release()
@@ -4643,6 +4946,9 @@ class MusicService :
         callWatcher.stop()
         abandonAudioFocus()
         releaseLoudnessEnhancer()
+        releaseEightDReverb()
+        if (mixItPreviewInit) mixItPreview.stop()
+        mixItObserverJob?.cancel()
         crossmixDirector.release()
         fadingLoudnessEnhancer?.runCatching { release() }
         fadingLoudnessEnhancer = null
@@ -4651,10 +4957,30 @@ class MusicService :
         floatingLyrics?.stop()
         floatingLyrics = null
         mediaSession.release()
+        mediaLibrarySessionCallback.release()
+        secondaryPlayer?.let { sec ->
+            sec.removeListener(secondaryPlayerListener)
+            unregisterEqualizer(sec)
+            runCatching { sec.release() }
+        }
+        secondaryPlayer = null
+        fadingPlayer?.let { fading ->
+            unregisterEqualizer(fading)
+            runCatching { fading.release() }
+        }
+        fadingPlayer = null
         player.removeListener(this)
         player.removeListener(sleepTimer)
-        playerSilenceProcessors.remove(player)
-        playerReplayGain.remove(player)
+        unregisterEqualizer(player)
+        playerSilenceProcessors.clear()
+        playerReplayGain.clear()
+        playerCrossmixProcessors.clear()
+        playerEqProcessors.clear()
+        playerSpectra.clear()
+        if (crossmixAnalysisInit) crossmixAnalysisRepository.release()
+        if (videoAudioSyncInit) videoAudioSync.release()
+        if (lyricsAutoSyncInit) lyricsAutoSync.release()
+        scope.cancel()
 
         player.release()
         super.onDestroy()
@@ -4696,6 +5022,15 @@ class MusicService :
             MusicWidgetReceiver.ACTION_UPDATE_WIDGET -> {
                 updateWidgetUI(player.isPlaying)
             }
+            MusicWidgetReceiver.ACTION_REPEAT -> {
+                // off -> all -> one -> off, the same order as the repeat button in the player
+                player.repeatMode = when (player.repeatMode) {
+                    REPEAT_MODE_OFF -> REPEAT_MODE_ALL
+                    REPEAT_MODE_ALL -> REPEAT_MODE_ONE
+                    else -> REPEAT_MODE_OFF
+                }
+                updateWidgetUI(player.isPlaying)
+            }
         }
 
         return super.onStartCommand(intent, flags, startId)
@@ -4703,7 +5038,16 @@ class MusicService :
 
     private val powerManager by lazy { getSystemService(android.os.PowerManager::class.java) }
 
+    // which lyric line the now playing widgets show; the scope is asked for each time because the service replaces it
+    private val widgetLyrics by lazy {
+        WidgetLyricTracker(this, CarLyricsSource(database, lyricsHelper), { scope }) { updateWidgetUI(player.isPlaying) }
+    }
+
     private fun updateWidgetUI(isPlaying: Boolean, progressOnly: Boolean = false) {
+        // without a lyric widget placed nobody sees the lines, and following them would fetch lyrics for every song
+        val lyricsShown = widgetManager.hasLyricWidgets
+        // looked up on the main thread the tracker expects, before the launch so the position is the moment of the tick
+        val lyricCue = if (lyricsShown) widgetLyrics.cue(currentMediaMetadata.value, player.currentPosition) else NoLyricCue
         scope.launch {
             try {
                 val songData = currentSong.value
@@ -4711,6 +5055,7 @@ class MusicService :
                 val songTitle = song?.title ?: getString(R.string.no_song_playing)
                 val artistName = songData?.artists?.joinToString(", ") { it.name } ?: getString(R.string.tap_to_open)
                 val isLiked = songData?.song?.liked == true
+                val (currentLyric, nextLyric) = lyricCue
 
                 widgetManager.updateWidgets(
                     title = songTitle,
@@ -4720,8 +5065,14 @@ class MusicService :
                     isLiked = isLiked,
                     duration = if (player.duration != C.TIME_UNSET) player.duration else 0,
                     currentPosition = player.currentPosition,
+                    currentLyric = currentLyric,
+                    nextLyric = nextLyric,
                     progressOnly = progressOnly,
+                    repeatMode = player.repeatMode,
                 )
+                // a lyric widget was just placed, so draw once more now that its lines get looked up
+                if (!lyricsShown && widgetManager.hasLyricWidgets) updateWidgetUI(isPlaying)
+                if (isPlaying && widgetManager.hasTickingWidgets && widgetUpdateJob == null) startWidgetUpdates()
             } catch (e: Exception) {
 
             }
@@ -4732,16 +5083,24 @@ class MusicService :
 
     private fun startWidgetUpdates() {
         widgetUpdateJob?.cancel()
+        // skip the once-a-second tick completely when no ticking widget is placed on the home screen
+        if (!widgetManager.hasTickingWidgets) {
+            widgetUpdateJob = null
+            return
+        }
         widgetUpdateJob = scope.launch {
             while (isActive) {
+                if (!widgetManager.hasTickingWidgets) break
                 // nobody sees a widget with the screen off, and redrawing it every second there was all cost
+                var wait = WidgetProgressIntervalMs
                 if (player.isPlaying && powerManager?.isInteractive != false) {
                     updateWidgetUI(true, progressOnly = true)
+                    // wake early for the next lyric line so it changes on time, not up to a second late
+                    if (widgetManager.hasLyricWidgets) wait = widgetLyrics.wakeInMs.coerceAtMost(WidgetProgressIntervalMs)
                 }
-                // the widget's progress bar moves in whole seconds anyway; more often only cost
-                // frames in the app
-                delay(WidgetProgressIntervalMs)
+                delay(wait)
             }
+            widgetUpdateJob = null
         }
     }
 
@@ -4780,18 +5139,31 @@ class MusicService :
         }
     }
 
-    /** a song's stream for a cast receiver: the link it fetches itself, and the kind of file behind it */
-    data class CastStream(val url: String, val mimeType: String)
+    /** a song's stream for a cast receiver: the link it fetches (or the proxy relays), its mime type, and any upstream headers it needs */
+    data class CastStream(
+        val url: String,
+        val mimeType: String,
+        val headers: Map<String, String> = emptyMap(),
+        val contentLength: Long = -1L,
+        val client: String = "",
+    )
 
-    // the receiver fetches the song itself, so it needs to be told what it is: an opus stream sent as mp4 won't play on most tvs
-    suspend fun getCastStream(mediaId: String): CastStream? = withContext(Dispatchers.IO) {
+    // receivers (especially samsung and other dlna tvs) reject opus/webm, so cast asks for stereo aac in mp4 first
+    suspend fun getCastStream(mediaId: String, preferMp4: Boolean = true): CastStream? = withContext(Dispatchers.IO) {
         try {
             YTPlayerUtils.playerResponseForPlayback(
                 videoId = mediaId,
                 audioQuality = audioQuality,
                 connectivityManager = connectivityManager,
+                preferMp4 = preferMp4,
             ).getOrNull()?.let { data ->
-                CastStream(data.streamUrl, data.format.mimeType.substringBefore(';').trim().ifBlank { "audio/mp4" })
+                CastStream(
+                    url = data.streamUrl,
+                    mimeType = data.format.mimeType.substringBefore(';').trim().ifBlank { "audio/mp4" },
+                    headers = data.streamHeaders,
+                    contentLength = data.format.contentLength ?: -1L,
+                    client = data.streamClient,
+                )
             }
         } catch (e: Exception) {
             timber.log.Timber.e(e, "Failed to get a stream for casting")
@@ -4831,14 +5203,30 @@ class MusicService :
         if (!isCrossfading) crossmixDirector.schedule()
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
-        if (crossmixMode == CrossmixMode.CROSSMIX) return
-        if (!crossfadeEnabled || player.duration == C.TIME_UNSET || player.duration <= crossfadeDuration) return
-        if (crossfadeGapless && isNextItemGapless()) return
         // repeat one goes straight round on the same player; crossfaded into itself, the second time round played silent
         if (player.repeatMode == REPEAT_MODE_ONE || !player.hasNextMediaItem()) return
+        val currentId = player.currentMediaItem?.mediaId
+        val nextIdx = player.nextMediaItemIndex
+        val nextId = if (nextIdx != C.INDEX_UNSET) player.getMediaItemAt(nextIdx).mediaId else null
+        // If this pair has a custom Mix It transition, CrossmixDirector owns it exclusively
+        if (activePlaylistMixItEnabled && currentId != null && nextId != null &&
+            activePlaylistTransitions.containsKey(currentId to nextId)
+        ) return
+        val effectiveFallback = if (activePlaylistMixItEnabled) activePlaylistFallback else co.oto.music.mixit.MixItFallbackMode.APP_DEFAULT
+        val effectiveMode = when (effectiveFallback) {
+            co.oto.music.mixit.MixItFallbackMode.CROSSMIX -> CrossmixMode.CROSSMIX
+            co.oto.music.mixit.MixItFallbackMode.AUTO_CROSSFADE -> CrossmixMode.AUTO_CROSSFADE
+            co.oto.music.mixit.MixItFallbackMode.OFF -> CrossmixMode.OFF
+            co.oto.music.mixit.MixItFallbackMode.APP_DEFAULT -> crossmixMode
+        }
+        if (effectiveMode == CrossmixMode.CROSSMIX || effectiveMode == CrossmixMode.OFF) return
+        val effectiveDuration = if (effectiveMode == CrossmixMode.AUTO_CROSSFADE) 5_000f else crossfadeDuration
+        if (effectiveFallback == co.oto.music.mixit.MixItFallbackMode.APP_DEFAULT && !crossfadeEnabled) return
+        if (player.duration == C.TIME_UNSET || player.duration <= effectiveDuration) return
+        if (crossfadeGapless && isNextItemGapless()) return
 
         val duration = player.duration
-        val triggerTime = duration - crossfadeDuration.toLong()
+        val triggerTime = duration - effectiveDuration.toLong()
         val delayMs = triggerTime - player.currentPosition
         if (delayMs <= 0) return
 
@@ -4847,7 +5235,7 @@ class MusicService :
         crossfadeTriggerJob = scope.launch {
             delay(delayMs)
             if (isActive && player.isPlaying && player.currentMediaItem?.mediaId == targetMediaId && !sleepTimer.pauseWhenSongEnd) {
-                startCrossfade()
+                startCrossfade(effectiveDuration.toLong())
             }
         }
     }
@@ -4861,11 +5249,11 @@ class MusicService :
     }
 
     /** the plain fixed-length crossfade (Auto and Manual): two equal-power volume ramps */
-    private fun startCrossfade() {
+    private fun startCrossfade(durationMs: Long = crossfadeDuration.toLong()) {
         if (isCrossfading || crossmixDirector.isTransitioning) return
         val targetIndex = player.nextMediaItemIndex
         if (targetIndex == C.INDEX_UNSET) return
-        crossfadeTo(targetIndex, crossfadeDuration.toLong())
+        crossfadeTo(targetIndex, durationMs)
     }
 
     // "blend skips" can cross over right now: it's on, a song is really playing, and nothing else is mixing or casting; crossmix still gets the song endings
@@ -5011,8 +5399,8 @@ class MusicService :
     private fun crossfadeInto(durationMs: Long, skipCurve: Boolean, load: (ExoPlayer) -> Unit) {
         // a skip calls off what crossmix had lined up for the old song, its tempo ramp included, before the new one copies the speed
         if (skipCurve) crossmixDirector.onItemChanged()
-        val savedRepeatMode = runBlocking { dataStore.get(RepeatModeKey, REPEAT_MODE_OFF) }
-        val savedShuffleEnabled = runBlocking { dataStore.get(ShuffleModeKey, false) }
+        val savedRepeatMode = dataStore.get(RepeatModeKey, REPEAT_MODE_OFF)
+        val savedShuffleEnabled = dataStore.get(ShuffleModeKey, false)
 
         secondaryPlayer = createExoPlayer()
         val secPlayer = secondaryPlayer!!
@@ -5059,6 +5447,7 @@ class MusicService :
         player = nextPlayer
         _playerFlow.value = player
         secondaryPlayer = null
+        announceEffectSession(nextPlayer.audioSessionId, open = true)
 
         fadingPlayer?.removeListener(this)
         fadingPlayer?.removeListener(sleepTimer)
@@ -5209,11 +5598,13 @@ class MusicService :
     }
 
     private fun cleanupCrossfade() {
+        fadingPlayer?.let { runCatching { announceEffectSession(it.audioSessionId, open = false) } }
         fadingPlayer?.stop()
         fadingPlayer?.clearMediaItems()
         fadingPlayer?.release()
         fadingPlayer?.let(playerCrossmixProcessors::remove)
         fadingPlayer?.let(playerSilenceProcessors::remove)
+        fadingPlayer?.let(playerReplayGain::remove)
         fadingPlayer?.let(::unregisterEqualizer)
         fadingPlayer = null
         fadingLoudnessEnhancer?.runCatching { release() }
@@ -5413,11 +5804,11 @@ class MusicService :
         )
     }
 
-    /** one ask of [module] for the song, passing over a stream this phone has no decoder for */
     private suspend fun resolveWith(module: co.oto.music.module.SourceModule, mediaId: String): co.oto.music.module.SourceStream? {
         val track = trackQueryOf(mediaId) ?: return null
         val result = module.resolve(track, sourceModules.picks(module.info.id))
         return (result as? co.oto.music.module.ResolveResult.Found)?.stream
+            ?.let(co.oto.music.modules.security.ModuleUrlGuard::sanitizeStream)
             ?.takeIf { co.oto.music.modules.DeviceDecoders.canPlay(it) }
     }
 
@@ -5569,6 +5960,7 @@ class MusicService :
             // set when it was made, seconds ago: a mute, an unmute or a slider move since then
             // never reached it, and the song carried on at the old volume (0, if it was muted)
             incoming.volume = targetVolume()
+            announceEffectSession(incoming.audioSessionId, open = true)
 
             outgoing.removeListener(this@MusicService)
             outgoing.removeListener(sleepTimer)
@@ -5614,6 +6006,7 @@ class MusicService :
         }
 
         override fun release(outgoing: ExoPlayer) {
+            runCatching { announceEffectSession(outgoing.audioSessionId, open = false) }
             runCatching {
                 outgoing.stop()
                 outgoing.clearMediaItems()
@@ -5640,14 +6033,32 @@ class MusicService :
             unregisterEqualizer(incoming)
         }
 
-        override fun crossmixBlocker(): String? = when {
-            !crossfadeEnabled -> "Crossfade is off"
-            crossmixMode != CrossmixMode.CROSSMIX -> "Crossfade is set to ${crossmixMode.name.lowercase()}, not Crossmix"
-            isCrossfading -> "A plain crossfade is running"
-            player.repeatMode == REPEAT_MODE_ONE -> "Repeat one plays the song straight round"
-            castConnectionHandler?.isCasting?.value == true -> "Casting: Crossmix waits until you're back"
-            sleepTimer.pauseWhenSongEnd -> "The sleep timer stops after this song"
-            else -> null
+        override fun customTransition(outMediaId: String, inMediaId: String): co.oto.music.db.entities.PlaylistTransition? {
+            if (!activePlaylistMixItEnabled) return null
+            return activePlaylistTransitions[outMediaId to inMediaId]
+        }
+
+        override fun crossmixBlocker(hasCustomTransition: Boolean): String? {
+            when {
+                isCrossfading -> return "A plain crossfade is running"
+                player.repeatMode == REPEAT_MODE_ONE -> return "Repeat one plays the song straight round"
+                castConnectionHandler?.isCasting?.value == true -> return "Casting: Crossmix waits until you're back"
+                sleepTimer.pauseWhenSongEnd -> return "The sleep timer stops after this song"
+            }
+            if (hasCustomTransition) return null
+            if (activePlaylistMixItEnabled && activePlaylistFallback != co.oto.music.mixit.MixItFallbackMode.APP_DEFAULT) {
+                return when (activePlaylistFallback) {
+                    co.oto.music.mixit.MixItFallbackMode.CROSSMIX -> null
+                    co.oto.music.mixit.MixItFallbackMode.AUTO_CROSSFADE -> "Unconfigured pairs use Auto Crossfade"
+                    co.oto.music.mixit.MixItFallbackMode.OFF -> "Unconfigured pairs have no transition"
+                    co.oto.music.mixit.MixItFallbackMode.APP_DEFAULT -> null
+                }
+            }
+            return when {
+                !crossfadeEnabled -> "Crossfade is off"
+                crossmixMode != CrossmixMode.CROSSMIX -> "Crossfade is set to ${crossmixMode.name.lowercase()}, not Crossmix"
+                else -> null
+            }
         }
 
         // with gapless albums on, songs from one album are checked for running into each other;
@@ -5693,6 +6104,41 @@ class MusicService :
         override fun onStartLatencyLearned(ms: Double) {
             scope.launch { dataStore.edit { it[CrossmixStartLatencyKey] = ms.toFloat() } }
         }
+    }
+
+    /** Host for live dual-player previews inside the Mix It Transition Editor. */
+    private inner class MixItPreviewHost : MixItPreviewController.Host {
+        override fun createPreviewPlayer(): ExoPlayer = createExoPlayer(publish = false).apply {
+            setOffloadEnabled(false)
+            pauseAtEndOfMediaItems = true
+        }
+
+        override fun processorFor(player: Player): CrossmixTransitionAudioProcessor? = playerCrossmixProcessors[player]
+
+        override fun releasePreviewPlayer(player: ExoPlayer) {
+            runCatching {
+                player.stop()
+                player.clearMediaItems()
+                player.release()
+            }
+            playerCrossmixProcessors.remove(player)
+            playerSilenceProcessors.remove(player)
+            playerReplayGain.remove(player)
+            playerSpectra.remove(player)
+            playerEqProcessors.remove(player)
+            playerInspectors.remove(player)
+            unregisterEqualizer(player)
+        }
+
+        override fun pauseMainPlayback() {
+            if (player.isPlaying || player.playWhenReady) {
+                player.pause()
+            }
+        }
+
+        override fun targetVolume(): Float = this@MusicService.targetVolume()
+
+        override fun learnedStartLatencyMs(): Double = dataStore[CrossmixStartLatencyKey]?.toDouble() ?: 70.0
     }
 
     companion object {
@@ -5758,6 +6204,9 @@ class MusicService :
 
 /** How often a placed home screen widget's progress is redrawn while playing. */
 private const val WidgetProgressIntervalMs = 1_000L
+
+// what the lyric lines carry while no lyric widget is placed
+private val NoLyricCue = WidgetLyricTracker.Cue("", "")
 
 // a timed save skips a place in the song that moved less than this; coming back a second or two early doesn't matter
 private const val PositionSaveStepMs = 2_000L

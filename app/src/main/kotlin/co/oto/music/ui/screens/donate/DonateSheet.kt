@@ -46,6 +46,7 @@ import co.oto.music.ui.component.pressBounce
 import co.oto.music.ui.player.menu.MenuRowSurface
 import co.oto.music.ui.screens.update.VersionRing
 import co.oto.music.ui.screens.update.openUrl
+import co.oto.music.ui.component.sheetHandleRoom
 
 const val KofiUrl = ""
 const val SocialBuzzUrl = ""
@@ -71,6 +72,8 @@ private fun DonateSheetContent() {
     val scroll = rememberScrollState()
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val characterWidth = characterWidth(maxWidth, maxHeight)
+        // the page starts under the sheet's handle now, so the ring and the first row sit that much lower
+        val room = sheetHandleRoom()
 
         VersionRing(
             text = "OTO MUSIC",
@@ -87,7 +90,7 @@ private fun DonateSheetContent() {
                                 maxHeight = Constraints.Infinity,
                             )
                         val placeable = measurable.measure(loose)
-                        layout(0, 0) { placeable.place(x = (-198).dp.roundToPx(), y = (-109).dp.roundToPx()) }
+                        layout(0, 0) { placeable.place(x = (-198).dp.roundToPx(), y = (room - 109.dp).roundToPx()) }
                     }.graphicsLayer { translationY = -scroll.value.toFloat() },
         )
 
@@ -96,6 +99,7 @@ private fun DonateSheetContent() {
                 Modifier
                     .fillMaxWidth()
                     .verticalScroll(scroll)
+                    .padding(top = room)
                     .padding(horizontal = 26.dp),
         ) {
             Spacer(Modifier.height(CharacterTop))

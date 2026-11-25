@@ -2,6 +2,7 @@
 
 package co.oto.music.ui.screens.settings.storage
 
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -90,7 +91,7 @@ fun StorageScreen(navController: NavController, viewModel: StorageViewModel = hi
             appliesLater = cacheLimit != startingLimit,
         )
         Spacer(Modifier.height(10.dp))
-        ClearButtons(viewModel, downloadCount = downloads?.size ?: 0)
+        ClearButtons(viewModel, downloadCount = downloads?.size ?: 0, usage = usage)
 
         Spacer(Modifier.height(26.dp))
         SectionText(stringResource(R.string.storage_or))
@@ -167,6 +168,7 @@ private fun BreakdownCard(usage: StorageUsage?) {
                 BarPart(CacheOrange, usage?.cache ?: 0),
                 BarPart(OtoGreen, usage?.downloads ?: 0),
                 BarPart(DatabaseRed, usage?.database ?: 0),
+                BarPart(CoversYellow, usage?.localCovers ?: 0),
                 BarPart(AppDataBlue, usage?.appData ?: 0),
             ),
             total = usage?.oto ?: 0,
@@ -176,6 +178,7 @@ private fun BreakdownCard(usage: StorageUsage?) {
             LegendRow(CacheOrange, stringResource(R.string.storage_legend_cache), usage?.let { formatSize(it.cache) })
             LegendRow(OtoGreen, stringResource(R.string.storage_legend_downloads), usage?.let { formatSize(it.downloads) })
             LegendRow(DatabaseRed, stringResource(R.string.storage_legend_database), usage?.let { formatSize(it.database) })
+            LegendRow(CoversYellow, stringResource(R.string.storage_legend_local_covers), usage?.let { formatSize(it.localCovers) })
             LegendRow(AppDataBlue, stringResource(R.string.storage_legend_app_data), usage?.let { formatSize(it.appData) })
         }
     }
@@ -247,7 +250,7 @@ private fun cacheLimitLabel(megabytes: Int): String = when {
 }
 
 @Composable
-private fun ClearButtons(viewModel: StorageViewModel, downloadCount: Int) {
+private fun ClearButtons(viewModel: StorageViewModel, downloadCount: Int, usage: StorageUsage?) {
     val busy by viewModel.busy.collectAsState()
     val menuState = LocalMenuState.current
     val removeTitle = stringResource(R.string.storage_remove_downloads_title)
@@ -256,6 +259,19 @@ private fun ClearButtons(viewModel: StorageViewModel, downloadCount: Int) {
     val clearTitle = stringResource(R.string.storage_clear_cache_title)
     val clearMessage = stringResource(R.string.storage_clear_cache_message)
     val clearAction = stringResource(R.string.storage_clear_cache_action)
+    val coversTitle = stringResource(R.string.storage_clear_local_covers_title)
+    val coversMessage = stringResource(R.string.storage_clear_local_covers_message)
+    val coversAction = stringResource(R.string.storage_clear_local_covers_action)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val gifRefresh = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // how much room the canvas gifs for discord take, measured again after a clear
+    val gifs by androidx.compose.runtime.produceState(co.oto.music.discord.CanvasGifStore.Stats(0L, 0), gifRefresh.intValue, busy) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { co.oto.music.discord.CanvasGifStore.stats(context) }
+    }
+    val gifTitle = stringResource(R.string.storage_clear_canvas_gifs_title)
+    val gifMessage = stringResource(R.string.storage_clear_canvas_gifs_message)
+    val gifAction = stringResource(R.string.storage_clear_canvas_gifs_action)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         StorageActionButton(
             label = removeAction,
@@ -268,6 +284,28 @@ private fun ClearButtons(viewModel: StorageViewModel, downloadCount: Int) {
             danger = true,
             enabled = !busy,
             onClick = { menuState.showConfirm(clearTitle, clearMessage, clearAction, viewModel::clearCaches) },
+        )
+        StorageActionButton(
+            label = stringResource(R.string.storage_clear_local_covers),
+            detail = usage?.let { stringResource(R.string.storage_local_covers_detail, formatSize(it.localCovers)) },
+            danger = true,
+            enabled = !busy && (usage?.localCovers ?: 0L) > 0L,
+            onClick = { menuState.showConfirm(coversTitle, coversMessage, coversAction, viewModel::clearLocalCovers) },
+        )
+        StorageActionButton(
+            label = stringResource(R.string.storage_clear_canvas_gifs),
+            detail = if (gifs.count == 0) stringResource(R.string.storage_canvas_gifs_none)
+            else stringResource(R.string.storage_canvas_gifs_detail, formatSize(gifs.bytes), gifs.count),
+            danger = true,
+            enabled = !busy && gifs.count > 0,
+            onClick = {
+                menuState.showConfirm(gifTitle, gifMessage, gifAction) {
+                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        co.oto.music.discord.CanvasGifStore.clear(context)
+                        gifRefresh.intValue++
+                    }
+                }
+            },
         )
         StorageActionButton(
             label = stringResource(R.string.storage_manage_downloads),
@@ -284,24 +322,30 @@ private fun PlaceButtons(viewModel: StorageViewModel, downloadCount: Int) {
     val export by viewModel.exportStep.collectAsState()
     val menuState = LocalMenuState.current
     val moving = move as? MoveStep.Working
+    val downloadsPlace by androidx.compose.runtime.produceState<String?>(null) {
+        value = viewModel.externalPlaceLabel(StoredKind.Downloads)
+    }
+    val cachePlace by androidx.compose.runtime.produceState<String?>(null) {
+        value = viewModel.externalPlaceLabel(StoredKind.SongCache)
+    }
 
     @Composable
-    fun moveDetail(kind: StoredKind): String? = when {
+    fun moveDetail(kind: StoredKind, externalLabel: String?): String? = when {
         moving?.kind == kind -> stringResource(R.string.storage_moving, (moving.progress * 100).toInt())
         (move as? MoveStep.Failed)?.kind == kind -> stringResource(R.string.storage_move_failed)
-        else -> null
+        else -> externalLabel
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         StorageActionButton(
             label = stringResource(R.string.storage_downloads_place),
-            detail = moveDetail(StoredKind.Downloads),
+            detail = moveDetail(StoredKind.Downloads, downloadsPlace),
             enabled = moving == null,
             onClick = { menuState.showStoragePlaceSheet(viewModel, StoredKind.Downloads) },
         )
         StorageActionButton(
             label = stringResource(R.string.storage_cache_place),
-            detail = moveDetail(StoredKind.SongCache),
+            detail = moveDetail(StoredKind.SongCache, cachePlace),
             enabled = moving == null,
             onClick = { menuState.showStoragePlaceSheet(viewModel, StoredKind.SongCache) },
         )

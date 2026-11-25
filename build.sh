@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+# BSD sed needs an empty backup suffix; GNU sed does not.
+sed_in_place() {
+    if [[ "$OSTYPE" == darwin* ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
 # build defaults
 BUILD_ATTEMPT_FILE=".build_number"
 if [ ! -f "$BUILD_ATTEMPT_FILE" ]; then
@@ -21,6 +30,10 @@ IS_CUSTOM_BUILD=false
 BETA_NOTICE_FILE="app/src/main/kotlin/co.oto.music/ui/screens/beta/BetaNoticeScreen.kt"
 
 cleanup() {
+    # a nightly's fourth number only lives for its own build
+    if [ -n "$NIGHTLY_NUMBER" ] && [ -n "$BASE_VERSION" ] && [ -n "$BUILD_ATTEMPT" ]; then
+        sed_in_place "s/versionName = \".*\"/versionName = \"$BASE_VERSION build#$BUILD_ATTEMPT\"/g" app/build.gradle.kts
+    fi
     if [ "$IS_CUSTOM_BUILD" = true ]; then
         echo ""
         echo "Restoring original build files after custom build..."
@@ -135,14 +148,21 @@ if [ "$SKIP_BUILD" = false ]; then
 
     if [ -n "$CHANGE_VERSION" ]; then
         echo "Changing base app version to $CHANGE_VERSION..."
-        sed -i '' "s/versionName = \".*\"/versionName = \"$CHANGE_VERSION\"/g" app/build.gradle.kts
+        sed_in_place "s/versionName = \".*\"/versionName = \"$CHANGE_VERSION\"/g" app/build.gradle.kts
     fi
 
     # read base version
     BASE_VERSION=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | sed 's/.*versionName = "\(.*\)".*/\1/' | sed 's/ build#.*//')
 
-    # update version name
-    sed -i '' "s/versionName = \".*\"/versionName = \"$BASE_VERSION build#$BUILD_ATTEMPT\"/g" app/build.gradle.kts
+    # update version name, a nightly gets its fourth number for this build only (cleanup puts it back)
+    VERSION_LABEL="$BASE_VERSION"
+    GRADLE_FLAGS=""
+    if [ -n "$NIGHTLY_NUMBER" ]; then
+        VERSION_LABEL="$BASE_VERSION.$NIGHTLY_NUMBER"
+        GRADLE_FLAGS="-Pnightly=true"
+        echo "Building nightly $VERSION_LABEL..."
+    fi
+    sed_in_place "s/versionName = \".*\"/versionName = \"$VERSION_LABEL build#$BUILD_ATTEMPT\"/g" app/build.gradle.kts
 
     # update beta notice
     if [ -f "$BETA_NOTICE_FILE" ]; then
@@ -150,10 +170,10 @@ if [ "$SKIP_BUILD" = false ]; then
         if [ -n "$CUSTOM_DATE" ]; then
             NOTICE_TITLE="oto build #$BUILD_ATTEMPT $VARIANT ($CUSTOM_DATE)"
         fi
-        sed -i '' -e "s/text = \"Oto DEV PREV\"/text = \"$NOTICE_TITLE\"/g" "$BETA_NOTICE_FILE"
-        sed -i '' -e "s/text = \"oto build #[0-9]* .*\"/text = \"$NOTICE_TITLE\"/g" "$BETA_NOTICE_FILE"
-        sed -i '' -e "s/text = \"[0-9]*\.[0-9]*\.[0-9]*DEV\"/text = \"$BASE_VERSION build#$BUILD_ATTEMPT\"/g" "$BETA_NOTICE_FILE"
-        sed -i '' -e "s/text = \"[0-9]*\.[0-9]*\.[0-9]* build#[0-9]*\"/text = \"$BASE_VERSION build#$BUILD_ATTEMPT\"/g" "$BETA_NOTICE_FILE"
+        sed_in_place -e "s/text = \"Oto DEV PREV\"/text = \"$NOTICE_TITLE\"/g" "$BETA_NOTICE_FILE"
+        sed_in_place -e "s/text = \"oto build #[0-9]* .*\"/text = \"$NOTICE_TITLE\"/g" "$BETA_NOTICE_FILE"
+        sed_in_place -e "s/text = \"[0-9]*\.[0-9]*\.[0-9]*DEV\"/text = \"$BASE_VERSION build#$BUILD_ATTEMPT\"/g" "$BETA_NOTICE_FILE"
+        sed_in_place -e "s/text = \"[0-9]*\.[0-9]*\.[0-9]* build#[0-9]*\"/text = \"$BASE_VERSION build#$BUILD_ATTEMPT\"/g" "$BETA_NOTICE_FILE"
     fi
 
     # select gradle task

@@ -86,7 +86,7 @@ fun AlternatePlayerStyle(
         PlayerStyle.BEDSIDE -> co.oto.music.ui.player.bedside.BedsidePlayerStyle(actions, modifier, preview)
         PlayerStyle.BEDSIDE_TILES -> co.oto.music.ui.player.bedside.BedsideTilesStyle(actions, modifier, preview)
         PlayerStyle.MODULE -> ModulePlayerStyle(actions, modifier, preview)
-        PlayerStyle.FLAGSHIP, PlayerStyle.CLASSIC, PlayerStyle.TURNTABLE -> Unit
+        PlayerStyle.FLAGSHIP, PlayerStyle.TURNTABLE -> Unit
     }
 }
 
@@ -294,6 +294,7 @@ private fun PosterPlayerStyle(actions: StyleActions, modifier: Modifier, preview
                             width = w,
                             height = h,
                             animate = false,
+                            warp = !preview,
                             timeProvider = backgroundClock,
                             modifier = Modifier.fillMaxSize(),
                         )

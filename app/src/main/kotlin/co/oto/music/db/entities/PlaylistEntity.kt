@@ -8,8 +8,8 @@ import com.music.innertube.YouTube
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.apache.commons.lang3.RandomStringUtils
 import java.time.LocalDateTime
+import kotlin.random.Random
 
 @Immutable
 @Entity(tableName = "playlist")
@@ -33,12 +33,18 @@ data class PlaylistEntity(
     val isAutoSync: Boolean = false,
     /** Free text the owner wrote about the playlist. Local only - never sent to YouTube. */
     val description: String? = null,
+    /** Whether Mix It custom transitions are active for this playlist. */
+    @ColumnInfo(name = "mixItEnabled", defaultValue = "0")
+    val mixItEnabled: Boolean = false,
+    /** What unconfigured pairs use when Mix It is on: null follows the app transition setting. */
+    val mixItFallback: String? = null,
 ) {
     companion object {
         const val LIKED_PLAYLIST_ID = "LP_LIKED"
         const val DOWNLOADED_PLAYLIST_ID = "LP_DOWNLOADED"
+        private const val Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-        fun generatePlaylistId() = "LP" + RandomStringUtils.insecure().next(8, true, false)
+        fun generatePlaylistId() = "LP" + CharArray(8) { Letters[Random.nextInt(Letters.length)] }.concatToString()
     }
 
     val shareLink: String?

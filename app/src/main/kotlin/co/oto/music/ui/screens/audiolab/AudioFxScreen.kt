@@ -4,7 +4,6 @@ package co.oto.music.ui.screens.audiolab
 
 import android.content.Context
 import android.media.AudioManager
-import android.media.MediaCodecList
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
@@ -68,16 +67,24 @@ fun AudioFxScreen(
     val reverb by viewModel.reverb.collectAsState()
     val loudness by viewModel.loudness.collectAsState()
     val spatial by viewModel.spatial.collectAsState()
+    val eightD by viewModel.eightD.collectAsState()
     val playback by viewModel.playback.collectAsState()
     val volume by viewModel.volume.collectAsState()
-    val effects = activeEffects(reverb, loudness, spatial, playback, volume)
+    val stage by viewModel.stage.collectAsState()
+    val effects = activeEffects(reverb, loudness, spatial, eightD, playback, volume, stage)
 
     AudioLabPage(
         title = LabTitle(stringResource(R.string.fx_title_audio), "FX", firstSize = 40.sp, secondSize = 84.sp, firstDim = true),
         onBack = { navController.navigateUp() },
         art = { hidden -> FxCardStack(effects, hidden) },
     ) {
+        FxPresetsSection(viewModel)
+        Spacer(Modifier.height(24.dp))
+        co.oto.music.ui.screens.audiolab.stage.StageCard(viewModel) { navController.navigate("audio_stage") }
+        Spacer(Modifier.height(14.dp))
         ReverbCard(viewModel)
+        Spacer(Modifier.height(14.dp))
+        EightDAudioCard(viewModel)
         Spacer(Modifier.height(14.dp))
         LoudnessCard(viewModel)
         Spacer(Modifier.height(14.dp))
@@ -126,7 +133,7 @@ private fun LoudnessCard(viewModel: AudioLabViewModel) {
         picture = { LoudnessPicture(loudness, viewModel.fx) },
         header = {
             LabToggleRow(stringResource(R.string.fx_loudness_title), stringResource(R.string.fx_loudness_sub), loudness.enabled,
-                { on -> viewModel.updateLoudness { it.copy(enabled = on) } })
+                { on -> viewModel.updateLoudness { it.copy(enabled = on) } }, highlightKey = "Loudness")
         },
         expanded = loudness.enabled,
         options = {
@@ -169,7 +176,13 @@ private fun LoudnessCard(viewModel: AudioLabViewModel) {
         },
         footer = {
             Spacer(Modifier.height(6.dp))
-            LabToggleRow(stringResource(R.string.fx_even_out), stringResource(R.string.fx_even_out_sub), normalize, onNormalize)
+            LabToggleRow(
+                title = stringResource(R.string.audio_normalization),
+                subtitle = stringResource(R.string.fx_even_out_sub),
+                checked = normalize,
+                onCheckedChange = onNormalize,
+                highlightKey = "Audio Normalization",
+            )
             val rg by viewModel.normalize.collectAsState()
             LabCollapsible(normalize) {
                 Spacer(Modifier.height(4.dp))
@@ -214,11 +227,12 @@ private val CrossfeedLevels = listOf(
 @Composable
 private fun SpatialCard(viewModel: AudioLabViewModel) {
     val spatial by viewModel.spatial.collectAsState()
+    val stage by viewModel.stage.collectAsState()
     EffectCard(
         picture = { SpatialPicture(spatial) },
         header = {
             LabToggleRow(stringResource(R.string.fx_spatial_title), stringResource(R.string.fx_spatial_sub), spatial.enabled,
-                { on -> viewModel.updateSpatial { it.copy(enabled = on) } })
+                { on -> viewModel.updateSpatial { it.copy(enabled = on) } }, highlightKey = "Spatial audio")
         },
         expanded = spatial.enabled,
         options = {
@@ -262,6 +276,15 @@ private fun SpatialCard(viewModel: AudioLabViewModel) {
                 }
             }
         },
+        footer = if (stage.enabled && spatial.enabled) {
+            {
+                Text(
+                    stringResource(R.string.stage_spatial_note),
+                    fontFamily = InterFontFamily, fontSize = 12.sp, lineHeight = 16.sp, color = LabColors.Secondary,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                )
+            }
+        } else null,
     )
 }
 
@@ -298,6 +321,7 @@ private fun AtmosCard(viewModel: AudioLabViewModel) {
                 subtitle = stringResource(R.string.fx_atmos_sub),
                 checked = spatial.surround,
                 onCheckedChange = { on -> viewModel.updateSpatial { it.copy(surround = on) } },
+                highlightKey = "Dolby Atmos",
             )
         },
         expanded = false,
@@ -321,13 +345,9 @@ private fun AtmosCard(viewModel: AudioLabViewModel) {
 
 private class AtmosSupport(@StringRes val decoder: Int, @StringRes val spatializer: Int)
 
-/** what this phone can do with an atmos stream: decode it, and spatialise it itself */
+/** what this phone can do with an atmos stream: decode it (system codec or bundled ffmpeg), and spatialise it itself */
 private fun atmosSupport(context: Context): AtmosSupport {
-    val decoder = runCatching {
-        MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.any { info ->
-            !info.isEncoder && info.supportedTypes.any { it.equals("audio/eac3-joc", ignoreCase = true) }
-        }
-    }.getOrDefault(false)
+    val decoder = co.oto.music.modules.DeviceDecoders.canPlay("DOLBY ATMOS")
     val spatializer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S_V2) spatializerState(context) else R.string.fx_atmos_needs_android
     return AtmosSupport(if (decoder) R.string.fx_atmos_yes else R.string.fx_atmos_not_on_phone, spatializer)
 }
@@ -474,7 +494,7 @@ private fun VolumeCard(viewModel: AudioLabViewModel) {
         picture = { VolumeCurvePicture(volume, playerVolume?.value ?: 0.6f) },
         header = {
             LabToggleRow(stringResource(R.string.fx_volume_title), stringResource(R.string.fx_volume_sub), volume.enabled,
-                { on -> viewModel.updateVolume { it.copy(enabled = on) } })
+                { on -> viewModel.updateVolume { it.copy(enabled = on) } }, highlightKey = "Exponential volume")
         },
         expanded = volume.enabled,
         options = {

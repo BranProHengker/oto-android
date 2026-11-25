@@ -49,7 +49,9 @@ import androidx.compose.ui.unit.sp
 import co.oto.music.LocalGridItemSize
 import co.oto.music.R
 import co.oto.music.constants.GridItemSize
-import co.oto.music.ui.theme.InterFontFamily
+import co.oto.music.ui.theme.globalTextStyle
+import co.oto.music.ui.theme.headingTextStyle
+import co.oto.music.ui.theme.subheadingTextStyle
 import coil3.compose.AsyncImage
 
 // spacing and type straight from the Figma home frames (13:11 / 14:212)
@@ -58,44 +60,30 @@ val HomeCardSpacing = 15.dp
 
 private val HomeTracking = (-0.06).em
 
-val HomeLabelStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 16.sp,
-    lineHeight = 19.sp,
-    letterSpacing = HomeTracking,
+private val HomeLabelStyleCache = subheadingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, lineHeight = 19.sp, letterSpacing = HomeTracking),
 )
+val HomeLabelStyle: TextStyle get() = HomeLabelStyleCache.current()
 
-val HomeTitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 24.sp,
-    lineHeight = 28.sp,
-    letterSpacing = HomeTracking,
+private val HomeTitleStyleCache = headingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp, lineHeight = 28.sp, letterSpacing = HomeTracking),
 )
+val HomeTitleStyle: TextStyle get() = HomeTitleStyleCache.current()
 
-private val HomeCardTitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
-    fontSize = 14.sp,
-    lineHeight = 17.sp,
-    letterSpacing = (-0.03).em,
+private val HomeCardTitleStyleCache = globalTextStyle(
+    TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 17.sp, letterSpacing = (-0.03).em),
 )
+private val HomeCardTitleStyle: TextStyle get() = HomeCardTitleStyleCache.current()
 
-private val HomeCardSubtitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Medium,
-    fontSize = 12.sp,
-    lineHeight = 15.sp,
-    letterSpacing = (-0.02).em,
+private val HomeCardSubtitleStyleCache = globalTextStyle(
+    TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 15.sp, letterSpacing = (-0.02).em),
 )
+private val HomeCardSubtitleStyle: TextStyle get() = HomeCardSubtitleStyleCache.current()
 
-private val HomeRankStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 22.sp,
-    letterSpacing = HomeTracking,
+private val HomeRankStyleCache = headingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp, letterSpacing = HomeTracking),
 )
+private val HomeRankStyle: TextStyle get() = HomeRankStyleCache.current()
 
 private val SectionLabelColor = Color.White.copy(alpha = 0.69f)
 private val HomeRowShape = RoundedCornerShape(14.dp)
@@ -283,21 +271,15 @@ fun HomeCoverCard(
 // the Figma "Concert" card (20:195) is 314 x 247 on a 402 wide frame
 const val HomeVideoCardAspect = 314f / 247f
 
-private val HomeVideoTitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
-    fontSize = 15.sp,
-    lineHeight = 18.sp,
-    letterSpacing = (-0.03).em,
+private val HomeVideoTitleStyleCache = globalTextStyle(
+    TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 18.sp, letterSpacing = (-0.03).em),
 )
+private val HomeVideoTitleStyle: TextStyle get() = HomeVideoTitleStyleCache.current()
 
-private val HomeVideoSubtitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Medium,
-    fontSize = 13.sp,
-    lineHeight = 16.sp,
-    letterSpacing = (-0.02).em,
+private val HomeVideoSubtitleStyleCache = globalTextStyle(
+    TextStyle(fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 16.sp, letterSpacing = (-0.02).em),
 )
+private val HomeVideoSubtitleStyle: TextStyle get() = HomeVideoSubtitleStyleCache.current()
 
 // dark at the top where the text sits, clear by the middle so the frame itself shows
 private val HomeVideoScrim = Brush.verticalGradient(
@@ -466,12 +448,11 @@ fun HomeTrackRow(
                 .weight(1f)
                 .padding(horizontal = 13.dp),
         ) {
-            Text(
+            TitleWithMarks(
                 text = title,
+                songId = songId,
                 style = HomeCardTitleStyle.copy(fontSize = 15.sp),
                 color = if (isActive) Color.White else Color.White.copy(alpha = 0.92f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             if (!subtitle.isNullOrEmpty()) {
                 Text(
@@ -483,7 +464,6 @@ fun HomeTrackRow(
                 )
             }
         }
-        OnDeviceMarks(songId, modifier = Modifier.padding(end = 2.dp))
         if (onMoreClick != null) Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier

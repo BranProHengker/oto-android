@@ -4,13 +4,14 @@ package co.oto.music.modules.skin
 
 import android.content.Context
 import android.net.Uri
+import co.oto.music.modules.security.ModuleSanitizer
 import java.io.File
 import java.util.zip.ZipInputStream
 
 internal object SkinFiles {
 
     fun folderFor(context: Context, moduleId: String): File =
-        File(context.filesDir, "module_files/" + moduleId.replace(Regex("[^a-z0-9._-]"), "-"))
+        File(context.filesDir, "module_files/" + ModuleSanitizer.safeSegment(moduleId))
 
     /** unpacks the pictures and fonts under [root], the manifest's folder in the zip; null when nothing was kept */
     fun unpack(context: Context, uri: Uri, moduleId: String, root: String): File? {
@@ -28,7 +29,7 @@ internal object SkinFiles {
                     val file = File(target, relative)
                     if (!file.canonicalPath.startsWith(targetPath)) continue
                     file.parentFile?.mkdirs()
-                    val written = copyCapped(zip, file, minOf(MaxFileBytes, MaxTotalBytes - total))
+                    val written = copyCapped(zip, file, minOf(MaxFileBytes, MaxTotalBytes - total), entry.compressedSize)
                     if (written < 0) file.delete() else {
                         total += written
                         count++
@@ -43,15 +44,16 @@ internal object SkinFiles {
         folderFor(context, moduleId).deleteRecursively()
     }
 
-    // pictures, fonts and glass shaders only, and none of the hidden copies macos tucks into a zip
+    // pictures, fonts, shaders and safe surface data files only, blocking traversal, backslashes and hidden macos copies
     private fun keeps(path: String): Boolean {
+        if ('\\' in path || '\u0000' in path) return false
         val parts = path.split('/')
-        if (parts.any { it.isEmpty() || it == ".." || it == "__MACOSX" || it.startsWith(".") }) return false
+        if (parts.any { it.isEmpty() || it == "." || it == ".." || it == "__MACOSX" || it.startsWith(".") }) return false
         return path.substringAfterLast('.', "").lowercase() in Kinds
     }
 
-    // the entry's bytes into [file], or -1 once it passes [limit] so a huge or lying entry can't fill the phone
-    private fun copyCapped(zip: ZipInputStream, file: File, limit: Long): Long {
+    // the entry's bytes into [file], or -1 once it passes [limit] or looks like a zip bomb so a huge or lying entry can't fill the phone
+    private fun copyCapped(zip: ZipInputStream, file: File, limit: Long, compressedSize: Long): Long {
         var written = 0L
         val buffer = ByteArray(16 * 1024)
         file.outputStream().use { out ->
@@ -60,14 +62,21 @@ internal object SkinFiles {
                 if (read < 0) break
                 written += read
                 if (written > limit) return -1
+                if (exceedsCompressionRatio(written, compressedSize)) return -1
                 out.write(buffer, 0, read)
             }
         }
         return written
     }
 
-    private val Kinds = setOf("png", "jpg", "jpeg", "webp", "gif", "ttf", "otf", "agsl", "sksl")
+    internal fun exceedsCompressionRatio(written: Long, compressedSize: Long): Boolean =
+        compressedSize > 0L && written > ZipBombCheckThreshold && written > compressedSize * MaxCompressionRatio
+
+    internal val SurfaceAssetKinds = setOf("wad", "pk3", "wl6", "wl1", "pak", "rom", "gb", "gbc", "gba", "nes", "sfc", "smc", "ch8", "dat", "bin")
+    private val Kinds = setOf("png", "jpg", "jpeg", "webp", "gif", "ttf", "otf", "agsl", "sksl") + SurfaceAssetKinds
     private const val MaxFiles = 200
-    private const val MaxFileBytes = 8L * 1024 * 1024
-    private const val MaxTotalBytes = 30L * 1024 * 1024
+    private const val MaxFileBytes = 24L * 1024 * 1024
+    private const val MaxTotalBytes = 48L * 1024 * 1024
+    private const val ZipBombCheckThreshold = 1024L * 1024L
+    private const val MaxCompressionRatio = 100L
 }

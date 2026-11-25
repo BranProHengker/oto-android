@@ -112,7 +112,7 @@
 -dontwarn java.beans.Introspector
 -dontwarn java.beans.PropertyDescriptor
 
-# Keep all classes within the kuromoji package
+# Keep all classes within the kuromoji package so Japanese kanji tokenization and dictionary loading work in release builds
 -keep class com.atilika.kuromoji.** { *; }
 
 ## Queue Persistence Rules
@@ -129,11 +129,6 @@
     private void readObject(java.io.ObjectInputStream);
 }
 
-## UCrop Rules
--dontwarn com.yalantis.ucrop**
--keep class com.yalantis.ucrop** { *; }
--keep interface com.yalantis.ucrop** { *; }
-
 ## Google Cast Rules
 -keep class co.oto.music.cast.** { *; }
 -keep class com.google.android.gms.cast.** { *; }
@@ -148,18 +143,18 @@
     native <methods>;
 }
 
+# Module store native signing bridge
+-keep class co.oto.music.modules.browser.StoreSignature { *; }
+-keepclassmembers class co.oto.music.modules.browser.StoreSignature {
+    native <methods>;
+}
+
 ## Modules from a zip
 # a zip module's own code reaches oto only through these, by their original names
 -keep class co.oto.music.module.bridge.shared.** { *; }
 
-## Kotlin Reflection Fix
--keep class kotlin.Metadata { *; }
--keep class kotlin.reflect.** { *; }
--dontwarn kotlin.reflect.**
-
-## Ktor Serialization
--keep class io.ktor.** { *; }
--keepclassmembers class io.ktor.** { *; }
+## Ktor client engine (let r8 strip unused ktor openapi, network, and server packages)
+-keep class io.ktor.client.engine.okhttp.** { *; }
 -dontwarn io.ktor.**
 
 ## Shazam Models

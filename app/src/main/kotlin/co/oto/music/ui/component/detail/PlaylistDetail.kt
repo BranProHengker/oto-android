@@ -66,6 +66,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -162,53 +163,40 @@ internal val TrackShape = RoundedCornerShape(9.dp)
 // a pressed track lights a pill from one side of the screen to the other, like the swipe slab
 private val TrackHighlight = RoundedHighlight(cornerRadius = 100.dp, spillX = (-10).dp)
 
-internal val PlaylistTitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 24.sp,
-    lineHeight = 28.sp,
-    letterSpacing = PlaylistTracking,
+private val PlaylistTitleStyleCache = co.oto.music.ui.theme.headingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp, lineHeight = 28.sp, letterSpacing = PlaylistTracking),
 )
-internal val PlaylistCreatorStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 15.sp,
-    lineHeight = 18.sp,
-    letterSpacing = (-0.04).em,
+internal val PlaylistTitleStyle: TextStyle get() = PlaylistTitleStyleCache.current()
+
+private val PlaylistCreatorStyleCache = co.oto.music.ui.theme.subheadingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 18.sp, letterSpacing = (-0.04).em),
 )
-internal val PlaylistStatsStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
-    fontSize = 11.sp,
-    lineHeight = 14.sp,
-    letterSpacing = (-0.02).em,
+internal val PlaylistCreatorStyle: TextStyle get() = PlaylistCreatorStyleCache.current()
+
+private val PlaylistStatsStyleCache = co.oto.music.ui.theme.globalTextStyle(
+    TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = (-0.02).em),
 )
-internal val PillLabelStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 16.sp,
-    letterSpacing = PlaylistTracking,
+internal val PlaylistStatsStyle: TextStyle get() = PlaylistStatsStyleCache.current()
+
+private val PillLabelStyleCache = co.oto.music.ui.theme.subheadingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = PlaylistTracking),
 )
-internal val TrackTitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
-    fontSize = 14.sp,
-    lineHeight = 17.sp,
-    letterSpacing = (-0.03).em,
+internal val PillLabelStyle: TextStyle get() = PillLabelStyleCache.current()
+
+private val TrackTitleStyleCache = co.oto.music.ui.theme.globalTextStyle(
+    TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 17.sp, letterSpacing = (-0.03).em),
 )
-internal val TrackSubtitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Medium,
-    fontSize = 11.5.sp,
-    lineHeight = 14.sp,
-    letterSpacing = (-0.02).em,
+internal val TrackTitleStyle: TextStyle get() = TrackTitleStyleCache.current()
+
+private val TrackSubtitleStyleCache = co.oto.music.ui.theme.globalTextStyle(
+    TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.5.sp, lineHeight = 14.sp, letterSpacing = (-0.02).em),
 )
-internal val SectionTitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 16.sp,
-    letterSpacing = PlaylistTracking,
+internal val TrackSubtitleStyle: TextStyle get() = TrackSubtitleStyleCache.current()
+
+private val SectionTitleStyleCache = co.oto.music.ui.theme.subheadingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = PlaylistTracking),
 )
+internal val SectionTitleStyle: TextStyle get() = SectionTitleStyleCache.current()
 internal val ReceiptSmallStyle = TextStyle(
     fontFamily = FontFamily.Monospace,
     fontWeight = FontWeight.Medium,
@@ -253,6 +241,15 @@ fun <A> featuredArtistsOf(
         .sortedByDescending { it.value.size }
         .take(limit)
         .map { (artistId, names) -> FeaturedArtistUi(id = artistId, name = names.first()) }
+
+// the featured artists counted off the main thread, liked songs and the cache run to thousands and made the page hitch as it opened
+@Composable
+fun <A> rememberFeaturedArtists(key: Any?, artists: () -> List<A>, id: (A) -> String?, name: (A) -> String): List<FeaturedArtistUi> {
+    val featured by produceState(emptyList<FeaturedArtistUi>(), key) {
+        value = withContext(Dispatchers.Default) { featuredArtistsOf(artists(), id, name) }
+    }
+    return featured
+}
 
 // passes the scaffold's cover composable down to PlaylistHeader when classic or minimal style draws a framed cover
 internal val LocalPlaylistFramedCover = staticCompositionLocalOf<(@Composable (Modifier) -> Unit)?> { null }
@@ -402,13 +399,12 @@ fun PlaylistDetailScaffold(
     // before the bar collapses
     val pillNeedsGlass = rememberUpdatedState(modeBar is PlaylistModeBar.EditOrder)
 
-    // on its side the cover stays at the left with the title on it, and the songs take the right
+    // on its side the cover stays at the left, and the title and the songs take the right
     if (co.oto.music.ui.utils.isLandscapeLayout()) {
         PlaylistSideBySide(
             sharedElementKey = sharedElementKey,
             coverUrl = coverUrl,
             cover = cover,
-            framedCover = framedCover,
             background = background,
             lazyListState = lazyListState,
             contentPadding = contentPadding,
@@ -973,13 +969,15 @@ fun PlaylistHeader(
     below: (@Composable () -> Unit)? = null,
     // opens the list's own song search, from a round button beside shuffle
     onSearchClick: (() -> Unit)? = null,
+    // sits at the far end of the button row, like the library pages' grid and list switch
+    actionsEnd: (@Composable () -> Unit)? = null,
 ) {
     val playlistStyle by rememberEnumPreference(PlaylistStyleKey, defaultValue = PlaylistStyle.FLOW)
     val framedCover = LocalPlaylistFramedCover.current
-    // on its side the block sits on the cover at the left, so it never draws a framed cover of its own
-    val side = LocalPlaylistSideHeader.current
-    val useMinimal = compact || (side == null && playlistStyle == PlaylistStyle.MINIMAL)
-    val useClassic = side == null && !compact && playlistStyle == PlaylistStyle.CLASSIC
+    // on its side the cover is already at the left, so the block heads the songs without a band or a framed cover of its own
+    val sideBySide = LocalPlaylistSideBySide.current
+    val useMinimal = compact || (!sideBySide && playlistStyle == PlaylistStyle.MINIMAL)
+    val useClassic = !sideBySide && !compact && playlistStyle == PlaylistStyle.CLASSIC
 
     val body: @Composable () -> Unit = {
         Column(
@@ -1033,7 +1031,7 @@ fun PlaylistHeader(
                 )
             }
             Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 PlayPill(isPlaying = isPlaying, onClick = onPlayClick)
                 Spacer(Modifier.width(9.dp))
                 CircleAction(
@@ -1058,6 +1056,10 @@ fun PlaylistHeader(
                         onClick = onSaveClick,
                     )
                 }
+                if (actionsEnd != null) {
+                    Spacer(Modifier.weight(1f))
+                    actionsEnd()
+                }
             }
             if (sortControl != null) {
                 Spacer(Modifier.height(12.dp))
@@ -1071,8 +1073,9 @@ fun PlaylistHeader(
         }
     }
 
-    if (side != null) {
-        PublishSideHeader(side, body)
+    if (sideBySide) {
+        // the list already starts under the back button on its side, so the block needs no gap above it
+        Column(modifier = modifier.fillMaxWidth()) { body() }
     } else if (useMinimal || useClassic) {
         Column(
             modifier = modifier
@@ -1111,13 +1114,10 @@ private fun playlistClassicCoverSize(): Dp = (LocalConfiguration.current.screenW
 @Composable
 private fun playlistClassicHeaderHeight(): Dp = playlistCompactHeaderTop() + playlistClassicCoverSize() + 22.dp + 120.dp
 
-internal val PlaylistCompactTitleStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 32.sp,
-    lineHeight = 36.sp,
-    letterSpacing = PlaylistTracking,
+private val PlaylistCompactTitleStyleCache = co.oto.music.ui.theme.headingTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 36.sp, letterSpacing = PlaylistTracking),
 )
+internal val PlaylistCompactTitleStyle: TextStyle get() = PlaylistCompactTitleStyleCache.current()
 
 /**
  * an album's description where the stats line used to be: two lines, and a tap opens the rest in
@@ -1415,7 +1415,8 @@ fun PlaylistTrackRow(
     liked: Boolean? = null,
     onLikeClick: (() -> Unit)? = null,
 ) {
-    val band by animateFloatAsState(if (selected) 1f else 0f, tween(180), label = "selectedBand")
+    // starts only when picking begins, so the rows of a long playlist mount without a coroutine each
+    val band by co.oto.music.ui.utils.animateFloatOnChange(if (selected) 1f else 0f, tween(180))
     // Keep album rows as compact as the other tracks while giving the heart a 48dp tap target.
     val verticalPadding = if (trailing == null && liked != null && onLikeClick != null) 5.dp else 9.dp
     Row(
@@ -1435,14 +1436,14 @@ fun PlaylistTrackRow(
             modifier = Modifier
                 .size(39.dp)
                 .then(coverModifier)
-                .clip(coverShape)
-                .background(BoneColor)
+                .background(BoneColor, coverShape)
         ) {
             ItemThumbnail(
                 thumbnailUrl = thumbnailUrl,
                 isActive = isActive,
                 isPlaying = isPlaying,
                 shape = coverShape,
+                imageSizePx = 256,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -1451,12 +1452,11 @@ fun PlaylistTrackRow(
                 .weight(1f)
                 .padding(horizontal = 11.dp)
         ) {
-            Text(
+            co.oto.music.ui.component.TitleWithMarks(
                 text = title,
+                songId = songId,
                 style = TrackTitleStyle,
                 color = Color.White.copy(alpha = if (isActive) 1f else 0.94f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = subtitle,
@@ -1466,7 +1466,6 @@ fun PlaylistTrackRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        co.oto.music.ui.component.OnDeviceMarks(songId, modifier = Modifier.padding(end = 2.dp))
         if (trailing == null && liked != null && onLikeClick != null) {
             Box(
                 contentAlignment = Alignment.Center,

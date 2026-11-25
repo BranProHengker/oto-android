@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -22,9 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -44,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -60,14 +58,43 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import co.oto.music.ui.utils.stableStatusBars
 import co.oto.music.ui.component.RemoteFocus
+import co.oto.music.ui.component.LocalSheetHandleRoom
+import co.oto.music.ui.component.SheetHandleRoom
+import co.oto.music.ui.component.SheetHandleRow
+import co.oto.music.ui.component.onChrome
+import co.oto.music.ui.component.rememberSheetGrabberBend
+import co.oto.music.ui.component.underSheetHandle
+import co.oto.music.modules.skin.ActiveSkin
 
 val MenuSurface = Color(0xFF0B0B0C)
 val MenuRowSurface = Color(0xFF161619)
+
+/** resolved sheet surface/row/dim/corner colours from an active look module, clamped so sheets always stay readable */
+@Composable
+internal fun resolvedSheetSurface(): Color {
+    val active = ActiveSkin.sheet ?: return MenuSurface
+    val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val raw = active.sheet.surface?.onChrome(accent, active.values) ?: return MenuSurface
+    return raw.copy(alpha = raw.alpha.coerceIn(0.86f, 1f))
+}
+
+@Composable
+internal fun resolvedSheetRowSurface(): Color {
+    val active = ActiveSkin.sheet ?: return MenuRowSurface
+    val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val raw = active.sheet.rowSurface?.onChrome(accent, active.values) ?: return MenuRowSurface
+    return raw.copy(alpha = raw.alpha.coerceIn(0.75f, 1f))
+}
+
+@Composable
+internal fun resolvedSheetRowCorner(): androidx.compose.ui.unit.Dp =
+    ActiveSkin.sheet?.sheet?.rowCorner ?: 16.dp
 
 internal val MenuEasing = CubicBezierEasing(0.57f, 0.53f, 0f, 1f)
 
@@ -84,13 +111,17 @@ private const val RecedeScale = 0.9f
 
 /**
  * ...and rises until this much of its top edge shows above the sheet in front. Larger than
- * PopupSheet's 24dp because this sheet's handle pill sits lower (12dp padding inside a 38dp row) -
- * this leaves the same ~8dp of strip above the front sheet's edge under the pill.
+ * PopupSheet's 24dp because this sheet's handle bar sits lower (6dp under the middle of a 38dp row) -
+ * this leaves the same ~8dp of strip above the front sheet's edge under the bar.
  */
 private val PeekHeight = 32.dp
 
 /** Space kept between the status bar and the highest a sheet (or its peek strip) can reach. */
 private val StatusBarGap = 6.dp
+
+// the handle's row at the sheet's top, and how far a pull goes before its bar turns into an arrow
+private val HandleRowHeight = 38.dp
+private val ArrowAfterPull = 8.dp
 
 // set where a sheet floats as a card in the middle instead of rising from the bottom edge (the full video mode, turned sideways)
 val LocalMenuSheetFloating = staticCompositionLocalOf { false }
@@ -341,6 +372,45 @@ fun MenuSheetSurface(
             ) { value, _ -> setOffset(value) }
         }
 
+        // true while a finger pulls the sheet down from where the pull began, so its bar folds into an arrow
+        var pulling by remember { mutableStateOf(false) }
+        var pullStartPx by remember { mutableFloatStateOf(0f) }
+        val arrowAfterPx = with(density) { ArrowAfterPull.toPx() }
+
+        fun startPull() {
+            if (pulling) return
+            pulling = true
+            pullStartPx = offsetPx.floatValue
+        }
+
+        // a sheet that can't be dismissed only rubber-bands, so its bar just stays a line
+        val bend = rememberSheetGrabberBend {
+            dismissEnabled && (closing || (pulling && offsetPx.floatValue > pullStartPx + arrowAfterPx))
+        }
+
+        val activeSheet = ActiveSkin.sheet
+        val sheetBaseColor = resolvedSheetSurface()
+        val sheetRecedeColor = resolvedSheetRowSurface()
+        val sheetDim = activeSheet?.sheet?.dim ?: 0.6f
+        val sheetStroke = activeSheet?.sheet?.stroke
+        val sheetStrokeColor = activeSheet?.sheet?.strokeColor?.onChrome(
+            androidx.compose.material3.MaterialTheme.colorScheme.primary,
+            activeSheet.values,
+        ) ?: Color.White.copy(alpha = 0.16f)
+
+        // the sheet's colour, stepping up to the row gray as it recedes; the fade behind its bar matches it
+        val surfaceColor: () -> Color = remember(stack, entry, sheetBaseColor, sheetRecedeColor) {
+            {
+                var recede = 0f
+                if (stack != null) {
+                    val entries = stack.entries
+                    val index = entries.indexOf(entry)
+                    if (index >= 0) recede = entries.depthAbove(index).coerceAtMost(1f)
+                }
+                lerp(sheetBaseColor, sheetRecedeColor, recede)
+            }
+        }
+
         val animateTo: (Float, () -> Unit) -> Unit = { target, onEnd ->
             scope.launch {
                 animate(
@@ -372,7 +442,7 @@ fun MenuSheetSurface(
                     // covered sheet that's meant to peek above this one.
                     alpha = if (isCovering) 0f else revealFraction()
                 }
-                .background(Color.Black.copy(alpha = 0.6f))
+                .background(Color.Black.copy(alpha = sheetDim))
                 .then(
                     if (dismissEnabled) {
                         Modifier.clickable(
@@ -385,6 +455,7 @@ fun MenuSheetSurface(
         )
 
         fun settle(velocity: Float) {
+            pulling = false
             val current = offsetPx.floatValue
             val target = when {
                 !dismissEnabled -> restingOffsetPx
@@ -420,6 +491,7 @@ fun MenuSheetSurface(
 
                     if (available.y > 0f && !dismissEnabled) return Offset.Zero
                     if (available.y > 0f) {
+                        startPull()
                         setOffset((offsetPx.floatValue + available.y).coerceAtMost(fullHeightPx))
                         return available
                     }
@@ -444,7 +516,8 @@ fun MenuSheetSurface(
             }
         }
 
-        val sheetShape = if (floating) RoundedCornerShape(FloatingCorner) else RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
+        val customCorner = activeSheet?.sheet?.corner
+        val sheetShape = if (floating) RoundedCornerShape(customCorner ?: FloatingCorner) else RoundedCornerShape(topStart = customCorner ?: 30.dp, topEnd = customCorner ?: 30.dp)
 
         Column(
             modifier = Modifier
@@ -502,14 +575,9 @@ fun MenuSheetSurface(
                 .drawBehind {
                     // Steps up to the row gray as it recedes, so the strip peeking above the
                     // sheet in front reads as its own layer instead of melting into it.
-                    var recede = 0f
-                    if (stack != null) {
-                        val entries = stack.entries
-                        val index = entries.indexOf(entry)
-                        if (index >= 0) recede = entries.depthAbove(index).coerceAtMost(1f)
-                    }
-                    drawRect(lerp(MenuSurface, MenuRowSurface, recede))
+                    drawRect(surfaceColor())
                 }
+                .then(if (sheetStroke != null) Modifier.border(sheetStroke, sheetStrokeColor, sheetShape) else Modifier)
         ) {
             val dragHandle = Modifier.draggable(
                 state = rememberDraggableState { delta ->
@@ -523,29 +591,35 @@ fun MenuSheetSurface(
                     }
                 },
                 orientation = Orientation.Vertical,
+                onDragStarted = { startPull() },
                 onDragStopped = { velocity -> settle(velocity) },
             )
 
-            Box(
+            SheetHandleRow(
+                bend = remember(bend) { { bend.value } },
+                fade = surfaceColor,
+                // the bar sits low in its row, so the strip a covered sheet peeks above the one in front still shows it
+                barOffset = 6.dp,
                 modifier = Modifier
-                    .fillMaxWidth()
-
-                    .height(38.dp)
+                    // drawn after the content, so rows scrolled up under this row stay beneath the bar
+                    .zIndex(1f)
+                    .height(HandleRowHeight)
                     .then(dragHandle),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 12.dp)
-                        .width(64.dp)
-                        .height(4.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.5f))
-                )
-            }
+            )
 
-            CompositionLocalProvider(LocalMenuSheetClose provides closeSheet) {
-                content(dragHandle)
+            val room = remember { SheetHandleRoom(HandleRowHeight) }
+            CompositionLocalProvider(
+                LocalMenuSheetClose provides closeSheet,
+                LocalSheetHandleRoom provides room,
+            ) {
+                Column(
+                    Modifier
+                        .underSheetHandle(room)
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                ) {
+                    content(dragHandle)
+                }
             }
         }
     }

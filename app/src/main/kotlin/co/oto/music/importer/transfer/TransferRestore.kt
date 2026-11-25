@@ -5,7 +5,6 @@ package co.oto.music.importer.transfer
 import android.app.Application
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.datastore.preferences.core.edit
 import co.oto.music.MainActivity
@@ -15,6 +14,7 @@ import co.oto.music.playback.MusicService
 import co.oto.music.playback.StoragePlaces
 import co.oto.music.playback.StoredKind
 import co.oto.music.utils.dataStore
+import co.oto.music.utils.isMainProcess
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.io.File
@@ -24,6 +24,7 @@ import kotlin.system.exitProcess
 object TransferRestore {
     private const val Tag = "TransferRestore"
     private const val StagingName = "transfer_staging"
+    internal const val DownloadsStagingName = "transfer_staging_download"
     private const val NoteName = "transfer_restored.json"
     internal const val ReadyMarker = "ready.json"
 
@@ -40,6 +41,7 @@ object TransferRestore {
         if (!ready.exists()) {
             // the import was closed halfway through unpacking, so there's nothing whole to use
             staging.deleteRecursively()
+            StoragePlaces.sdCards(app).forEach { File(it.root, DownloadsStagingName).deleteRecursively() }
             return
         }
         runCatching { swapIn(app, staging, JSONObject(ready.readText())) }
@@ -73,9 +75,23 @@ object TransferRestore {
 
     // files first and the library last, so a stop halfway leaves an app that still starts and can import again
     private fun swapIn(context: Context, staging: File, ready: JSONObject) {
+        val externalDownloadsRoot = ready.optString("downloadsRoot").takeIf { it.isNotBlank() }?.let(::File)
+        val externalDownloadsStage = externalDownloadsRoot?.let { File(it, DownloadsStagingName) }?.takeIf { it.exists() }
+        val carriesDownloads = externalDownloadsStage != null || File(staging, TransferArchive.FilesPrefix + StoredKind.Downloads.folder).exists()
         moveFiles(context, File(staging, TransferArchive.FilesPrefix))
-        // the import's downloads land on the phone, so a card that held the old ones is let go
-        if (File(context.filesDir, StoredKind.Downloads.folder).exists()) StoragePlaces.resetToPhone(context, StoredKind.Downloads)
+        if (externalDownloadsStage != null) {
+            val target = File(externalDownloadsRoot, StoredKind.Downloads.folder)
+            target.deleteRecursively()
+            if (!externalDownloadsStage.renameTo(target)) {
+                externalDownloadsStage.copyRecursively(target, overwrite = true)
+                externalDownloadsStage.deleteRecursively()
+            }
+            // keep downloads pointed at the SD card where they were staged instead of moving back to internal storage
+            StoragePlaces.pointToRoot(context, StoredKind.Downloads, externalDownloadsRoot)
+        } else if (carriesDownloads) {
+            // the import's downloads landed on the phone, so a card that held the old ones is let go; a backup without songs leaves them be
+            StoragePlaces.resetToPhone(context, StoredKind.Downloads)
+        }
         File(staging, TransferArchive.MediaEntry).takeIf { it.exists() }?.let { media ->
             // the streaming cache's index lived in the old media database, so the cache starts over with the new one
             StoragePlaces.dir(context, StoredKind.SongCache).deleteRecursively()
@@ -114,19 +130,23 @@ object TransferRestore {
     // merged into what's there, so anything set during onboarding that the old app never had stays
     private fun restorePrefs(context: Context, folder: File) {
         for (file in folder.listFiles().orEmpty()) {
-            val fileName = TransferArchive.PrefsToCarry[file.name.removeSuffix(".json")] ?: continue
+            val logicalName = file.name.removeSuffix(".json")
+            val fileName = TransferArchive.PrefsToCarry[logicalName] ?: continue
+            val json = JSONObject(file.readText())
+            if (logicalName == "source_modules") {
+                // Never let an imported archive silently register executable code modules or pre-acknowledge script security warnings
+                val toRemove = buildList {
+                    val keys = json.keys()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        if (k == "code_modules" || k.startsWith("script_warn_ack_")) add(k)
+                    }
+                }
+                toRemove.forEach { json.remove(it) }
+            }
             val editor = context.getSharedPreferences(fileName, Context.MODE_PRIVATE).edit()
-            TransferArchive.jsonIntoSharedPreferences(JSONObject(file.readText()), editor)
+            TransferArchive.jsonIntoSharedPreferences(json, editor)
             editor.commit()
         }
-    }
-
-    private fun isMainProcess(context: Context): Boolean {
-        val name = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            Application.getProcessName()
-        } else {
-            runCatching { File("/proc/self/cmdline").readText().substringBefore('\u0000').trim() }.getOrNull()
-        }
-        return name.isNullOrEmpty() || name == context.packageName
     }
 }

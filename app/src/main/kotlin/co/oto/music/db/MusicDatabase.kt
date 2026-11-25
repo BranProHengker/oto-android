@@ -34,6 +34,7 @@ import co.oto.music.db.entities.ImportedSong
 import co.oto.music.db.entities.PlaylistEvent
 import co.oto.music.db.entities.PlaylistSongMap
 import co.oto.music.db.entities.PlaylistSongMapPreview
+import co.oto.music.db.entities.PlaylistTransition
 import co.oto.music.db.entities.RecognitionHistory
 import co.oto.music.db.entities.RelatedSongMap
 import co.oto.music.db.entities.SearchHistory
@@ -108,7 +109,7 @@ class MusicDatabase(
 }
 
 // bump this with every schema change and add its migration to AllMigrations, the import checks old exports against it too
-const val MusicDatabaseVersion = 43
+const val MusicDatabaseVersion = 47
 
 @Database(
     entities = [
@@ -136,6 +137,7 @@ const val MusicDatabaseVersion = 43
         ImportedPlaylist::class,
         ImportedPlaylistTrack::class,
         SongEdit::class,
+        PlaylistTransition::class,
     ],
     views = [
         SortedSongArtistMap::class,
@@ -434,6 +436,10 @@ val AllMigrations: Array<Migration>
         MIGRATION_40_41,
         MIGRATION_41_42,
         MIGRATION_42_43,
+        MIGRATION_43_44,
+        MIGRATION_44_45,
+        MIGRATION_45_46,
+        MIGRATION_46_47,
     )
 
 val MIGRATION_1_2 =
@@ -1115,5 +1121,86 @@ val MIGRATION_42_43 =
                 "CREATE TABLE IF NOT EXISTS `song_edit` (`songId` TEXT NOT NULL, `title` TEXT, `artists` TEXT, `album` TEXT, " +
                     "`year` INTEGER, `cover` TEXT, `videoId` TEXT, `noVideo` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`songId`))",
             )
+        }
+    }
+
+val MIGRATION_43_44 =
+    object : Migration(43, 44) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // local songs' genre tags for the library's Genres tab, read again for files that came in before
+            db.execSQL("ALTER TABLE `song` ADD COLUMN `genre` TEXT")
+        }
+    }
+
+val MIGRATION_44_45 =
+    object : Migration(44, 45) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // who made an imported playlist on its service, so its page can still credit them
+            db.execSQL("ALTER TABLE `imported_playlist` ADD COLUMN `authorName` TEXT")
+            db.execSQL("ALTER TABLE `imported_playlist` ADD COLUMN `authorAvatarUrl` TEXT")
+            db.execSQL("ALTER TABLE `imported_playlist` ADD COLUMN `authorUrl` TEXT")
+        }
+    }
+
+val MIGRATION_45_46 =
+    object : Migration(45, 46) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Mix It: per-playlist toggle, fallback mode for unconfigured pairs, and user-crafted transitions
+            val columns = db.query("PRAGMA table_info(`playlist`)").use { cursor ->
+                val name = cursor.getColumnIndex("name")
+                buildSet { while (cursor.moveToNext()) add(cursor.getString(name)) }
+            }
+            if ("mixItEnabled" !in columns) {
+                db.execSQL("ALTER TABLE `playlist` ADD COLUMN `mixItEnabled` INTEGER NOT NULL DEFAULT 0")
+            }
+            if ("mixItFallback" !in columns) {
+                db.execSQL("ALTER TABLE `playlist` ADD COLUMN `mixItFallback` TEXT")
+            }
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `playlist_transition` (" +
+                    "`playlistId` TEXT NOT NULL, " +
+                    "`fromSongId` TEXT NOT NULL, " +
+                    "`toSongId` TEXT NOT NULL, " +
+                    "`outStartMs` INTEGER NOT NULL, " +
+                    "`inStartMs` INTEGER NOT NULL, " +
+                    "`durationMs` INTEGER NOT NULL, " +
+                    "`outEffect` TEXT NOT NULL, " +
+                    "`inEffect` TEXT NOT NULL, " +
+                    "`outFadeStart` REAL NOT NULL, " +
+                    "`outFadeEnd` REAL NOT NULL, " +
+                    "`inFadeStart` REAL NOT NULL, " +
+                    "`inFadeEnd` REAL NOT NULL, " +
+                    "`beatMatchMode` TEXT NOT NULL, " +
+                    "`snapToBeat` INTEGER NOT NULL, " +
+                    "`bassSwap` INTEGER NOT NULL, " +
+                    "`swapFrac` REAL NOT NULL, " +
+                    "`beatNudgeMs` INTEGER NOT NULL, " +
+                    "`customSpeedRatio` REAL NOT NULL, " +
+                    "`presetName` TEXT, " +
+                    "`updatedAt` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`playlistId`, `fromSongId`, `toSongId`), " +
+                    "FOREIGN KEY(`playlistId`) REFERENCES `playlist`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE" +
+                    ")",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_playlist_transition_playlistId` ON `playlist_transition` (`playlistId`)")
+        }
+    }
+
+val MIGRATION_46_47 =
+    object : Migration(46, 47) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Mix It per-track voice / bass / instrument mix sliders
+            val columns = db.query("PRAGMA table_info(`playlist_transition`)").use { cursor ->
+                val name = cursor.getColumnIndex("name")
+                buildSet { while (cursor.moveToNext()) add(cursor.getString(name)) }
+            }
+            for (col in listOf(
+                "outVoiceLevel", "outBassLevel", "outInstrumentLevel",
+                "inVoiceLevel", "inBassLevel", "inInstrumentLevel",
+            )) {
+                if (col !in columns) {
+                    db.execSQL("ALTER TABLE `playlist_transition` ADD COLUMN `$col` REAL NOT NULL DEFAULT 1.0")
+                }
+            }
         }
     }

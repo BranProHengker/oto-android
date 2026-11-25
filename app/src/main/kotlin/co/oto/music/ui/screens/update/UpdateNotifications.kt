@@ -84,10 +84,10 @@ private fun postNotification(context: Context, release: GithubRelease): Boolean 
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    val summary = changelogSummaryLine(release.body).ifBlank { "Tap to see what's new." }
+    val summary = changelogSummaryLine(release.body).ifBlank { context.getString(R.string.update_notice_details) }
     val notification = NotificationCompat.Builder(context, ChannelId)
         .setSmallIcon(R.drawable.oto_notification)
-        .setContentTitle("Oto ${release.version} is out")
+        .setContentTitle(context.getString(R.string.update_notice_available, release.version))
         .setContentText(summary)
         .setStyle(NotificationCompat.BigTextStyle().bigText(summary))
         .setContentIntent(pending)

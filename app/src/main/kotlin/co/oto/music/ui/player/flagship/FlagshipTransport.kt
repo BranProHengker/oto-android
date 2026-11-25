@@ -93,6 +93,8 @@ fun FlagshipTransportRow(
     modifier: Modifier = Modifier,
     queueOpen: Boolean = false,
     onQueue: () -> Unit = {},
+    // tighter sizing for compact landscape columns so buttons never collide
+    compact: Boolean = false,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val transportState by playerConnection.uiState.transportState.collectAsState()
@@ -113,8 +115,11 @@ fun FlagshipTransportRow(
     val ended = transportState.playbackState == Player.STATE_ENDED
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        // one design unit, so the whole row keeps the design's proportions on any screen
-        val unit = (maxWidth / DesignWidth).coerceIn(0.27.dp, 0.42.dp)
+        // scale down cleanly on narrow landscape columns so adjacent buttons never overlap
+        val unit = (maxWidth / DesignWidth).coerceIn(if (compact) 0.14.dp else 0.18.dp, 0.42.dp)
+        val threeTouch = minOf(if (compact) 50.dp else ButtonTouch, maxWidth * 0.27f).coerceAtLeast(36.dp)
+        val fiveSkipTouch = minOf(if (compact) 42.dp else TenSkipTouch, maxWidth * 0.145f).coerceAtLeast(32.dp)
+        val fiveOuterTouch = minOf(if (compact) 40.dp else 56.dp, maxWidth * 0.145f).coerceAtLeast(32.dp)
         when (layout) {
             FlagshipTransportLayout.THREE -> {
                 SlotRow(ThreeCentres) {
@@ -126,10 +131,11 @@ fun FlagshipTransportRow(
                         onHoldEnd = holdSpeed::end,
                         holdLabel = "0.5×", holdPulseMs = 900L,
                         description = stringResource(R.string.flagship_previous),
+                        touch = threeTouch,
                     )
                     PlayButton(
                         shapes = shapes, unit = unit, playing = transportState.isPlaying, ended = ended,
-                        circle = false, onClick = onPlayPause,
+                        circle = false, onClick = onPlayPause, touch = threeTouch,
                     )
                     SkipButton(
                         shapes = shapes, unit = unit, backwards = false,
@@ -139,22 +145,24 @@ fun FlagshipTransportRow(
                         onHoldEnd = holdSpeed::end,
                         holdLabel = "2×", holdPulseMs = 420L,
                         description = stringResource(R.string.flagship_next),
+                        touch = threeTouch,
                     )
                 }
             }
             FlagshipTransportLayout.TEN_SECONDS, FlagshipTransportLayout.QUEUE_REPEAT -> {
                 val skipUnit = unit
-                val circle = unit * TenCircle
+                val circle = (unit * TenCircle).coerceAtMost(maxWidth * 0.19f)
+                val playPad = minOf(if (compact) 6.dp else 14.dp, maxWidth * 0.025f)
                 SlotRow(TenCentres) {
                     if (layout == FlagshipTransportLayout.TEN_SECONDS) {
                         TenSecondsButton(
                             forward = false,
                             iconSize = DpSize(unit * TenIconWidth, unit * TenIconHeight),
                             onClick = {
-                                val player = playerConnection.player
-                                playerConnection.seekTo((player.currentPosition - TenSecondsMs).coerceAtLeast(0L))
+                                playerConnection.seekTo((playerConnection.effectivePositionMs - TenSecondsMs).coerceAtLeast(0L))
                             },
                             description = stringResource(R.string.flagship_back_ten),
+                            touch = fiveOuterTouch,
                         )
                     } else {
                         QueueButton(
@@ -162,6 +170,7 @@ fun FlagshipTransportRow(
                             iconSize = DpSize(unit * QueueIconSize, unit * QueueIconSize),
                             onClick = onQueue,
                             description = stringResource(R.string.flagship_queue),
+                            touch = fiveOuterTouch,
                         )
                     }
                     SkipButton(
@@ -172,12 +181,12 @@ fun FlagshipTransportRow(
                         onHoldEnd = holdSpeed::end,
                         holdLabel = "0.5×", holdPulseMs = 900L,
                         description = stringResource(R.string.flagship_previous),
-                        touch = TenSkipTouch,
+                        touch = fiveSkipTouch,
                     )
                     PlayButton(
                         shapes = shapes, unit = unit,
                         playing = transportState.isPlaying, ended = ended,
-                        circle = true, circleSize = circle, onClick = onPlayPause,
+                        circle = true, circleSize = circle, onClick = onPlayPause, touch = circle + playPad,
                     )
                     SkipButton(
                         shapes = shapes, unit = skipUnit, backwards = false,
@@ -187,18 +196,18 @@ fun FlagshipTransportRow(
                         onHoldEnd = holdSpeed::end,
                         holdLabel = "2×", holdPulseMs = 420L,
                         description = stringResource(R.string.flagship_next),
-                        touch = TenSkipTouch,
+                        touch = fiveSkipTouch,
                     )
                     if (layout == FlagshipTransportLayout.TEN_SECONDS) {
                         TenSecondsButton(
                             forward = true,
                             iconSize = DpSize(unit * TenIconWidth, unit * TenIconHeight),
                             onClick = {
-                                val player = playerConnection.player
-                                val duration = player.duration.takeIf { it > 0L } ?: Long.MAX_VALUE
-                                playerConnection.seekTo((player.currentPosition + TenSecondsMs).coerceAtMost(duration))
+                                val duration = playerConnection.effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
+                                playerConnection.seekTo((playerConnection.effectivePositionMs + TenSecondsMs).coerceAtMost(duration))
                             },
                             description = stringResource(R.string.flagship_forward_ten),
+                            touch = fiveOuterTouch,
                         )
                     } else {
                         RepeatButton(
@@ -206,6 +215,7 @@ fun FlagshipTransportRow(
                             iconSize = DpSize(unit * RepeatIconWidth, unit * RepeatIconHeight),
                             onClick = playerConnection.player::toggleRepeatMode,
                             description = stringResource(R.string.flagship_repeat),
+                            touch = fiveOuterTouch,
                         )
                     }
                 }
@@ -252,6 +262,7 @@ private fun PlayButton(
     circle: Boolean,
     onClick: () -> Unit,
     circleSize: Dp = 0.dp,
+    touch: Dp = ButtonTouch,
 ) {
     val source = remember { MutableInteractionSource() }
     val press = pressScale(source)
@@ -261,7 +272,7 @@ private fun PlayButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(if (circle) circleSize + 14.dp else ButtonTouch)
+            .size(if (circle) touch else touch)
             .graphicsLayer {
                 val s = press()
                 scaleX = s
@@ -276,7 +287,7 @@ private fun PlayButton(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(if (circle) circleSize else ButtonTouch)
+                .size(if (circle) circleSize else touch)
                 .then(
                     if (circle) {
                         // the white circle squashes and bounces along with its glyph
@@ -407,6 +418,7 @@ private fun TenSecondsButton(
     iconSize: DpSize,
     onClick: () -> Unit,
     description: String,
+    touch: Dp = 56.dp,
 ) {
     val scope = rememberCoroutineScope()
     val spin = remember { Animatable(0f) }
@@ -415,7 +427,7 @@ private fun TenSecondsButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(56.dp)
+            .size(touch)
             .graphicsLayer {
                 val s = press()
                 scaleX = s
@@ -455,6 +467,7 @@ private fun QueueButton(
     iconSize: DpSize,
     onClick: () -> Unit,
     description: String,
+    touch: Dp = 56.dp,
 ) {
     val source = remember { MutableInteractionSource() }
     val press = pressScale(source)
@@ -466,7 +479,7 @@ private fun QueueButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(56.dp)
+            .size(touch)
             .graphicsLayer {
                 val s = press()
                 scaleX = s
@@ -489,6 +502,7 @@ private fun RepeatButton(
     iconSize: DpSize,
     onClick: () -> Unit,
     description: String,
+    touch: Dp = 56.dp,
 ) {
     val scope = rememberCoroutineScope()
     val spin = remember { Animatable(0f) }
@@ -508,7 +522,7 @@ private fun RepeatButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(56.dp)
+            .size(touch)
             .graphicsLayer {
                 val s = press()
                 scaleX = s

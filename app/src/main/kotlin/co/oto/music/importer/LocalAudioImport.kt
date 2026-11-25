@@ -7,7 +7,10 @@
 package co.oto.music.importer
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -29,7 +32,7 @@ import java.util.concurrent.TimeUnit
 
 private const val AlacProbeTimeoutSeconds = 5L
 
-/** adds one audio file to the library as a local song and returns its id, uri has to stay readable so a shared file is copied into the app first (importSharedAudio) */
+/** adds one audio file to the library as a local song and returns its id, the file stays where it is and uri has to stay readable (importSharedAudio finds a link that does) */
 suspend fun importLocalAudio(
     context: Context,
     database: MusicDatabase,
@@ -55,7 +58,7 @@ suspend fun importLocalAudio(
     // the picture inside the file, else the one beside it
     val thumbnailUrl = withContext(Dispatchers.IO) {
         (metadata.embeddedArtwork ?: coverFile?.let { LocalSidecars.readCover(context, it) })
-            ?.let { LocalArtwork.save(context, songId, it) }
+            ?.let { LocalArtwork.save(context, it) }
     }
     val albumTitle = metadata.album?.trim()?.takeIf { it.isNotEmpty() }
     val albumArtist = metadata.albumArtist?.trim()?.takeIf { it.isNotEmpty() } ?: metadata.artist
@@ -72,26 +75,30 @@ suspend fun importLocalAudio(
                     isLocal = true,
                     inLibrary = LocalDateTime.now(),
                     localUri = uri.toString(),
+                    genre = metadata.genre.orEmpty(),
                 ),
             )
 
-            val artistName = metadata.artist
-            val artistId = artistByName(artistName)?.id
-                ?: ArtistEntity.generateArtistId()
-            insert(
-                ArtistEntity(
-                    id = artistId,
-                    name = artistName,
-                    isLocal = true,
-                ),
-            )
-            insert(
-                SongArtistMap(
-                    songId = songId,
-                    artistId = artistId,
-                    position = 0,
-                ),
-            )
+            // a tag naming several artists gives the song to each of them, in the tag's order
+            LocalArtistNames.split(metadata.artist, metadata.albumArtist) { artistByName(it) != null }
+                .forEachIndexed { position, artistName ->
+                    val artistId = artistByName(artistName)?.id
+                        ?: ArtistEntity.generateArtistId()
+                    insert(
+                        ArtistEntity(
+                            id = artistId,
+                            name = artistName,
+                            isLocal = true,
+                        ),
+                    )
+                    insert(
+                        SongArtistMap(
+                            songId = songId,
+                            artistId = artistId,
+                            position = position,
+                        ),
+                    )
+                }
 
             if (albumTitle != null) {
                 linkLocalAlbum(songId, albumTitle, albumArtist, metadata.year, metadata.discNumber, metadata.trackNumber, thumbnailUrl)
@@ -152,6 +159,14 @@ suspend fun groupLocalAlbums(context: Context, database: MusicDatabase) {
     }
 }
 
+/** reads the genre of local files imported before genres were kept, once each; a file with none is marked so it isn't read again */
+suspend fun readLocalGenres(context: Context, database: MusicDatabase) {
+    database.localSongsWithoutGenre().forEach { song ->
+        val genre = withContext(Dispatchers.IO) { readGenreTag(context, Uri.parse(song.localUri)) } ?: return@forEach
+        withContext(Dispatchers.IO) { database.setSongGenre(song.id, genre) }
+    }
+}
+
 // puts a local song on its album, making the album when its first file comes in, the way local players group by album and album artist
 private fun MusicDatabase.linkLocalAlbum(
     songId: String,
@@ -179,12 +194,17 @@ private fun localAlbumId(title: String, albumArtist: String): String =
 // disc first, then track, so a two-disc album plays in order; a file with no number goes last on its disc
 private fun trackOrder(disc: Int?, track: Int?): Int = (disc ?: 1) * 1000 + (track ?: 999)
 
-/** copies a file another app shared into the app's own storage, then imports it */
+/** imports a file another app shared and plays it where it is, copying it into the app's own storage only when no link to the original can be kept */
 suspend fun importSharedAudio(
     context: Context,
     database: MusicDatabase,
     shared: Uri,
 ) {
+    val inPlace = withContext(Dispatchers.IO) { linkThatStaysReadable(context, shared) }
+    if (inPlace != null) {
+        importLocalAudio(context, database, inPlace)
+        return
+    }
     val name = withContext(Dispatchers.IO) {
         context.contentResolver.query(shared, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { if (it.moveToFirst()) it.getString(0) else null }
@@ -203,6 +223,23 @@ suspend fun importSharedAudio(
         copy.parentFile?.deleteRecursively()
         throw e
     }
+}
+
+// a shared link only works while the sender's grant lasts, so keep access if they allow it, else use the phone's own entry for the file; null means only a copy will do
+private fun linkThatStaysReadable(context: Context, shared: Uri): Uri? {
+    val keptAccess = runCatching {
+        context.contentResolver.takePersistableUriPermission(shared, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }.isSuccess
+    if (keptAccess) return shared
+    if (!DeviceMusicScanner.hasAccess(context)) return null
+    val mediaStoreUri = when {
+        shared.authority == MediaStore.AUTHORITY -> shared
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> runCatching { MediaStore.getMediaUri(context, shared) }.getOrNull()
+        else -> null
+    } ?: return null
+    // the entry only counts if it opens with the music permission alone
+    val opens = runCatching { context.contentResolver.openFileDescriptor(mediaStoreUri, "r")?.close() != null }.getOrDefault(false)
+    return mediaStoreUri.takeIf { opens }
 }
 
 private fun isMp4(mimeType: String?) = mimeType != null && (mimeType.contains("mp4") || mimeType.contains("m4a"))

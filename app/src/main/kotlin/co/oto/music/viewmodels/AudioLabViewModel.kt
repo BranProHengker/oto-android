@@ -17,6 +17,12 @@ import co.oto.music.eq.autoeq.AutoEqRepository
 import co.oto.music.eq.autoeq.AutoEqTuning
 import co.oto.music.eq.data.FilterType
 import co.oto.music.eq.data.ParametricEQBand
+import co.oto.music.eq.stage.StageListener
+import co.oto.music.eq.stage.StageNative
+import co.oto.music.eq.stage.StageObject
+import co.oto.music.eq.stage.StagePresets
+import co.oto.music.eq.stage.StageSettings
+import co.oto.music.eq.stage.StageSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -53,37 +59,42 @@ class AudioLabViewModel @Inject constructor(
 
     val eq = store.eq
     val presets = store.presets
+    val fxPresets = store.fxPresets
+    val fxPresetId = store.fxPresetId
     val reverb = store.reverb
     val loudness = store.loudness
     val spatial = store.spatial
+    val eightD = store.eightD
     val playback = store.playback
     val volume = store.volume
     val normalize = store.normalize
+    val stage = store.stage
+    val stageOutput = store.stageOutput
 
     // ---- the user's curve -------------------------------------------------------------------
 
     fun setEnabled(enabled: Boolean) = store.updateEq { it.copy(enabled = enabled) }
 
-    fun updateNode(index: Int, transform: (ParametricEQBand) -> ParametricEQBand) = store.updateEq { s ->
+    fun updateNode(index: Int, transform: (ParametricEQBand) -> ParametricEQBand) = store.editEqCurve { s ->
         if (index !in s.nodes.indices) s
-        else s.copy(nodes = s.nodes.toMutableList().also { it[index] = transform(it[index]) }, presetId = null)
+        else s.copy(nodes = s.nodes.toMutableList().also { it[index] = transform(it[index]) })
     }
 
     /** adds a band at [frequency], returning where it went */
     fun addNode(frequency: Double, gain: Double = 0.0): Int {
         var index = -1
-        store.updateEq { s ->
-            if (s.nodes.size >= MaxNodes) return@updateEq s
+        store.editEqCurve { s ->
+            if (s.nodes.size >= MaxNodes) return@editEqCurve s
             val node = ParametricEQBand(frequency = frequency.coerceIn(20.0, 20_000.0), gain = gain, q = 1.0, filterType = FilterType.PK)
             index = s.nodes.size
-            s.copy(nodes = s.nodes + node, presetId = null)
+            s.copy(nodes = s.nodes + node)
         }
         return index
     }
 
-    fun removeNode(index: Int) = store.updateEq { s ->
+    fun removeNode(index: Int) = store.editEqCurve { s ->
         if (s.nodes.size <= 1 || index !in s.nodes.indices) s
-        else s.copy(nodes = s.nodes.filterIndexed { i, _ -> i != index }, presetId = null)
+        else s.copy(nodes = s.nodes.filterIndexed { i, _ -> i != index })
     }
 
     fun applyPreset(id: String) {
@@ -104,9 +115,13 @@ class AudioLabViewModel @Inject constructor(
         if (name.isNotBlank()) store.savePreset(name)
     }
 
+    fun renamePreset(id: String, name: String) {
+        if (name.isNotBlank()) store.renamePreset(id, name)
+    }
+
     fun deletePreset(id: String) = store.deletePreset(id)
 
-    fun setPreamp(db: Double) = store.updateEq { it.copy(preamp = db) }
+    fun setPreamp(db: Double) = store.setEqPreamp(db)
 
     fun setAutoPreamp(on: Boolean) = store.updateEq { it.copy(autoPreamp = on) }
 
@@ -226,6 +241,9 @@ class AudioLabViewModel @Inject constructor(
     fun updateSpatial(transform: (co.oto.music.eq.SpatialSettings) -> co.oto.music.eq.SpatialSettings) =
         store.updateSpatial(transform)
 
+    fun updateEightD(transform: (co.oto.music.eq.EightDSettings) -> co.oto.music.eq.EightDSettings) =
+        store.updateEightD(transform)
+
     fun updatePlayback(transform: (co.oto.music.eq.PlaybackSettings) -> co.oto.music.eq.PlaybackSettings) =
         store.updatePlayback(transform)
 
@@ -234,6 +252,66 @@ class AudioLabViewModel @Inject constructor(
 
     fun updateNormalize(transform: (co.oto.music.eq.NormalizeSettings) -> co.oto.music.eq.NormalizeSettings) =
         store.updateNormalize(transform)
+
+    fun saveFxPreset(name: String) {
+        if (name.isNotBlank()) store.saveFxPreset(name)
+    }
+
+    fun applyFxPreset(id: String) = store.applyFxPreset(id)
+
+    fun releaseFxPreset() = store.releaseFxPreset()
+
+    fun renameFxPreset(id: String, name: String) {
+        if (name.isNotBlank()) store.renameFxPreset(id, name)
+    }
+
+    fun deleteFxPreset(id: String) = store.deleteFxPreset(id)
+
+    // ---- 3D Sims ----------------------------------------------------------------------------
+
+    fun updateStage(transform: (StageSettings) -> StageSettings) = store.updateStage(transform)
+
+    /** moves or changes one thing in the room; the preset it came from no longer matches */
+    fun updateStageObject(id: Int, transform: (StageObject) -> StageObject) = store.updateStage { s ->
+        s.copy(objects = s.objects.map { if (it.id == id) transform(it) else it }, presetId = null)
+    }
+
+    fun updateListener(transform: (StageListener) -> StageListener) = store.updateStage { s ->
+        s.copy(listener = transform(s.listener), presetId = null)
+    }
+
+    /** another copy of a part, a little to the side of the last one; null when all four of that kind are in the room */
+    fun addStageObject(source: StageSource): Int? {
+        var added: Int? = null
+        store.updateStage { s ->
+            val same = s.objects.filter { it.source == source }
+            if (same.size >= StageNative.Copies) return@updateStage s
+            val last = same.lastOrNull()
+            val id = (s.objects.maxOfOrNull { it.id } ?: -1) + 1
+            val x = last?.let { if (it.x > 0.5f) it.x - 0.4f else it.x + 0.4f } ?: 0f
+            added = id
+            val copy = last?.copy(id = id, x = x, solo = false) ?: StageObject(id, source, x, if (source == StageSource.Sub) 0.05f else 0.4f, 0.5f)
+            s.copy(objects = s.objects + copy, presetId = null)
+        }
+        return added
+    }
+
+    /** a copy can go; the last one of each part always keeps its place */
+    fun removeStageObject(id: Int) = store.updateStage { s ->
+        val target = s.objects.firstOrNull { it.id == id } ?: return@updateStage s
+        if (s.objects.count { it.source == target.source } <= 1) s
+        else s.copy(objects = s.objects - target, presetId = null)
+    }
+
+    fun applyStagePreset(id: String) {
+        val preset = StagePresets.All.firstOrNull { it.id == id } ?: return
+        store.updateStage { StagePresets.apply(it, preset) }
+    }
+
+    /** null goes back to guessing */
+    fun setOutputKind(key: String, speaker: Boolean?) = store.updateStage { s ->
+        s.copy(outputKinds = if (speaker == null) s.outputKinds - key else s.outputKinds + (key to speaker))
+    }
 
     companion object {
         const val MaxNodes = 16

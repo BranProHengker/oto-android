@@ -5,6 +5,7 @@ package co.oto.music.modules
 import co.oto.music.module.MetadataModule
 import co.oto.music.module.TrackMetadata
 import co.oto.music.module.TrackQuery
+import co.oto.music.modules.security.ModuleUrlGuard
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -45,7 +46,7 @@ object ModuleMetadata {
             producers = all.firstOrNull { it.producers.isNotEmpty() }?.producers.orEmpty(),
             label = all.firstNotNullOfOrNull { it.label },
             about = all.firstNotNullOfOrNull { it.about?.takeIf(String::isNotBlank) },
-            coverUrl = all.firstNotNullOfOrNull { it.coverUrl },
+            coverUrl = all.firstNotNullOfOrNull { it.coverUrl?.takeIf(ModuleUrlGuard::isSafeRemoteUrl) },
             isrc = all.firstNotNullOfOrNull { it.isrc },
         )
         return ModuleFacts(merged, answers.firstOrNull { !it.second.about.isNullOrBlank() }?.first)

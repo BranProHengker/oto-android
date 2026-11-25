@@ -55,7 +55,7 @@ import co.oto.music.ui.component.detail.PlaylistSortControl
 import co.oto.music.ui.component.detail.PlaylistModeBar
 import co.oto.music.ui.component.detail.PlaylistSelectTick
 import co.oto.music.ui.component.detail.PlaylistTrackRow
-import co.oto.music.ui.component.detail.featuredArtistsOf
+import co.oto.music.ui.component.detail.rememberFeaturedArtists
 import co.oto.music.ui.component.librarySwipeAction
 import co.oto.music.ui.component.queueSwipeAction
 import co.oto.music.ui.component.rememberRevealSeenState
@@ -131,9 +131,7 @@ fun CachePlaylistScreen(
     }
 
     val totalSeconds = remember(sortedSongs) { sortedSongs.sumOf { it.song.duration } }
-    val featuredArtists = remember(sortedSongs) {
-        featuredArtistsOf(sortedSongs.flatMap { it.artists }, id = { it.id }, name = { it.name })
-    }
+    val featuredArtists = rememberFeaturedArtists(sortedSongs, { sortedSongs.flatMap { it.artists } }, id = { it.id }, name = { it.name })
     val downloadState = rememberSongsDownloadState(remember(sortedSongs) { sortedSongs.map { it.song.id } })
     val isThisQueue = queueTitle == title
 

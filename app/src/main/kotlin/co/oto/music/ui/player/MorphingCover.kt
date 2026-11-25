@@ -43,6 +43,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.key
@@ -73,7 +74,6 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -101,6 +101,7 @@ import co.oto.music.ui.player.models.TrackInfo
 import co.oto.music.ui.utils.resize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.oto.music.ui.component.BlurEffectCache
@@ -124,6 +125,8 @@ import co.oto.music.constants.PlayVideoBackgroundKey
 import co.oto.music.constants.DisableVideoAutoplayKey
 import co.oto.music.constants.PlayerBackgroundStyle
 import co.oto.music.constants.PlayerCoverStyle
+import co.oto.music.constants.PlayerCoverZoomKey
+import co.oto.music.ui.player.customize.ZoomedCover
 import co.oto.music.ui.player.customize.DiscCoverStack
 import co.oto.music.ui.player.customize.PlayerBackgroundContent
 import co.oto.music.ui.player.customize.CoverGradientBackdrop
@@ -458,6 +461,9 @@ fun MorphingCover(
     // data saver turns video backgrounds and auto-playing videos off; the full video mode still plays when asked for
     val dataSaving = co.oto.music.utils.rememberDataSaverActive()
     val playVideoPref = rememberPreference(PlayVideoBackgroundKey, defaultValue = false).value && !dataSaving
+    // the disc styles crop the cover into the disc, so the zoom is only for the squared and edge to edge ones
+    val coverZoom = rememberPreference(PlayerCoverZoomKey, defaultValue = 1f).value
+        .takeIf { !coverStyle.isDisc && !alternateStyle && it < 1f }
     val disableVideoAutoplay = rememberPreference(DisableVideoAutoplayKey, defaultValue = false).value || dataSaving
     val currentMetadata by (playerConnection?.mediaMetadata ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) })
         .collectAsState()
@@ -475,15 +481,9 @@ fun MorphingCover(
         isVideoSong = if (miniVideo || forceVideoBackground) songIsVideo else trackIsVideo,
         enabled = playVideoBackground,
     )
-    // with the full video mode opening over it, the mini player's copy steps aside; collapsed into the pill or covered by lyrics it rests so it doesn't stream unseen video
-    val miniVideoShown by remember(alternateStyle, miniVideo) {
-        derivedStateOf {
-            when {
-                alternateStyle -> progressProvider() < MiniVideoUntil
-                miniVideo -> true
-                else -> progressProvider() > 0.02f && lyricsProgressProvider() < 0.99f
-            }
-        }
+    // with the full video mode opening over it, the mini player's copy steps aside so the mode takes the picture
+    val miniVideoShown by remember(alternateStyle) {
+        derivedStateOf { !alternateStyle || progressProvider() < MiniVideoUntil }
     }
 
     val isVideoActive = !isDiscStyle && playVideoBackground && videoInfo != null
@@ -641,16 +641,17 @@ fun MorphingCover(
     // recomposed all of this in the first frames of every open.
     // the new flagship's open player hides the backdrop completely under its cover and mirror, so nothing there needs to move
     val backdropHidden = frostedCover && coverBlur && coverStyle == PlayerCoverStyle.EDGE_TO_EDGE
+    val appObscured = co.oto.music.LocalAppContentObscured.current
     LaunchedEffect(editMode, alternateStyle, backdropHidden) {
         snapshotFlow {
-            !alternateStyle && !editMode && progressProvider() > 0.02f && lyricsProgressProvider() < 0.6f &&
+            !alternateStyle && !editMode && !appObscured.value && progressProvider() > 0.02f && lyricsProgressProvider() < 0.6f &&
                 !(backdropHidden && progressProvider() >= 0.999f && lyricsProgressProvider() <= 0.001f)
         }
             .collectLatest { active ->
                 if (!active) return@collectLatest
                 // it carries on from where it stopped, so pausing it never makes the backdrop jump when it shows again
                 var last = 0L
-                // ends when the flow moves on: collectLatest cancels this at the frame wait
+                // paced to the backdrops' 30 hz step so 120 hz displays aren't woken four times per actual draw
                 while (true) {
                     androidx.compose.animation.core.withInfiniteAnimationFrameNanos { frameTimeNanos ->
                         if (last != 0L) {
@@ -659,6 +660,7 @@ fun MorphingCover(
                         }
                         last = frameTimeNanos
                     }
+                    kotlinx.coroutines.delay(30L)
                 }
             }
     }
@@ -712,6 +714,17 @@ fun MorphingCover(
             endpointsPx = endpointsPx,
             pureBlack = pureBlack,
         )
+
+        // a look's own mini player draws in the pill in place of mochy's words and buttons; the cover stays mochy's, so it still grows into the player
+        val moduleMini = co.oto.music.modules.skin.ActiveSkin.mini?.takeIf { !pillFrame.merged }
+        if (moduleMini != null) {
+            co.oto.music.ui.player.styles.ModuleMiniPlayer(
+                mini = moduleMini,
+                carousel = carousel,
+                progress = progressProvider,
+                space = co.oto.music.ui.player.styles.MiniPillSpace(pillFrame.start, pillFrame.end, pillFrame.height, endpoints.miniTextX),
+            )
+        }
 
         val isEdgeToEdge = coverStyle == PlayerCoverStyle.EDGE_TO_EDGE
         // a record player stays put when paused: the record stops, the arm says where it is
@@ -990,7 +1003,7 @@ fun MorphingCover(
                     }
                     .then(
                         if (onArtBoundsChanged != null) {
-                            Modifier.onGloballyPositioned { onArtBoundsChanged(it.boundsInParent()) }
+                            Modifier.onGloballyPositioned { onArtBoundsChanged(it.boundsInRoot()) }
                         } else Modifier
                     )
             ) {
@@ -1066,6 +1079,14 @@ fun MorphingCover(
                         thumbnailUrl = url,
                         modifier = (if (squaredCards) pictureModifier.then(cardGreyFilter) else pictureModifier)
                             .graphicsLayer { if (pictureHidden(url)) alpha = 0f },
+                        // filled as before in the mini player and the lyrics header, zoomed out once open
+                        zoom = coverZoom?.let { zoom ->
+                            {
+                                val open = ((progressProvider() - 0.5f) / 0.45f).coerceIn(0f, 1f) *
+                                    (1f - lyricsProgressProvider()).coerceIn(0f, 1f)
+                                1f - (1f - zoom) * open
+                            }
+                        },
                     )
                 }
 
@@ -1114,6 +1135,7 @@ fun MorphingCover(
                                 onFrameColors = if (playing && feedsAmbient) ambient?.let { it::live } else null,
                                 onLiveEnd = if (playing && feedsAmbient) ambient?.let { it::endLive } else null,
                                 onShowingChange = if (playing) { shown -> liveCanvasShown = shown } else null,
+                                feedsMenu = playing,
                             )
 
                             if (playing && !isDiscStyle && playVideoBackground && videoInfo != null && miniVideoShown) {
@@ -1156,89 +1178,91 @@ fun MorphingCover(
             }
         }
 
-        MiniSongInfo(
-            carousel = carousel,
-            trackInfo = trackInfo,
-            progressProvider = progressProvider,
-            horizontalOffsetProvider = horizontalOffsetProvider,
-            endpointsPx = endpointsPx,
-        )
+        if (moduleMini == null) {
+            MiniSongInfo(
+                carousel = carousel,
+                trackInfo = trackInfo,
+                progressProvider = progressProvider,
+                horizontalOffsetProvider = horizontalOffsetProvider,
+                endpointsPx = endpointsPx,
+            )
 
-        if (pillFrame.withPrevious) {
-            MiniPreviousButton(progressProvider = progressProvider, endpointsPx = endpointsPx, size = miniPlaySize)
-        }
+            if (pillFrame.withPrevious) {
+                MiniPreviousButton(progressProvider = progressProvider, endpointsPx = endpointsPx, size = miniPlaySize)
+            }
 
-        Box(
-            modifier = Modifier
-                .morphLayout(
-                    progressProvider = progressProvider,
-                    horizontalOffsetProvider = { 0f },
-                    endpointsPx = endpointsPx,
-                    element = MorphElement.PLAY,
-                )
-                .requiredSize(miniPlaySize)
-                .graphicsLayer {
-                    val p = progressProvider()
-                    val playScale = 1f + (p * 1.0f)
-                    scaleX = playScale
-                    scaleY = playScale
-                    transformOrigin = TransformOrigin(0.5f, 0.5f)
-                    alpha = (1f - (p / 0.5f)).coerceIn(0f, 1f)
-                }
-        ) {
-            MiniPlayerButton(onClick = { playerConnection?.togglePlayPause() }) {
-                val tint = MaterialTheme.colorScheme.onSurface
-                // replay pops in for a finished song; play and pause swap with the flagship's squash
-                AnimatedContent(
-                    targetState = playbackState == Player.STATE_ENDED,
-                    transitionSpec = { MiniIconSwap },
-                    contentAlignment = Alignment.Center,
-                    label = "miniPlayerIcon",
-                ) { ended ->
-                    if (ended) {
-                        Icon(painter = painterResource(R.drawable.replay), contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-                    } else {
-                        AnimatedPlayGlyph(playing = isPlaying, color = tint, height = MiniPlayHeight)
+            Box(
+                modifier = Modifier
+                    .morphLayout(
+                        progressProvider = progressProvider,
+                        horizontalOffsetProvider = { 0f },
+                        endpointsPx = endpointsPx,
+                        element = MorphElement.PLAY,
+                    )
+                    .requiredSize(miniPlaySize)
+                    .graphicsLayer {
+                        val p = progressProvider()
+                        val playScale = 1f + (p * 1.0f)
+                        scaleX = playScale
+                        scaleY = playScale
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
+                        alpha = (1f - (p / 0.5f)).coerceIn(0f, 1f)
+                    }
+            ) {
+                MiniPlayerButton(onClick = { playerConnection?.togglePlayPause() }) {
+                    val tint = MaterialTheme.colorScheme.onSurface
+                    // replay pops in for a finished song; play and pause swap with the flagship's squash
+                    AnimatedContent(
+                        targetState = playbackState == Player.STATE_ENDED,
+                        transitionSpec = { MiniIconSwap },
+                        contentAlignment = Alignment.Center,
+                        label = "miniPlayerIcon",
+                    ) { ended ->
+                        if (ended) {
+                            Icon(painter = painterResource(R.drawable.replay), contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+                        } else {
+                            AnimatedPlayGlyph(playing = isPlaying, color = tint, height = MiniPlayHeight)
+                        }
                     }
                 }
             }
-        }
 
-        Box(
-            modifier = Modifier
-                .morphLayout(
-                    progressProvider = progressProvider,
-                    horizontalOffsetProvider = { 0f },
-                    endpointsPx = endpointsPx,
-                    element = MorphElement.SKIP,
-                )
-                .requiredSize(miniPlaySize)
-                .graphicsLayer {
-                    val p = progressProvider()
-                    val playScale = 1f + (p * 1.0f)
-                    scaleX = playScale
-                    scaleY = playScale
-                    transformOrigin = TransformOrigin(0.5f, 0.5f)
-                    alpha = (1f - (p / 0.5f)).coerceIn(0f, 1f)
-                }
-        ) {
-            val skipScope = rememberCoroutineScope()
-            val skipCycle = remember { SkipCycleState() }
-            MiniPlayerButton(
-                onClick = {
-                    skipScope.launch { skipCycle.step() }
-                    playerConnection?.let { connection ->
-                        // through the same skip as every other button (its fade, the cast), with the row gliding first so the song change can't make it stutter
-                        val row = currentCarousel
-                        if (row == null) {
-                            connection.seekToNext()
-                        } else {
-                            row.skipToNext(connection.player, connection.service.transport.skipDelayMs()) { connection.seekToNext() }
-                        }
+            Box(
+                modifier = Modifier
+                    .morphLayout(
+                        progressProvider = progressProvider,
+                        horizontalOffsetProvider = { 0f },
+                        endpointsPx = endpointsPx,
+                        element = MorphElement.SKIP,
+                    )
+                    .requiredSize(miniPlaySize)
+                    .graphicsLayer {
+                        val p = progressProvider()
+                        val playScale = 1f + (p * 1.0f)
+                        scaleX = playScale
+                        scaleY = playScale
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
+                        alpha = (1f - (p / 0.5f)).coerceIn(0f, 1f)
                     }
-                },
             ) {
-                AnimatedSkipGlyph(cycle = skipCycle, backwards = false, color = MaterialTheme.colorScheme.onSurface, width = MiniSkipWidth)
+                val skipScope = rememberCoroutineScope()
+                val skipCycle = remember { SkipCycleState() }
+                MiniPlayerButton(
+                    onClick = {
+                        skipScope.launch { skipCycle.step() }
+                        playerConnection?.let { connection ->
+                            // through the same skip as every other button (its fade, the cast), with the row gliding first so the song change can't make it stutter
+                            val row = currentCarousel
+                            if (row == null) {
+                                connection.seekToNext()
+                            } else {
+                                row.skipToNext(connection.player, connection.service.transport.skipDelayMs()) { connection.seekToNext() }
+                            }
+                        }
+                    },
+                ) {
+                    AnimatedSkipGlyph(cycle = skipCycle, backwards = false, color = MaterialTheme.colorScheme.onSurface, width = MiniSkipWidth)
+                }
             }
         }
     }
@@ -1407,7 +1431,7 @@ private fun MiniSongLines(title: String, artist: String, album: String, modifier
 }
 
 @Composable
-private fun CoverPicture(thumbnailUrl: String?, modifier: Modifier = Modifier) {
+private fun CoverPicture(thumbnailUrl: String?, modifier: Modifier = Modifier, zoom: (() -> Float)? = null) {
     val context = LocalContext.current
     val imageRequest = remember(thumbnailUrl) {
         ImageRequest.Builder(context)
@@ -1417,6 +1441,10 @@ private fun CoverPicture(thumbnailUrl: String?, modifier: Modifier = Modifier) {
             .precision(Precision.INEXACT)
             .crossfade(false)
             .build()
+    }
+    if (zoom != null) {
+        ZoomedCover(model = imageRequest, zoom = zoom, modifier = modifier)
+        return
     }
     AsyncImage(
         model = imageRequest,
@@ -1468,6 +1496,13 @@ private fun PlayerBackdropCrossfade(
     val currentCanvasAlpha = androidx.compose.runtime.rememberUpdatedState(canvasMirrorAlpha)
     val effectiveCanvasAlpha = { (currentCanvasAlpha.value() * (1f - currentLyricsProgress.value())).coerceIn(0f, 1f) }
     val canvasShown by remember { derivedStateOf { effectiveCanvasAlpha() > 0.005f && currentSheetShown.value() } }
+    val appObscured = co.oto.music.LocalAppContentObscured.current
+    val backdropAnimate by remember {
+        derivedStateOf {
+            currentSheetShown.value() && !appObscured.value &&
+                (1f - effectiveVideoAlpha()) * (1f - effectiveCanvasAlpha()) > 0.005f
+        }
+    }
 
     Box(modifier = modifier) {
         Box(
@@ -1490,7 +1525,8 @@ private fun PlayerBackdropCrossfade(
                     style = backgroundStyle,
                     thumbnailUrl = trackInfo.thumbnailUrl,
                     pureBlack = pureBlack,
-                    modifier = Modifier.requiredSize(maxWidth, maxHeight)
+                    modifier = Modifier.requiredSize(maxWidth, maxHeight),
+                    animate = backdropAnimate,
                 )
             } else {
                 CoverBackdropFade(
@@ -2015,8 +2051,14 @@ private fun CoverCanvasLayer(
     onLiveEnd: (() -> Unit)? = null,
     // told when the canvas's picture is up over the cover, and when it's gone
     onShowingChange: ((Boolean) -> Unit)? = null,
+    // the playing song's canvas tells the player's menu what size it plays
+    feedsMenu: Boolean = false,
 ) {
     val context = LocalContext.current
+    val sizeOwner = remember { Any() }
+    var playingSide by remember { mutableIntStateOf(0) }
+    LaunchedEffect(feedsMenu, playingSide) { PlayerCanvasPlayback.report(sizeOwner, if (feedsMenu) playingSide else 0) }
+    DisposableEffect(Unit) { onDispose { PlayerCanvasPlayback.report(sizeOwner, 0) } }
     val playerConnection = LocalPlayerConnection.current
     var canvasArtwork by remember(trackInfo.mediaId) { mutableStateOf<CanvasArtwork?>(null) }
     val canvasEnabled = rememberPreference(CanvasThumbnailAnimationKey, defaultValue = true).value && !alternateStyle
@@ -2086,6 +2128,7 @@ private fun CoverCanvasLayer(
                 if (!ready) onLiveEnd?.invoke()
             },
             onFrameColors = onFrameColors,
+            onPlayingSize = { playingSide = it },
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = sheetFade(progressProvider()) }

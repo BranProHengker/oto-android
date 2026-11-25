@@ -134,11 +134,12 @@ fun rememberLocalImportActions(viewModel: LibraryImportViewModel): LocalImportAc
 
     val refreshThenScan = {
         scope.launch {
-            val started = viewModel.refreshLocal()
+            val rescan = viewModel.refreshLocal()
             when {
-                started -> showProgress()
+                rescan.started -> showProgress()
                 !viewModel.hasFolders() -> folderPicker.launch(null)
-                else -> TopToaster.show(context.getString(R.string.lib_local_no_new_songs), iconRes = R.drawable.library_music)
+                // songs whose file is gone, or files skipped, matter more than there being nothing new
+                !rescan.alreadyTold -> TopToaster.show(context.getString(R.string.lib_local_no_new_songs), iconRes = R.drawable.library_music)
             }
         }
         Unit

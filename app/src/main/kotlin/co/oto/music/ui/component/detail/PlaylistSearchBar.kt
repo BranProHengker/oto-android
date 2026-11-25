@@ -48,13 +48,10 @@ import co.oto.music.ui.utils.stableStatusBarsPadding
 private val BarHeight = 44.dp
 private val BarFill = Color(0xFF3A3D42).copy(alpha = 0.78f)
 
-private val FieldText = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 15.sp,
-    letterSpacing = (-0.2).sp,
-    color = Color.White,
+private val FieldTextCache = co.oto.music.ui.theme.globalTextStyle(
+    TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = (-0.2).sp, color = Color.White),
 )
+private val FieldText: TextStyle get() = FieldTextCache.current()
 
 // the list's own song search across the top of a playlist or album: the field in a pill and a round close beside it, the cover softened behind
 @Composable

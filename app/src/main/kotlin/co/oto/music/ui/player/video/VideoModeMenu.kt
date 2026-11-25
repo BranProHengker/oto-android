@@ -63,6 +63,7 @@ import co.oto.music.ui.theme.InterFontFamily
 import co.oto.music.ui.utils.resize
 import co.oto.music.utils.rememberEnumPreference
 import co.oto.music.ui.component.RemoteFocus
+import co.oto.music.ui.component.sheetHandleRoom
 
 // the chevron's menu in the full video mode: a card floating over the video, and every sheet it opens floats the same way
 @Composable
@@ -109,6 +110,7 @@ internal fun VideoModeMenu(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
+                    .padding(top = sheetHandleRoom())
                     .padding(horizontal = 18.dp)
                     .padding(top = 6.dp, bottom = 18.dp),
             ) {
@@ -253,8 +255,9 @@ internal fun VideoModeMenu(
     }
 }
 
+// the grey value at the end of a menu row, like the quality playing now
 @Composable
-private fun TrailingValue(text: String) {
+internal fun TrailingValue(text: String) {
     Text(
         text = text,
         color = Color(0xFF9A9A9A),
@@ -267,7 +270,7 @@ private fun TrailingValue(text: String) {
 @Composable
 internal fun qualityLabel(quality: VideoQuality, session: YouTubeVideoSession?): String {
     if (quality != VideoQuality.AUTO) return videoSizeName(quality.shortSide)
-    val playing = session?.playingShortSide ?: 0
+    val playing = session?.playingLines ?: 0
     return if (playing > 0) {
         stringResource(R.string.video_quality_auto_now, videoSizeName(playing))
     } else {
@@ -291,6 +294,7 @@ internal fun VideoQualitySheet(session: YouTubeVideoSession?, onDismiss: () -> U
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
+                .padding(top = sheetHandleRoom())
                 .padding(horizontal = 18.dp)
                 .padding(top = 4.dp, bottom = 18.dp),
         ) {
@@ -335,8 +339,9 @@ internal fun VideoQualitySheet(session: YouTubeVideoSession?, onDismiss: () -> U
     }
 }
 
+// one pick in a quality sheet, ticked when it's the one in use
 @Composable
-private fun QualityRow(title: String, description: String?, selected: Boolean, onClick: () -> Unit) {
+internal fun QualityRow(title: String, description: String?, selected: Boolean, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

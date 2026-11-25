@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,11 +19,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import co.oto.music.utils.LanHttpClient
 import org.xmlpull.v1.XmlPullParser
 import timber.log.Timber
+import java.io.ByteArrayInputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
-import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.net.URL
@@ -48,6 +50,7 @@ sealed interface FoundReceiver {
         override val detail: String,
         val avTransportUrl: String,
         val renderingControlUrl: String?,
+        val connectionManagerUrl: String? = null,
     ) : FoundReceiver
 }
 
@@ -105,6 +108,17 @@ class CastDiscovery(context: Context) {
         }
         ssdpJob?.cancel()
         ssdpJob = null
+        // clear pending look-ups so reopening the sheet starts fresh without holding stale entries
+        describing.clear()
+        toResolve.clear()
+        resolving = false
+    }
+
+    // cancels the discovery coroutine scope when the music service tears down
+    @Synchronized
+    fun release() {
+        stop()
+        scope.cancel()
     }
 
     @Synchronized
@@ -171,7 +185,8 @@ class CastDiscovery(context: Context) {
                     }
                     val reply = String(packet.data, 0, packet.length, Charsets.UTF_8)
                     val location = header(reply, "LOCATION") ?: continue
-                    if (describing.add(location)) scope.launch { describe(location) }
+                    val senderIp = packet.address?.takeIf { LanHttpClient.isPrivateLanAddress(it) }?.hostAddress ?: continue
+                    if (describing.add(location)) scope.launch { describe(location, senderIp) }
                 }
                 delay(SearchGapMs)
             }
@@ -186,13 +201,20 @@ class CastDiscovery(context: Context) {
         reply.lineSequence().firstOrNull { it.startsWith("$name:", ignoreCase = true) }?.substringAfter(':')?.trim()
 
     // reads a renderer's description: its name, and where its transport and volume controls answer
-    private fun describe(location: String) {
+    private fun describe(location: String, senderIp: String) {
         try {
-            val connection = URL(location).openConnection() as HttpURLConnection
-            connection.connectTimeout = 3000
-            connection.readTimeout = 3000
+            val xmlBytes = LanHttpClient.execute(
+                method = "GET",
+                url = location,
+                connectTimeoutMs = 3000,
+                readTimeoutMs = 3000,
+                expectedHostIp = senderIp,
+            ).use { resp ->
+                if (!resp.isSuccessful) throw java.io.IOException("Renderer answered HTTP ${resp.code}")
+                resp.body.bytes(maxBytes = MaxDescriptionBytes)
+            }
             val parser = Xml.newPullParser()
-            connection.inputStream.use { stream ->
+            ByteArrayInputStream(xmlBytes).use { stream ->
                 parser.setInput(stream, null)
                 var friendlyName: String? = null
                 var model: String? = null
@@ -201,6 +223,7 @@ class CastDiscovery(context: Context) {
                 var serviceType: String? = null
                 var avTransport: String? = null
                 var renderingControl: String? = null
+                var connectionManager: String? = null
                 var text = ""
                 while (parser.next() != XmlPullParser.END_DOCUMENT) {
                     when (parser.eventType) {
@@ -215,23 +238,34 @@ class CastDiscovery(context: Context) {
                             "controlURL" -> when {
                                 serviceType?.contains(":AVTransport:") == true && avTransport == null -> avTransport = text
                                 serviceType?.contains(":RenderingControl:") == true && renderingControl == null -> renderingControl = text
+                                serviceType?.contains(":ConnectionManager:") == true && connectionManager == null -> connectionManager = text
                             }
                         }
                     }
                 }
                 val transport = avTransport ?: return
                 val root = URL(base?.takeIf { it.isNotBlank() } ?: location)
+                // Every control URL must stay on the same private LAN device that answered SSDP
+                val resolvedAv = URL(root, transport).toString().also {
+                    LanHttpClient.validateLanUrl(it, expectedHostIp = senderIp)
+                }
+                val resolvedRc = renderingControl?.let { URL(root, it).toString() }?.takeIf {
+                    runCatching { LanHttpClient.validateLanUrl(it, expectedHostIp = senderIp) }.isSuccess
+                }
+                val resolvedCm = connectionManager?.let { URL(root, it).toString() }?.takeIf {
+                    runCatching { LanHttpClient.validateLanUrl(it, expectedHostIp = senderIp) }.isSuccess
+                }
                 val id = "dlna:" + (udn ?: location)
                 renderers[id] = FoundReceiver.Dlna(
                     id = id,
                     name = friendlyName?.takeIf { it.isNotBlank() } ?: (model ?: "TV"),
                     detail = model?.takeIf { it.isNotBlank() } ?: "DLNA",
-                    avTransportUrl = URL(root, transport).toString(),
-                    renderingControlUrl = renderingControl?.let { URL(root, it).toString() },
+                    avTransportUrl = resolvedAv,
+                    renderingControlUrl = resolvedRc,
+                    connectionManagerUrl = resolvedCm,
                 )
                 publish()
             }
-            connection.disconnect()
         } catch (e: Exception) {
             Timber.d(e, "Couldn't read the renderer at $location")
             // asked again on the next search, a tv waking up can take a moment to answer
@@ -247,5 +281,6 @@ class CastDiscovery(context: Context) {
         const val ChromecastService = "_googlecast._tcp"
         const val ListenMs = 3000L
         const val SearchGapMs = 7000L
+        const val MaxDescriptionBytes = 512 * 1024
     }
 }

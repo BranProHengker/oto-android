@@ -29,6 +29,7 @@ import co.oto.music.module.TrackMatcher
 import co.oto.music.module.TrackMetadata
 import co.oto.music.module.TrackQuery
 import co.oto.music.modules.DeviceDecoders
+import co.oto.music.modules.security.ModuleUrlGuard
 import co.oto.music.modules.skin.ModuleSkin
 import co.oto.music.modules.skin.SkinGlass
 import co.oto.music.modules.skin.SkinParser
@@ -52,7 +53,7 @@ internal class WebModule(
     private val resources: Resources,
     // the pictures and fonts a zip brought, when it came as one
     files: File? = null,
-) : SourceModule, LyricsModule, LookModule, MetadataModule, ModuleArt, ModuleFields, SkinSource {
+) : SourceModule, LyricsModule, LookModule, MetadataModule, ModuleArt, ModuleFields, SkinSource, FieldRanges {
 
     private val siteName = runCatching { URI(base).host }.getOrNull().orEmpty()
 
@@ -64,7 +65,12 @@ internal class WebModule(
         author = manifest.author,
     )
 
-    override val skin: ModuleSkin? = SkinParser.parse(info.id, info.name, manifest.player, manifest.font, manifest.pages, files, base, manifest.actions, manifest.glass)
+    override val skin: ModuleSkin? = SkinParser.parse(
+        info.id, info.name, manifest.player, manifest.font, manifest.pages, files, base,
+        manifest.actions, manifest.glass, manifest.players, manifest.bar, manifest.mini,
+        floating = manifest.floating, background = manifest.background, appBackground = manifest.appBackground,
+        sheet = manifest.sheet, menu = manifest.menu,
+    )
 
     override val icon: String? = resolveModuleArt(manifest.icon, files, base)
 
@@ -81,6 +87,8 @@ internal class WebModule(
     private val settings = ManifestSettings(manifest, skip = if (manifest.playsSongs) setOf(QualityKey, AtmosKey) else emptySet())
 
     override val fields: List<ModuleField> get() = settings.fields
+
+    override val ranges: Map<String, FieldRange> get() = settings.ranges
 
     override fun onFields(values: Map<String, String>) {
         settings.values = values
@@ -295,9 +303,8 @@ internal class WebModule(
         val response = runCatching { host.http(HttpRequest("$base/stream/${enc(track.id)}?${paramsFor(tier, atmos)}", headers = headers)) }.getOrNull()
         if (response == null || !response.ok) return null
         val answer = runCatching { json.parseToJsonElement(response.text) as? JsonObject }.getOrNull() ?: return null
-        // a locked stream would need keys oto doesn't have
         if ((answer["encrypted"] as? JsonPrimitive)?.let { it.booleanOrNull ?: (it.contentOrNull !in setOf(null, "", "false", "none")) } == true) return null
-        val url = answer.string("url")?.takeIf { it.startsWith("http") } ?: return null
+        val url = answer.string("url")?.takeIf { ModuleUrlGuard.isSafeRemoteUrl(it) } ?: return null
         return streamOf(url, answer, rowIsAtmos)
     }
 
@@ -378,7 +385,7 @@ internal class WebModule(
             producers = o.list("producers"),
             label = o.string("label"),
             about = o.string("about") ?: o.string("description"),
-            coverUrl = (o.string("coverUrl") ?: o.string("cover") ?: o.string("artwork"))?.takeIf { it.startsWith("https://") || it.startsWith("http://") },
+            coverUrl = (o.string("coverUrl") ?: o.string("cover") ?: o.string("artwork"))?.takeIf { ModuleUrlGuard.isSafeRemoteUrl(it) },
             isrc = o.string("isrc"),
         )
         // an answer with nothing in it is the same as not knowing the song

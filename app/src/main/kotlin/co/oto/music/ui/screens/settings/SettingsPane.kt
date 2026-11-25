@@ -29,6 +29,7 @@ import co.oto.music.ui.screens.settings.devspace.DevPlaygroundRoute
 import co.oto.music.ui.screens.settings.importsync.ImportSyncRoute
 import co.oto.music.ui.screens.settings.integrations.IntegrationsRoute
 import co.oto.music.ui.screens.settings.integrations.ScrobbleServiceRoute
+import co.oto.music.ui.screens.settings.integrations.backup.BackupRoute
 import co.oto.music.ui.screens.settings.integrations.discord.DiscordRoute
 import co.oto.music.ui.screens.settings.modules.ModulesRoute
 import co.oto.music.ui.screens.settings.storage.StorageRoute
@@ -54,6 +55,7 @@ val SettingsPaneRoutes = setOf(
     IntegrationsRoute,
     DiscordRoute,
     ScrobbleServiceRoute,
+    BackupRoute,
     ProxySettingsRoute,
     ModulesRoute,
     "module/{id}",

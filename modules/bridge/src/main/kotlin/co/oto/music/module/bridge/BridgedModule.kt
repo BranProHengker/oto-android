@@ -29,6 +29,7 @@ import co.oto.music.module.bridge.shared.BridgeReply
 import co.oto.music.module.bridge.shared.BridgeResponse
 import co.oto.music.module.bridge.shared.HostBridge
 import co.oto.music.module.bridge.shared.ModuleBridge
+import co.oto.music.module.bridge.shared.SurfaceBridge
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -53,6 +54,9 @@ open class BridgedModule private constructor(private val bridge: ModuleBridge, a
     override val banner = about.banner
     val itemsLabel: String = about.itemsLabel
     val itemsAbout: String = about.itemsAbout
+
+    /** live framebuffer surface when the zip's code implements SurfaceModule; null for older or non-surface zips */
+    val surface: SurfaceBridge? = (bridge as? SurfaceBridge)?.takeIf { runCatching { it.hasSurface() }.getOrDefault(false) }
 
     private val callIds = AtomicLong()
 

@@ -2,6 +2,8 @@
 
 package co.oto.music.ui.player
 
+import co.oto.music.ui.screens.devices.showDeviceIntegration
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -52,6 +54,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import co.oto.music.ui.player.studio.playHoldRamp
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
@@ -63,7 +66,6 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
-import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.positionInRoot
@@ -85,7 +87,6 @@ import co.oto.music.constants.PlayerCoverStyleKey
 import co.oto.music.constants.PlayerStyle
 import co.oto.music.constants.ShowPlayerBottomCardKey
 import co.oto.music.constants.PlayerBottomBarStyle
-import co.oto.music.constants.PlayerBottomBarStyleKey
 import co.oto.music.constants.InfiniteQueueKey
 import co.oto.music.constants.FlagshipBackgroundStyleKey
 import co.oto.music.constants.FlagshipBottomBarStyleKey
@@ -281,15 +282,20 @@ private fun PlayerSheet(
     val (showPlayerBottomCard) = rememberPreference(ShowPlayerBottomCardKey, defaultValue = true)
 
     // the player studio: the selector the player shrinks into, and the flagship's in-place editor
-    // a look module with a player of its own puts that style first in the selector, for as long as it's on
+    // every player the looks that are on bring comes first in the selector, each in its own column with its sub-styles under it
     val onTv = co.oto.music.ui.utils.isTvLayout()
-    val hasModuleStyle = !onTv && co.oto.music.modules.skin.ActiveSkin.current?.player != null
-    // the selector's columns, as indexes into PlayerStyle.entries: the flagship with its older layouts under it
-    val selectorColumns = remember(hasModuleStyle, onTv) {
-        val columns = if (hasModuleStyle) listOf(listOf(PlayerStyle.MODULE)) + PlayerStyle.selectorColumns else PlayerStyle.selectorColumns
+    val moduleStyles = if (onTv) emptyList() else co.oto.music.modules.skin.ActiveSkin.styles
+    val hasModuleStyle = moduleStyles.isNotEmpty()
+    // mochy's own styles keep their places and the module ones follow, one card each
+    val ownStyles = remember { PlayerStyle.entries.filter { it != PlayerStyle.MODULE } }
+    val firstModuleStyle = ownStyles.size
+    // the selector's columns, as indexes into playerStyles: the flagship with its older layouts under it
+    val selectorColumns = remember(moduleStyles, onTv) {
+        val own = PlayerStyle.selectorColumns.map { column -> column.map { it.ordinal } }
         // a tv only offers the looks made for it
-        val shown = if (onTv) columns.map { column -> column.filter { it.availableOnTv } }.filter { it.isNotEmpty() } else columns
-        shown.map { column -> column.map { it.ordinal } }
+        val shown = if (onTv) PlayerStyle.selectorColumns.map { column -> column.filter { it.availableOnTv }.map { it.ordinal } }.filter { it.isNotEmpty() } else own
+        val modules = moduleStyles.withIndex().groupBy({ it.value.group }, { firstModuleStyle + it.index }).values.toList()
+        modules + shown
     }
     val studio = co.oto.music.ui.player.studio.rememberPlayerStudioState(selectorColumns)
     val studioAnchors = remember { co.oto.music.ui.player.studio.StudioAnchors() }
@@ -309,6 +315,15 @@ private fun PlayerSheet(
     var showPlaybackSpeed by remember { mutableStateOf(false) }
     var showDeviceOutput by remember { mutableStateOf(false) }
     var showLyricsSource by remember { mutableStateOf(false) }
+    var showAddToPlaylist by remember { mutableStateOf(false) }
+    var showLyricsOffset by remember { mutableStateOf(false) }
+    var showLyricsTranslation by remember { mutableStateOf(false) }
+    var showLyricsEditor by remember { mutableStateOf(false) }
+    var showSongEdit by remember { mutableStateOf(false) }
+    var showVideoQuality by remember { mutableStateOf(false) }
+    var showCanvasQuality by remember { mutableStateOf(false) }
+    var showVideoPicker by remember { mutableStateOf(false) }
+    var showCreatePlaylist by remember { mutableStateOf(false) }
 
     var showExpandMenu by remember { mutableStateOf(false) }
     var seeVideo by remember { mutableStateOf(false) }
@@ -355,7 +370,6 @@ private fun PlayerSheet(
                     TvPlayerCommand.Lyrics -> if (currentStyle != PlayerStyle.VIDEO) {
                         if (transition.page == PlayerPage.LYRICS) transition.close() else transition.open(PlayerPage.LYRICS)
                     }
-                    TvPlayerCommand.LyricsSource -> showLyricsSource = true
                     TvPlayerCommand.ClosePage -> if (transition.page != PlayerPage.NONE) transition.close()
                 }
             }
@@ -375,33 +389,27 @@ private fun PlayerSheet(
     val isTurntable = playerStyle == co.oto.music.constants.PlayerStyle.TURNTABLE
     val shownCoverStyle = if (isTurntable) PlayerCoverStyle.TURNTABLE else coverStyle
     val controlsDrawShift = if (shownCoverStyle == PlayerCoverStyle.EDGE_TO_EDGE) ControlsDrawShift else 0.dp
-    // the new flagship: its own buttons and bottom bar, the cover frosting into moving colours
+    // the flagship: its own buttons and bottom bar, the cover frosting into moving colours
     val isFlagship = playerStyle == PlayerStyle.FLAGSHIP
-    // the flagships' landscape layout draws the whole open player itself, the way the other styles do
+    // the flagship family's landscape layout draws the whole open player itself, the way the other styles do
     val landscapeFlagship = playerStyle.flagshipFamily && landscapeWindow
-    // each flagship keeps its own background, the new one starting on the moving colours it was made with
-    var classicBackground by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.COVER_GRADIENT)
+    // the flagship keeps its moving-colour background while the turntable uses the shared player background
+    var turntableBackground by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.COVER_GRADIENT)
     var flagshipBackground by rememberEnumPreference(FlagshipBackgroundStyleKey, PlayerBackgroundStyle.AMBIENT)
-    val backgroundStyle = if (isFlagship) flagshipBackground else classicBackground
+    val backgroundStyle = if (isFlagship) flagshipBackground else turntableBackground
     var transportLayout by rememberEnumPreference(FlagshipTransportLayoutKey, FlagshipTransportLayout.THREE)
-    // the colours the new flagship's backdrop and cover fade drift between
+    // the colours the flagship's backdrop and cover fade drift between
     val ambient = rememberAmbientColors()
-    // what sits under the play buttons: the card deck or the volume bar, again each flagship with its own
-    val (classicBarStyle, onClassicBarStyle) = rememberEnumPreference(PlayerBottomBarStyleKey, PlayerBottomBarStyle.STACK)
-    val (flagshipBarStyle, onFlagshipBarStyle) = rememberEnumPreference(FlagshipBottomBarStyleKey, PlayerBottomBarStyle.STACK)
-    // the Turntable is built on the new flagship, so it takes the new bottom bar rather than the classic's
-    val newBottomBar = isFlagship || isTurntable
-    // the card under the buttons: the classic's glass, or the new flagship's faint outlined one
-    val cardLook = if (newBottomBar) FlagshipCardLook else ClassicCardLook
-    val barStyle = if (newBottomBar) flagshipBarStyle else classicBarStyle
-    val onBarStyle: (PlayerBottomBarStyle) -> Unit = if (newBottomBar) onFlagshipBarStyle else onClassicBarStyle
+    // what sits under the play buttons: the card deck or the volume bar
+    val (barStyle, onBarStyle) = rememberEnumPreference(FlagshipBottomBarStyleKey, PlayerBottomBarStyle.STACK)
+    val cardLook = FlagshipCardLook
     StudioCameraEffect(studio, studioCapture, studioPieces, barStyle)
     // while the bar is edited both its styles are built, each lifted off the player for the editor
     val barLifted by remember { derivedStateOf { studioPieces.liftedPart == LiftedPart.BAR } }
     val showDeck = showPlayerBottomCard && barStyle == PlayerBottomBarStyle.STACK
     val showVolumeBar = barStyle == PlayerBottomBarStyle.VOLUME
-    // the flagship's bar has no card to grow a page from, so the page grows out of the pill's lyrics or queue half
-    val pillMorph = newBottomBar && showVolumeBar
+    // the flagship's volume bar has no card to grow a page from, so the page grows out of the pill's lyrics or queue half
+    val pillMorph = showVolumeBar
     val pageLook = if (pillMorph) FlagshipPillLook else cardLook
     // a style stored by the ones these replaced lands on its successor
     val (storedPlayerStyle, onStoredPlayerStyle) = rememberPreference(co.oto.music.constants.PlayerStyleKey, "")
@@ -416,15 +424,39 @@ private fun PlayerSheet(
     LaunchedEffect(studioEngaged) {
         if (studioEngaged) transition.close()
     }
-    // the module style is last among the entries, so leaving it out keeps every other style's index
-    val playerStyles = remember(hasModuleStyle) { PlayerStyle.entries.filter { it != PlayerStyle.MODULE || hasModuleStyle } }
+    // the module style is last among the entries, so leaving it out keeps every other style's index; each module style is one more card after them
+    val playerStyles = remember(ownStyles, moduleStyles.size) { ownStyles + List(moduleStyles.size) { PlayerStyle.MODULE } }
     val currentPlayerStyleForStudio by androidx.compose.runtime.rememberUpdatedState(playerStyle)
+    val currentModuleStyles by androidx.compose.runtime.rememberUpdatedState(moduleStyles)
+    // where a style's card is: a module style's is the one picked among them
+    val styleIndex: (PlayerStyle) -> Int = { style ->
+        if (style == PlayerStyle.MODULE) {
+            firstModuleStyle + currentModuleStyles.indexOf(co.oto.music.modules.skin.ActiveSkin.style).coerceAtLeast(0)
+        } else {
+            ownStyles.indexOf(style).coerceAtLeast(0)
+        }
+    }
     val openStudio: () -> Unit = remember(studio) {
         {
             showActionMenu = false
             showExpandMenu = false
-            studio.open(playerStyles.indexOf(currentPlayerStyleForStudio).coerceAtLeast(0))
+            studio.open(styleIndex(currentPlayerStyleForStudio))
         }
+    }
+    // a module player without an editor page of its own edits through its customise sheet, over the player
+    var moduleCustomiseOpen by remember { mutableStateOf(false) }
+    // the flagship's editor on a module player: its parts as tiles, a panel for the open one
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val moduleRegistry = remember(appContext) {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(appContext, co.oto.music.di.ModulesEntryPoint::class.java).moduleRegistry()
+    }
+    val moduleEditor = remember(studio, moduleRegistry) {
+        co.oto.music.ui.player.styles.ModuleEditorState(
+            progress = { studio.edit.value },
+            active = { studio.editing && currentPlayerStyleForStudio == PlayerStyle.MODULE },
+            rangeOf = { module, key -> moduleRegistry.entries.value.firstOrNull { it.id == module }?.ranges?.get(key) },
+            commit = moduleRegistry::setField,
+        )
     }
     // a hold opens it with a buzz rising from soft to strong, the selector arriving on the peak
     val studioContext = androidx.compose.ui.platform.LocalContext.current
@@ -503,6 +535,8 @@ private fun PlayerSheet(
         active = styleTurned && playerFullyOpen,
     )
 
+    val styleDevicesLink = co.oto.music.ui.screens.devices.rememberDevicesLink()
+    val styleOverlaySheets = co.oto.music.ui.component.LocalZoomOutOverlayState.current
     val styleActions = remember(openStudio) {
         co.oto.music.ui.player.styles.StyleActions(
             onOtherMenu = {
@@ -529,6 +563,41 @@ private fun PlayerSheet(
             onClose = { state.collapseSoft() },
             onQueue = { styleQueueOpen = true },
             turn = if (onTv) null else styleTurn,
+            onFullVideo = { enterVideoMode() },
+            onEqualizer = { openEqualizer() },
+            onOpenSheet = { kind ->
+                when (kind) {
+                    co.oto.music.modules.skin.SheetKind.PlayerMenu -> {
+                        menuFromLyrics = false
+                        showActionMenu = true
+                    }
+                    co.oto.music.modules.skin.SheetKind.SleepTimer -> showSleepTimer = true
+                    co.oto.music.modules.skin.SheetKind.Output -> showDeviceOutput = true
+                    co.oto.music.modules.skin.SheetKind.Speed -> showPlaybackSpeed = true
+                    co.oto.music.modules.skin.SheetKind.SongDetails -> showSongDetails = true
+                    co.oto.music.modules.skin.SheetKind.StreamInfo -> showStreamInfo = true
+                    co.oto.music.modules.skin.SheetKind.Share ->
+                        playerConnection?.mediaMetadata?.value?.let { co.oto.music.ui.player.share.song.SongShare.open(it) }
+                    co.oto.music.modules.skin.SheetKind.AddToPlaylist -> showAddToPlaylist = true
+                    co.oto.music.modules.skin.SheetKind.CreatePlaylist -> showCreatePlaylist = true
+                    co.oto.music.modules.skin.SheetKind.LyricsProvider -> showLyricsSource = true
+                    co.oto.music.modules.skin.SheetKind.LyricsOffset -> showLyricsOffset = true
+                    co.oto.music.modules.skin.SheetKind.LyricsTranslation -> showLyricsTranslation = true
+                    co.oto.music.modules.skin.SheetKind.LyricsEditor -> showLyricsEditor = true
+                    co.oto.music.modules.skin.SheetKind.Customise -> moduleCustomiseOpen = true
+                    co.oto.music.modules.skin.SheetKind.SongEdit -> showSongEdit = true
+                    co.oto.music.modules.skin.SheetKind.VideoQuality -> showVideoQuality = true
+                    co.oto.music.modules.skin.SheetKind.CanvasQuality -> showCanvasQuality = true
+                    co.oto.music.modules.skin.SheetKind.VideoPicker -> showVideoPicker = true
+                    co.oto.music.modules.skin.SheetKind.Devices -> styleOverlaySheets.showDeviceIntegration(styleDevicesLink)
+                    co.oto.music.modules.skin.SheetKind.EditPlayer -> openStudio()
+                    co.oto.music.modules.skin.SheetKind.SongMenu -> {
+                        menuFromLyrics = false
+                        showActionMenu = true
+                    }
+                    else -> Unit
+                }
+            },
         )
     }
 
@@ -614,7 +683,8 @@ private fun PlayerSheet(
     // The queue hides the controls the same way when scrolled, each page with its own flag so one
     // page's state never hides the controls on the other.
     var queueImmersive by remember { mutableStateOf(false) }
-    val controlsHidden by animateFloatAsState(
+    // kept as State so toggling lyrics/queue immersion doesn't recompose the entire player every frame for 420ms
+    val controlsHiddenState = animateFloatAsState(
         targetValue = if (
             (lyricsImmersive && showLyrics) || (queueImmersive && showQueue)
         ) 1f else 0f,
@@ -686,14 +756,13 @@ private fun PlayerSheet(
             (lyricsProgress > 0.001f && lyricsProgress < 0.999f) || transition.preparing == PlayerPage.LYRICS
         }
     }
-    val lyricsButtonMounted by remember { derivedStateOf { lyricsProgress < 0.999f } }
     // Also built just before a page closes, while the deck is still hidden (preparingClose), and
     // kept from then on: with no page open the controls are showing or on their way back
     val deckMounted by remember {
-        derivedStateOf { controlsHidden < 0.99f || transition.preparingClose || transition.page == PlayerPage.NONE }
+        derivedStateOf { controlsHiddenState.value < 0.99f || transition.preparingClose || transition.page == PlayerPage.NONE }
     }
     androidx.compose.runtime.SideEffect {
-        transition.closeNeedsPreparing = { (showDeck || showVolumeBar) && controlsHidden >= 0.99f }
+        transition.closeNeedsPreparing = { (showDeck || showVolumeBar) && controlsHiddenState.value >= 0.99f }
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -748,7 +817,7 @@ private fun PlayerSheet(
                 /** [start] (root) is on or below the seek bar, with the controls actually showing. */
                 private fun inControlStrip(start: Offset): Boolean {
                     val top = seekBarTop[0]
-                    return !top.isNaN() && controlsHidden < 0.5f && start.y >= top
+                    return !top.isNaN() && controlsHiddenState.value < 0.5f && start.y >= top
                 }
 
                 /**
@@ -756,7 +825,7 @@ private fun PlayerSheet(
                  * anywhere under a cover that doesn't reach the title. Never on the cover itself.
                  */
                 private fun aroundControls(start: Offset): Boolean {
-                    if (controlsHidden >= 0.5f) return false
+                    if (controlsHiddenState.value >= 0.5f) return false
                     val controlsTop = rects.controls?.top ?: return false
                     val coverBottom = if (currentCoverStyle == PlayerCoverStyle.EDGE_TO_EDGE) null else rects.cover?.bottom
                     return start.y >= minOf(controlsTop, coverBottom ?: controlsTop)
@@ -911,12 +980,14 @@ private fun PlayerSheet(
             }
         }
 
-        Box(
+        Spacer(
             modifier = Modifier
                 .fillMaxSize()
-                // behind the player while it's shrunk into a card or a box, too
-                .graphicsLayer { alpha = if (studio.engaged) 1f else menuReveal.floatValue }
-                .background(Color.Black)
+                // behind the player while it's shrunk into a card or a box, skipping draw when idle
+                .drawBehind {
+                    val alpha = if (studio.engaged) 1f else menuReveal.floatValue
+                    if (alpha > 0.001f) drawRect(Color.Black, alpha = alpha)
+                }
         )
 
         BottomSheet(
@@ -956,7 +1027,6 @@ private fun PlayerSheet(
             dragsWhenOpen = { currentPlayerStyle != PlayerStyle.VIDEO },
             onTouchActivity = handleState::onTouchActivity,
             pureBlack = pureBlack,
-            background = {},
             sharedContent = {
                 MorphingCover(
                     progressProvider = progressProvider,
@@ -1071,6 +1141,7 @@ private fun PlayerSheet(
                     androidx.compose.runtime.CompositionLocalProvider(
                         co.oto.music.ui.player.styles.LocalStyleInteractive provides styleInteractive,
                         co.oto.music.ui.player.styles.LocalStyleCovered provides styleCoveredNow,
+                        co.oto.music.ui.player.styles.LocalModuleEditor provides moduleEditor,
                     ) {
                         co.oto.music.ui.player.styles.AlternatePlayerStyle(
                             style = playerStyle,
@@ -1116,17 +1187,36 @@ private fun PlayerSheet(
                 val landscapeOpen by remember(state) {
                     derivedStateOf { state.isExpanded || (state.isExpandedOrExpanding && state.progress > 0.9f) }
                 }
+                // root reference for the player studio so edit tiles and camera moves work in landscape too
+                Spacer(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .onGloballyPositioned { studioAnchors.root = it },
+                )
                 FlagshipLandscape(
                     pages = transition,
                     turntable = isTurntable,
+                    coverStyle = shownCoverStyle,
+                    backgroundStyle = backgroundStyle,
+                    ambient = if (isFlagship || backgroundStyle == PlayerBackgroundStyle.AMBIENT) ambient else null,
+                    pureBlack = pureBlack,
+                    editMode = studioEngaged,
                     sheetShowing = sheetShowing,
-                    interactive = remember(state) { { landscapeOpen } },
+                    interactive = remember(state) { { landscapeOpen && !studio.engaged } },
                     expanded = remember(state) { { state.isExpanded } },
                     likeBurst = likeBurst,
                     onChevron = { showExpandMenu = !showExpandMenu },
                     onChevronPlaced = { chevronButtonRect = it },
                     onSongInfo = { if (!studioEngaged) showSongDetails = true },
                     onSwitchLyricsSource = { showLyricsSource = true },
+                    onDoubleTapCover = { position ->
+                        if (!studioEngaged) {
+                            likeBurst.likeFromDoubleTap(position, trackInfo.liked, playerConnection::toggleLike)
+                        }
+                    },
+                    studioParts = if (playerStyle.hasFullEditor) studioParts else null,
+                    studioAnchors = if (playerStyle.hasFullEditor) studioAnchors else null,
+                    studioPieces = if (playerStyle.hasFullEditor) studioPieces else null,
                     transport = { transportModifier ->
                         if (isFlagship) {
                             FlagshipTransportRow(
@@ -1139,20 +1229,31 @@ private fun PlayerSheet(
                             PlayerTransportRow(modifier = transportModifier, flagshipGlyph = isTurntable)
                         }
                     },
+                    compactTransport = { transportModifier ->
+                        if (isFlagship) {
+                            FlagshipTransportRow(
+                                layout = transportLayout,
+                                queueOpen = showQueue,
+                                onQueue = { if (showQueue) transition.close() else transition.open(PlayerPage.QUEUE) },
+                                compact = true,
+                                modifier = transportModifier,
+                            )
+                        } else {
+                            PlayerTransportRow(modifier = transportModifier, flagshipGlyph = isTurntable)
+                        }
+                    },
+                    bottomFlush = showDeck,
                     bottom = { barModifier ->
                         when {
-                            showVolumeBar && newBottomBar -> FlagshipBottomBar(
+                            showVolumeBar -> FlagshipBottomBar(
                                 progressProvider = progressProvider,
                                 isActive = ::menuActionActive,
                                 onAction = onMenuAction,
                                 pages = transition,
-                                modifier = barModifier,
-                            )
-                            showVolumeBar -> PlayerVolumeBar(
-                                progressProvider = progressProvider,
-                                isActive = ::menuActionActive,
-                                onAction = onMenuAction,
-                                modifier = barModifier,
+                                modifier = barModifier
+                                    .studioAnchor(studioAnchors) { it.volumeBar }
+                                    .studioBarLayer(studioParts) { it.volumeBar }
+                                    .studioPiece(studioPieces, co.oto.music.ui.player.studio.StudioPieces.VOLUME_BAR),
                             )
                             showDeck -> PlayerBottomCardStack(
                                 glassState = morphingGlassState,
@@ -1163,7 +1264,11 @@ private fun PlayerSheet(
                                 onOpen = { transition.open(it) },
                                 onLongPress = holdToStudio,
                                 look = cardLook,
-                                modifier = barModifier,
+                                modifier = barModifier
+                                    .padding(horizontal = 18.dp)
+                                    .studioAnchor(studioAnchors) { it.card }
+                                    .studioBarLayer(studioParts) { it.card }
+                                    .studioPiece(studioPieces, co.oto.music.ui.player.studio.StudioPieces.CARD_STACK),
                             )
                         }
                     },
@@ -1177,6 +1282,7 @@ private fun PlayerSheet(
                             }
                         },
                 )
+                if (playerStyle.hasFullEditor) EditTiles(studioParts)
                 // a tv closes its player with the back button, it has no handle to drag
                 if (!onTv) PlayerHandle(
                     state = handleState,
@@ -1196,31 +1302,23 @@ private fun PlayerSheet(
                     .onGloballyPositioned { studioAnchors.root = it },
             )
 
-            // the new flagship's cover fades into its own blurred copy instead, with only a light shade for the text; the Turntable's record isn't a cover to soften
-            if (isFlagship) {
-                if (shownCoverStyle == PlayerCoverStyle.EDGE_TO_EDGE) CoverFrost(
+            // the flagship's cover fades into its own blurred copy, with only a light shade for the text; the Turntable's record isn't a cover to soften
+            if (isFlagship && shownCoverStyle == PlayerCoverStyle.EDGE_TO_EDGE) {
+                CoverFrost(
                     glassState = morphingGlassState,
                     progressProvider = progressProvider,
                     maxHeight = screenHeight,
                     fadeProvider = { 1f - lyricsProgress },
                     offsetProvider = layoutTweaks::controlsOffset,
                 )
-                if (shownCoverStyle == PlayerCoverStyle.EDGE_TO_EDGE) ControlsShade(
+                ControlsShade(
                     progressProvider = progressProvider,
                     maxHeight = screenHeight,
                     fadeProvider = { 1f - lyricsProgress },
                     offsetProvider = layoutTweaks::controlsOffset,
                     glareProvider = ambient::glare,
                 )
-            } else if (!isTurntable) SeamBlur(
-                glassState = morphingGlassState,
-                progressProvider = progressProvider,
-                trackInfo = trackInfo,
-                maxHeight = screenHeight,
-
-                fadeProvider = { 1f - lyricsProgress },
-                offsetProvider = layoutTweaks::controlsOffset,
-            )
+            }
 
             // The card growing into the page, under it: its glass widens to the full screen while
             // the player behind dims a touch. Only there while a page is growing or shrinking.
@@ -1232,6 +1330,8 @@ private fun PlayerSheet(
             // behind Home. It mounts again with the first frame of the next open. (Keeping it
             // composed but paused measured worse: waking a page whose position had jumped cost
             // more in one frame than building it fresh.)
+            // each page's flags read in a scope of their own: a flip rebuilt the whole player, mid-open
+            co.oto.music.ui.utils.OwnScope {
             if (lyricsPageMounted && sheetShowing) {
                 LyricsScreen(
                     onClose = { transition.close() },
@@ -1244,12 +1344,15 @@ private fun PlayerSheet(
                     enterProgressProvider = { transition.cardMorphProgress(PlayerPage.LYRICS) },
                     morph = morph,
                     onSwitchSource = { showLyricsSource = true },
+                    onCoverBackdrop = backgroundStyle.takesSoftLight,
                     modifier = Modifier
                         .fillMaxSize()
-                        .pageTransitionLayer(PlayerPage.LYRICS, transition, morph, pageLook) { lyricsPageProgress },
+                        .pageTransitionLayer(PlayerPage.LYRICS, transition, morph, pageLook, modulateAlpha = true) { lyricsPageProgress },
                 )
             }
+            }
 
+            co.oto.music.ui.utils.OwnScope {
             if (queuePageMounted && sheetShowing) {
                 QueueScreen(
                     onClose = { transition.close() },
@@ -1266,6 +1369,7 @@ private fun PlayerSheet(
                         .pageTransitionLayer(PlayerPage.QUEUE, transition, morph, pageLook) { queuePageProgress },
                 )
             }
+            }
 
             // the title flying between the player and the page header, drawn over the seam blur and the growing card so it never slides under them and pops back in
             MorphingSongInfo(
@@ -1278,8 +1382,12 @@ private fun PlayerSheet(
                 screenWidth = screenWidth,
                 // the Turntable's title is set differently, so its header title fades in over it
                 handOff = !isTurntable,
+                // the queue page's heart sits at the header's end; the title fades out before it
+                endRoom = { queuePageProgress },
             )
             // Above the title after a like, moving with it into the lyrics/queue header.
+            // the crossmix flag flips at song changes; read in here it recomposes the label, not the player
+            co.oto.music.ui.utils.OwnScope {
             LikedLabel(
                 likeCount = likeBurst.likeCount,
                 mixing = playerConnection.isCrossmixing.collectAsState().value,
@@ -1289,7 +1397,9 @@ private fun PlayerSheet(
                 lyricsProgressProvider = { lyricsProgress },
                 sheetProgressProvider = progressProvider,
             )
+            }
 
+            co.oto.music.ui.utils.OwnScope {
             if ((showDeck || (barLifted && showPlayerBottomCard)) && deckMounted) {
                 PlayerBottomCardStack(
                     glassState = morphingGlassState,
@@ -1313,52 +1423,41 @@ private fun PlayerSheet(
                         .then(Modifier.studioPiece(studioPieces, StudioPieces.CARD_STACK))
 
                         .graphicsLayer {
-                            alpha = 1f - controlsHidden
-                            translationY = controlsHidden * size.height * 0.75f
+                            val hidden = controlsHiddenState.value
+                            alpha = 1f - hidden
+                            translationY = hidden * size.height * 0.75f
                             letTouchesThroughWhenHidden()
                         }
                 )
             }
+            }
 
+            co.oto.music.ui.utils.OwnScope {
             if ((showVolumeBar || barLifted) && deckMounted) {
                 val volumeBarModifier = Modifier
                     .align(Alignment.BottomCenter)
                     .widthIn(max = 600.dp)
-                    .padding(
-                        bottom = if (newBottomBar) flagshipBarFootprint() - FlagshipBarHeight
-                        else playerVolumeBarFootprint() - PlayerVolumeBarHeight
-                    )
+                    .padding(bottom = flagshipBarFootprint() - FlagshipBarHeight)
                     .padding(horizontal = 26.dp)
                     .studioAnchor(studioAnchors) { it.volumeBar }
                     .studioBarLayer(studioParts) { it.volumeBar }
                     .studioPiece(studioPieces, StudioPieces.VOLUME_BAR)
                     .graphicsLayer {
-                        alpha = 1f - controlsHidden
-                        translationY = controlsHidden * size.height * 0.75f
+                        val hidden = controlsHiddenState.value
+                        alpha = 1f - hidden
+                        translationY = hidden * size.height * 0.75f
                         letTouchesThroughWhenHidden()
                     }
-                if (newBottomBar) {
-                    FlagshipBottomBar(
-                        progressProvider = progressProvider,
-                        isActive = ::menuActionActive,
-                        onAction = onMenuAction,
-                        // the page grows out of the button that was tapped, not out of a card that isn't there
-                        onPageFrom = { morph.cardRect = it },
-                        pages = transition,
-                        modifier = volumeBarModifier,
-                    )
-                } else {
-                    PlayerVolumeBar(
-                        progressProvider = progressProvider,
-                        isActive = ::menuActionActive,
-                        onAction = onMenuAction,
-                        modifier = volumeBarModifier,
-                    )
-                }
+                FlagshipBottomBar(
+                    progressProvider = progressProvider,
+                    isActive = ::menuActionActive,
+                    onAction = onMenuAction,
+                    // the page grows out of the button that was tapped, not out of a card that isn't there
+                    onPageFrom = { morph.cardRect = it },
+                    pages = transition,
+                    modifier = volumeBarModifier,
+                )
             }
-
-            if (lyricsButtonMounted && !studioEngaged) {
-                // Removed as per request
             }
 
             // The transport row sits centred between the seek bar and the card. The seek bar keeps
@@ -1373,8 +1472,7 @@ private fun PlayerSheet(
             // open and the start of every close, for a value the card layout never uses. (The
             // volume bar reads its size as if it were showing, which stays put through all that.)
             val belowControls = when {
-                showVolumeBar && newBottomBar -> flagshipBarFootprint()
-                showVolumeBar -> playerVolumeBarFootprint()
+                showVolumeBar -> flagshipBarFootprint()
                 showPlayerBottomCard -> PlayerDeckHeight
                 else -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 8.dp
             }
@@ -1404,11 +1502,12 @@ private fun PlayerSheet(
                     // where the editor's hold put them; only placed, so a drag never recomposes
                     .offset { androidx.compose.ui.unit.IntOffset(0, layoutTweaks.controlsOffset().roundToInt()) }
                     .graphicsLayer {
+                        val hidden = controlsHiddenState.value
                         // the Turntable shows its own controls; these (with the seek bar) come up
                         // only as the lyrics or the queue open, which run off the seek bar
-                        alpha = (1f - controlsHidden) * (if (isTurntable) turntablePageProgress else 1f)
+                        alpha = (1f - hidden) * (if (isTurntable) turntablePageProgress else 1f)
 
-                        translationY = controlsHidden * size.height * 0.55f
+                        translationY = hidden * size.height * 0.55f
                         // Hidden over the lyrics, or behind the Turntable's own controls, they let
                         // touches through. A layer that ate every touch used to sit here, and it
                         // blocked the lyrics, the record and swipes along with the hidden buttons.
@@ -1418,8 +1517,7 @@ private fun PlayerSheet(
                     .onGloballyPositioned { coords ->
                         if (coords.parentLayoutCoordinates == null) return@onGloballyPositioned
 
-                        // measured in the sheet's own box so a fast open animation never leaves a mid-slide root y behind
-                        val bounds = coords.boundsInParent()
+                        val bounds = coords.boundsInRoot()
                         rects.controls = androidx.compose.ui.geometry.Rect(
                             left = bounds.left,
                             top = bounds.top - with(density) { controlsDrawShift.toPx() },
@@ -1451,8 +1549,8 @@ private fun PlayerSheet(
                             // it. Its place on the sheet itself doesn't change.
                             onTitlePositioned = { if (state.isExpanded && !isTurntable) songInfoSourceRect = it },
                             onChevronPositioned = { if (!isTurntable) chevronButtonRect = it },
-                            isExpandMenuOpen = showExpandMenu,
-                            hideChevron = lyricsMounted,
+                            isExpandMenuOpen = { showExpandMenu },
+                            hideChevron = { lyricsMounted },
                             onToggleExpandMenu = { showExpandMenu = !showExpandMenu },
                             likeBurst = likeBurst,
                             sideAction = menuLayout.side,
@@ -1474,7 +1572,8 @@ private fun PlayerSheet(
                                     else -> 1f - lyricsProgress
                                 }
                             },
-                            badgeAlpha = { (1f - lyricsProgress / 0.3f).coerceIn(0f, 1f) },
+                            // tucked away over the first half of the open, and slid back out over the last half of the close
+                            badgeTuck = { smoothstepF(lyricsProgress / 0.5f) },
                             onSidePositioned = { if (state.isExpanded && lyricsProgress <= 0f) sideButtonRect = it },
                             sideLayer = {
                                 val lp = lyricsProgress
@@ -1506,6 +1605,8 @@ private fun PlayerSheet(
                     // normally sit in is faded out, so they stack above the progress bar instead.
                     // The queue page swaps like (moved to its header) for shuffle and autoplay.
                     // Height tracks the transitions so the controls don't jump when a page opens.
+                    // In a scope of its own: the flag flips as a page opens and closes.
+                    co.oto.music.ui.utils.OwnScope {
                     if (lyricsMounted) {
                         Column(
                             modifier = Modifier
@@ -1641,6 +1742,7 @@ private fun PlayerSheet(
                             }
                         }
                     }
+                    }
 
                     // Column, not Box: PlayerProgressSlider emits the track and the timestamp
                     // row as two siblings, so a Box would stack the timestamps on top of the
@@ -1657,7 +1759,7 @@ private fun PlayerSheet(
                                 // coordinates this moved on every frame of the sheet's slide (and of
                                 // the controls hiding), and the pages that read it recomposed - and
                                 // re-laid out their lists - frame by frame for it.
-                                if (!state.isExpanded || controlsHidden > 0.001f) return@onGloballyPositioned
+                                if (!state.isExpanded || controlsHiddenState.value > 0.001f) return@onGloballyPositioned
                                 val rootHeight = coords.findRootCoordinates().size.height
                                 val topY = coords.positionInRoot().y
                                 seekBarTop[0] = topY
@@ -1670,6 +1772,8 @@ private fun PlayerSheet(
                             .studioAnchor(studioAnchors) { it.slider }
                             .studioMiddleLayer(studioParts) { it.slider }
                     ) {
+                        // sheetShowing flips in the open's first frame; read here it recomposes the bar, not the whole player
+                        co.oto.music.ui.utils.OwnScope {
                         PlayerProgressSlider(
                             active = sheetShowing,
                             onSeekBarPlaced = { if (!studio.editing) studioAnchors.capture(studioAnchors.seekBar, it) },
@@ -1677,6 +1781,7 @@ private fun PlayerSheet(
                             seekBarModifier = Modifier.studioPiece(studioPieces, co.oto.music.ui.player.studio.StudioPieces.SEEK_BAR),
                             endTimeModifier = Modifier.studioPiece(studioPieces, co.oto.music.ui.player.studio.StudioPieces.END_TIME),
                         )
+                        }
                     }
                 }
 
@@ -1692,12 +1797,15 @@ private fun PlayerSheet(
                     .studioTransportLayer(studioParts)
                     .studioPiece(studioPieces, StudioPieces.TRANSPORT)
                 if (isFlagship) {
+                    // the queue flag flips as its page opens; read here it recomposes the row alone
+                    co.oto.music.ui.utils.OwnScope {
                     FlagshipTransportRow(
                         layout = transportLayout,
                         queueOpen = showQueue,
                         onQueue = { if (showQueue) transition.close() else transition.open(PlayerPage.QUEUE) },
                         modifier = transportModifier,
                     )
+                    }
                 } else {
                     PlayerTransportRow(modifier = transportModifier, flagshipGlyph = isTurntable)
                 }
@@ -1707,9 +1815,9 @@ private fun PlayerSheet(
             // way to the flagship's (with the seek bar) while a page is up.
             if (isTurntable) {
                 TurntableControls(
-                    isExpandMenuOpen = showExpandMenu,
+                    isExpandMenuOpen = { showExpandMenu },
                     onToggleExpandMenu = { showExpandMenu = !showExpandMenu },
-                    hideChevron = lyricsMounted,
+                    hideChevron = { lyricsMounted },
                     onTitlePositioned = { if (state.isExpanded) songInfoSourceRect = it },
                     onChevronPositioned = { chevronButtonRect = it },
                     likeBurst = likeBurst,
@@ -1720,8 +1828,9 @@ private fun PlayerSheet(
                         .widthIn(max = 600.dp)
                         .padding(bottom = belowControls + TurntableControlsLift)
                         .graphicsLayer {
-                            alpha = (1f - controlsHidden) * (1f - turntablePageProgress)
-                            translationY = controlsHidden * size.height * 0.55f
+                            val hidden = controlsHiddenState.value
+                            alpha = (1f - hidden) * (1f - turntablePageProgress)
+                            translationY = hidden * size.height * 0.55f
                             // gone with a page up, so the flagship's controls under them answer
                             letTouchesThroughWhenHidden()
                         },
@@ -1745,7 +1854,8 @@ private fun PlayerSheet(
         LikeBurstOverlay(state = likeBurst)
 
         ExpandMenuOverlay(
-            visible = showExpandMenu,
+            // a lambda, so a tap on the chevron recomposes the menu and not the whole player
+            visible = { showExpandMenu },
             onDismiss = { showExpandMenu = false },
             // the Turntable's pills have no shuffle or repeat, so its menu adds them on top of the
             // four set in the editor (unless one of those is already there)
@@ -1785,8 +1895,10 @@ private fun PlayerSheet(
         // and wins over - the sheet's own back handler: back shrinks the page into its card
         // first, then collapses the player. Not while collapsed: the page is remembered then,
         // and back belongs to the app.
-        PageBackHandler(state, pageOpen = showQueue || showLyrics) { transition.close() }
+        PageBackHandler(state, pageOpen = { showQueue || showLyrics }) { transition.close() }
 
+        // the sheets' flags read in a scope of their own, so opening one doesn't recompose the whole player under it
+        co.oto.music.ui.utils.OwnScope {
         if (showSleepTimer) {
             co.oto.music.ui.player.menu.SleepTimerSheet(
                 onDismiss = { showSleepTimer = false }
@@ -1848,6 +1960,69 @@ private fun PlayerSheet(
         if (showLyricsSource) {
             co.oto.music.ui.player.menu.LyricsProviderSheet(onDismiss = { showLyricsSource = false })
         }
+        if (showLyricsOffset) {
+            co.oto.music.ui.player.menu.LyricsOffsetSheet(onDismiss = { showLyricsOffset = false })
+        }
+        if (showLyricsTranslation) {
+            co.oto.music.ui.player.menu.LyricsTranslationSheet(onDismiss = { showLyricsTranslation = false })
+        }
+        if (showLyricsEditor) {
+            co.oto.music.ui.player.menu.LyricsEditorSheet(onDismiss = { showLyricsEditor = false })
+        }
+        if (showAddToPlaylist) {
+            val metadata = playerConnection?.mediaMetadata?.value
+            val database = co.oto.music.LocalDatabase.current
+            if (metadata != null) {
+                co.oto.music.ui.menu.AddToPlaylistDialog(
+                    isVisible = true,
+                    onGetSong = {
+                        database.transaction { insert(metadata) }
+                        listOf(metadata.id)
+                    },
+                    onDismiss = { showAddToPlaylist = false },
+                    topSongId = metadata.id,
+                    topSongArtworkUrl = metadata.thumbnailUrl,
+                )
+            } else {
+                showAddToPlaylist = false
+            }
+        }
+        if (showCreatePlaylist) {
+            co.oto.music.ui.component.CreatePlaylistDialog(
+                onDismiss = { showCreatePlaylist = false },
+            )
+        }
+        if (showSongEdit) {
+            val metadata = playerConnection?.mediaMetadata?.value
+            if (metadata != null) {
+                co.oto.music.ui.menu.songedit.SongEditSheet(metadata = metadata, onDismiss = { showSongEdit = false })
+            } else {
+                showSongEdit = false
+            }
+        }
+        if (showVideoQuality) {
+            co.oto.music.ui.player.video.VideoQualitySheet(
+                session = co.oto.music.ui.player.video.YouTubeVideoSessions.showing,
+                onDismiss = { showVideoQuality = false },
+            )
+        }
+        if (showCanvasQuality) {
+            co.oto.music.ui.player.menu.CanvasQualitySheet(onDismiss = { showCanvasQuality = false })
+        }
+        if (showVideoPicker) {
+            val metadata = playerConnection?.mediaMetadata?.value
+            if (metadata != null) {
+                co.oto.music.ui.menu.songedit.VideoPickerSheet(
+                    songId = metadata.id,
+                    title = metadata.title,
+                    artist = metadata.artists.joinToString { it.name },
+                    onDismiss = { showVideoPicker = false },
+                )
+            } else {
+                showVideoPicker = false
+            }
+        }
+        }
 
         // the player studio, over the player: the selector, the editor's header and editors, its sheets
         PlayerSelectorOverlay(
@@ -1855,12 +2030,32 @@ private fun PlayerSheet(
             styles = playerStyles,
             onSet = { index, velocity ->
                 val style = playerStyles[index]
-                val restyled = style != playerStyle
-                if (restyled) onPlayerStyleChange(style)
+                // a module style is also a pick among them, which changes the player even when the style itself stays module
+                val moduleStyle = moduleStyles.getOrNull(index - firstModuleStyle)
+                val repicked = moduleStyle != null && moduleStyle != co.oto.music.modules.skin.ActiveSkin.style
+                moduleStyle?.let { co.oto.music.modules.skin.ActiveSkin.pick(it.key) }
+                val restyled = style != playerStyle || repicked
+                if (style != playerStyle) onPlayerStyleChange(style)
                 studio.settleOn(index, restyled, velocity = velocity)
             },
             onEdit = { focused ->
-                if (playerStyles.getOrNull(focused) == PlayerStyle.POSTER) {
+                val moduleStyle = moduleStyles.getOrNull(focused - firstModuleStyle)
+                if (moduleStyle != null) {
+                    // the module's own editor page, or its customise sheet over the player
+                    val repicked = moduleStyle != co.oto.music.modules.skin.ActiveSkin.style
+                    co.oto.music.modules.skin.ActiveSkin.pick(moduleStyle.key)
+                    if (playerStyle != PlayerStyle.MODULE) onPlayerStyleChange(PlayerStyle.MODULE)
+                    val editor = moduleStyle.player.editor
+                    if (moduleStyle.player.edit.isNotEmpty()) {
+                        // its parts, edited on the player itself the way the flagship's are
+                        studio.livePage = focused
+                        studio.go(StudioStage.EDIT)
+                    } else if (editor != null) {
+                        styleActions.onOpenRoute(co.oto.music.ui.screens.settings.modules.modulePageRoute(moduleStyle.skin.moduleId, editor))
+                    } else {
+                        studio.settleOn(focused, repicked || playerStyle != PlayerStyle.MODULE) { moduleCustomiseOpen = true }
+                    }
+                } else if (playerStyles.getOrNull(focused) == PlayerStyle.POSTER) {
                     // its one edit is its visualizer: back to the player, with the poster's sheet
                     val restyled = playerStyle != PlayerStyle.POSTER
                     if (restyled) onPlayerStyleChange(PlayerStyle.POSTER)
@@ -1893,7 +2088,7 @@ private fun PlayerSheet(
                     // the full editor, on whichever flagship is in view
                     val style = playerStyles.getOrNull(focused)?.takeIf { it.hasFullEditor } ?: PlayerStyle.FLAGSHIP
                     if (playerStyle != style) onPlayerStyleChange(style)
-                    studio.livePage = playerStyles.indexOf(style)
+                    studio.livePage = styleIndex(style)
                     studio.go(StudioStage.EDIT)
                 }
             },
@@ -1902,6 +2097,7 @@ private fun PlayerSheet(
         if (playerStyle == PlayerStyle.POSTER || playerStyle == PlayerStyle.IPOD || playerStyle.isBedside) {
             co.oto.music.ui.player.studio.StyleSheets(studio)
         }
+        if (moduleCustomiseOpen) co.oto.music.ui.player.menu.SkinCustomiseSheet(onDismiss = { moduleCustomiseOpen = false })
         if (playerStyle.flagshipFamily) {
             val (showBigDiscStyles) = rememberPreference(co.oto.music.constants.ShowBigDiscStylesKey, defaultValue = false)
             val coverStyles = remember(showBigDiscStyles, coverStyle) {
@@ -1925,6 +2121,7 @@ private fun PlayerSheet(
                 co.oto.music.constants.PlayerEndTimestamp.END_TIME,
             )
             val artworkPalette = co.oto.music.ui.theme.ArtworkPalette.from(co.oto.music.LocalArtworkColor.current)
+            if (playerStyle == PlayerStyle.MODULE) co.oto.music.ui.player.studio.ModuleEditOverlay(studio, moduleEditor, morphingGlassState)
             if (playerStyle.hasFullEditor) StudioEditOverlay(
                 parts = studioParts,
                 glassState = morphingGlassState,
@@ -1934,7 +2131,7 @@ private fun PlayerSheet(
                 onCoverStyle = { coverStyle = it },
                 backgroundStyles = backgroundStyles,
                 backgroundStyle = backgroundStyle,
-                onBackgroundStyle = { if (isFlagship) flagshipBackground = it else classicBackground = it },
+                onBackgroundStyle = { if (isFlagship) flagshipBackground = it else turntableBackground = it },
                 menuLayout = menuLayout,
                 seekBarStyle = seekBarStyle,
                 endTimestamp = endTimestamp,
@@ -2000,13 +2197,13 @@ private fun OnSheetHeadingDown(state: BottomSheetState, onHeadingDown: () -> Uni
 
 // the back press belongs to the open page while it is up, read here so the flip doesn't recompose the player
 @Composable
-private fun PageBackHandler(state: BottomSheetState, pageOpen: Boolean, onBack: () -> Unit) {
-    if (pageOpen && state.isExpandedOrExpanding) BackHandler(onBack = onBack)
+private fun PageBackHandler(state: BottomSheetState, pageOpen: () -> Boolean, onBack: () -> Unit) {
+    if (pageOpen() && state.isExpandedOrExpanding) BackHandler(onBack = onBack)
 }
 
 @Composable
 private fun ExpandMenuOverlay(
-    visible: Boolean,
+    visible: () -> Boolean,
     onDismiss: () -> Unit,
     /** the actions, top to bottom: the four set in the editor, and any the style adds */
     slots: List<co.oto.music.ui.player.studio.PlayerMenuAction>,
@@ -2027,9 +2224,10 @@ private fun ExpandMenuOverlay(
     val itemProgress = remember(menuItems.size) { List(menuItems.size) { androidx.compose.animation.core.Animatable(0f) } }
     val bgAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
     var isRendered by remember { mutableStateOf(false) }
+    val isVisible = visible()
 
-    LaunchedEffect(visible) {
-        if (visible) {
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
             isRendered = true
             launch {
                 bgAlpha.animateTo(
@@ -2107,31 +2305,11 @@ private fun ExpandMenuOverlay(
             PlayerHorizontalPadding
         }
 
-        val chevronRotation by animateFloatAsState(
-            targetValue = if (visible) 180f else 0f,
-            label = "overlayChevronRot",
-            animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 380f)
-        )
-        val chevronScale by animateFloatAsState(
-            targetValue = if (visible) 0.86f else 1f,
-            label = "overlayChevronScale",
-            animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 380f)
-        )
-        val overlayChevronBgColor by animateColorAsState(
-            targetValue = if (visible) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.15f),
-            label = "overlayChevronBgColor",
-            animationSpec = androidx.compose.animation.core.tween(durationMillis = 280, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-        )
-        val overlayChevronTint by animateColorAsState(
-            targetValue = if (visible) Color.White else Color.White.copy(alpha = 0.90f),
-            label = "overlayChevronTint",
-            animationSpec = androidx.compose.animation.core.tween(durationMillis = 280, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-        )
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = bgAlpha.value))
+                // read while drawing, so the dim fading in doesn't recompose the menu every frame
+                .drawBehind { drawRect(Color.Black, alpha = bgAlpha.value) }
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = { onDismiss() })
                 }
@@ -2163,8 +2341,12 @@ private fun ExpandMenuOverlay(
                 horizontalAlignment = if (fromLeft) Alignment.Start else Alignment.End
             ) {
                 menuItems.forEachIndexed { index, item ->
-                    val p = itemProgress[index].value
-                    if (p > 0.005f) {
+                    val itemAnim = itemProgress[index]
+                    // each row in a scope of its own: its show flag flips once each way and only rebuilds that row
+                    co.oto.music.ui.utils.OwnScope {
+                    // the spring itself is read in the row's layer, never here
+                    val itemShown by remember(itemAnim) { derivedStateOf { itemAnim.value > 0.005f } }
+                    if (itemShown) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -2175,7 +2357,7 @@ private fun ExpandMenuOverlay(
                                 // the sides. Give it room to fade out, and let it fade to clear.
                                 .blurBleedRoom(MenuItemBlurRoom)
                                 .graphicsLayer {
-                                    val progress = p.coerceIn(0f, 1.25f)
+                                    val progress = itemAnim.value.coerceIn(0f, 1.25f)
                                     alpha = progress.coerceIn(0f, 1f)
                                     translationY = (1f - progress) * 55f
                                     val scale = (0.7f + 0.3f * progress).coerceAtLeast(0.01f)
@@ -2235,6 +2417,7 @@ private fun ExpandMenuOverlay(
                             if (fromLeft) label()
                         }
                     }
+                    }
                 }
             }
 
@@ -2253,21 +2436,51 @@ private fun ExpandMenuOverlay(
                         }
                     )
             ) {
-                PressScaleActionButton(
-                    icon = R.drawable.expand_less,
-                    tint = overlayChevronTint,
-                    containerColor = overlayChevronBgColor,
+                OverlayChevron(
+                    open = isVisible,
                     onClick = onDismiss,
-                    hasShadow = false,
                     // over the Turntable's chevron exactly, its own size
                     size = if (fromLeft) chevronSizeDp else 34.dp,
-                    modifier = Modifier.graphicsLayer {
-                        rotationZ = chevronRotation
-                        scaleX = chevronScale
-                        scaleY = chevronScale
-                    }
                 )
             }
         }
     }
+}
+
+// the menu's own chevron over the dim, apart so its colour fade recomposes only this button
+@Composable
+private fun OverlayChevron(open: Boolean, onClick: () -> Unit, size: androidx.compose.ui.unit.Dp) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (open) 180f else 0f,
+        label = "overlayChevronRot",
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 380f)
+    )
+    val chevronScale by animateFloatAsState(
+        targetValue = if (open) 0.86f else 1f,
+        label = "overlayChevronScale",
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 380f)
+    )
+    val overlayChevronBgColor by animateColorAsState(
+        targetValue = if (open) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.15f),
+        label = "overlayChevronBgColor",
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 280, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+    )
+    val overlayChevronTint by animateColorAsState(
+        targetValue = if (open) Color.White else Color.White.copy(alpha = 0.90f),
+        label = "overlayChevronTint",
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 280, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+    )
+    PressScaleActionButton(
+        icon = R.drawable.expand_less,
+        tint = overlayChevronTint,
+        containerColor = overlayChevronBgColor,
+        onClick = onClick,
+        hasShadow = false,
+        size = size,
+        modifier = Modifier.graphicsLayer {
+            rotationZ = chevronRotation
+            scaleX = chevronScale
+            scaleY = chevronScale
+        }
+    )
 }

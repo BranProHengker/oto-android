@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import co.oto.music.LocalAppContentObscured
+import co.oto.music.modules.security.ShaderSecurityGuard
 import co.oto.music.modules.skin.ActiveSkin
 import co.oto.music.modules.skin.ModuleSkin
 import co.oto.music.modules.skin.SkinProgram
@@ -60,6 +61,9 @@ private object PageShaderCache {
         compiled[key]?.let { return@withContext PageProgram.Ready(it) }
         try {
             val source = file.readText()
+            ShaderSecurityGuard.validate(source)?.let { rejected ->
+                return@withContext PageProgram.Broken("${file.name}: $rejected")
+            }
             val program = SkinProgram(createAgslShader(source), ActiveSkin.DeclaredUniform.findAll(source).map { it.groupValues[1] }.toSet())
             compiled[key] = program
             PageProgram.Ready(program)

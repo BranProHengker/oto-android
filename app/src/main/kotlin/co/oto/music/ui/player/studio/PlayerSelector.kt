@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import co.oto.music.R
 import co.oto.music.constants.PlayerStyle
 import co.oto.music.ui.player.styles.AlternatePlayerStyle
+import co.oto.music.ui.player.styles.LocalModuleStyle
 import co.oto.music.ui.player.styles.StyleActions
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -90,6 +92,14 @@ internal class CardGeometry(val e: Float, val w: Float, val h: Float, gapPx: Flo
     fun centerY(row: Int, rowPosition: Float) = centerY + (row - rowPosition) * strideY
     fun visible(page: Int, position: Float) = abs(centerX(page, position) - w / 2f) < w / 2f + cardW / 2f
     fun visibleY(row: Int, rowPosition: Float) = abs(centerY(row, rowPosition) - h / 2f) < h / 2f + cardH / 2f
+}
+
+// caches quantized rounded shapes so swiping at constant corner radius allocates nothing and avoids rebuilding clip paths every frame
+private val SelectorCornerShapes = android.util.SparseArray<RoundedCornerShape>()
+
+private fun cachedCornerShape(radiusPx: Float): RoundedCornerShape {
+    val key = (radiusPx.coerceAtLeast(0f) * 2f).roundToInt()
+    return SelectorCornerShapes.get(key) ?: RoundedCornerShape(key / 2f).also { SelectorCornerShapes.put(key, it) }
 }
 
 /**
@@ -138,7 +148,7 @@ fun Modifier.studioSheetLayer(studio: PlayerStudioState): Modifier = graphicsLay
     translationX = tx
     translationY = ty
     // the shape is in the layer's own (unscaled) units
-    shape = RoundedCornerShape(corner.coerceAtLeast(0f) / scale.coerceAtLeast(0.01f))
+    shape = cachedCornerShape(corner / scale.coerceAtLeast(0.01f))
     clip = true
 }
 
@@ -313,11 +323,48 @@ fun PlayerSelectorOverlay(
                     }
                 ),
         ) {
-            // every style, as itself
-            styles.forEachIndexed { index, style ->
-                key(style) {
-                    val column = studio.columnOf(index)
-                    val row = studio.rowOf(index)
+            // Only mount cards within a 1-column lookahead around the viewport (and the live card
+            // only during a style handoff), instead of inflating all 10+ full-screen player styles
+            // at once — eliminates the opening freeze and swipe stutter.
+            val mountedIndices by remember(studio, styles, lastColumn) {
+                derivedStateOf {
+                    val pos = studio.page.value
+                    val minCol = (floor(pos).toInt() - 1).coerceIn(0, lastColumn)
+                    val maxCol = (ceil(pos).toInt() + 1).coerceIn(0, lastColumn)
+                    val focusCol = pos.roundToInt().coerceIn(0, lastColumn)
+                    val live = studio.livePage
+                    val handoff = studio.handoff.value > 0.001f
+                    buildList(6) {
+                        styles.indices.forEach { index ->
+                            val isLive = index == live
+                            if (isLive) {
+                                if (handoff) add(index)
+                                return@forEach
+                            }
+                            val column = studio.columnOf(index)
+                            if (column !in minCol..maxCol) return@forEach
+                            val row = studio.rowOf(index)
+                            val rp = studio.rows(column).value
+                            val inRowWindow = if (column == focusCol) {
+                                row in floor(rp).toInt()..(ceil(rp).toInt() + 1)
+                            } else {
+                                row == rp.roundToInt()
+                            }
+                            if (inRowWindow) add(index)
+                        }
+                    }
+                }
+            }
+            mountedIndices.forEach { index ->
+                val style = styles[index]
+                val column = studio.columnOf(index)
+                val row = studio.rowOf(index)
+                val cardKey: Any = if (style == PlayerStyle.MODULE) {
+                    moduleStyleAt(styles, index)?.key ?: "module:$index"
+                } else {
+                    style
+                }
+                key(cardKey) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -332,23 +379,28 @@ fun PlayerSelectorOverlay(
                                 val leaving = rowLeaving(row, rowPosition) * variantFade(column, row, studio, g.e)
                                 val visible = g.visible(column, position) && g.visibleY(row, rowPosition) && leaving > 0f &&
                                     (!live || studio.handoff.value > 0.001f)
-                                alpha = if (!visible) 0f else if (live) studio.handoff.value.coerceIn(0f, 1f) * leaving else leaving
+                                if (!visible) {
+                                    alpha = 0f
+                                    return@graphicsLayer
+                                }
+                                alpha = if (live) studio.handoff.value.coerceIn(0f, 1f) * leaving else leaving
                                 scaleX = g.scale
                                 scaleY = g.scale
                                 translationX = g.centerX(column, position) - w / 2f
                                 translationY = g.centerY(row, rowPosition) - h / 2f
                                 // springs settle a hair past their ends: a corner must never go below zero
-                                shape = RoundedCornerShape(CardCorner.toPx() * g.e.coerceIn(0f, 1f) / g.scale.coerceAtLeast(0.01f))
+                                shape = cachedCornerShape(CardCorner.toPx() * g.e.coerceIn(0f, 1f) / g.scale.coerceAtLeast(0.01f))
                                 clip = true
                             }
                             .background(Color.Black),
                     ) {
-                        // every card built, the live one too: picking a style hands over to its
-                        // card, which mustn't be built in the frame it has to cover the player
                         when (style) {
                             PlayerStyle.FLAGSHIP -> FlagshipPreview(flagship = true)
-                            PlayerStyle.CLASSIC -> FlagshipPreview()
                             PlayerStyle.TURNTABLE -> FlagshipPreview(turntable = true)
+                            // each module card draws its own module style, the one at its place among them
+                            PlayerStyle.MODULE -> CompositionLocalProvider(LocalModuleStyle provides moduleStyleAt(styles, index)) {
+                                AlternatePlayerStyle(style = style, actions = previewActions, preview = true, modifier = Modifier.fillMaxSize())
+                            }
                             else -> AlternatePlayerStyle(style = style, actions = previewActions, preview = true, modifier = Modifier.fillMaxSize())
                         }
                     }
@@ -454,9 +506,9 @@ fun PlayerSelectorOverlay(
                 ) {
                     Text(stringResource(R.string.ps_studio_styles), color = Color.White, style = studioText(StudioType.Title, FontWeight.Bold))
                     AnimatedContent(
-                        // the module style goes by the name its look gives it
+                        // a module style goes by the name its look gives it, and its sub-style's
                         targetState = styles.getOrNull(focused)?.let { style ->
-                            if (style == PlayerStyle.MODULE) co.oto.music.modules.skin.ActiveSkin.current?.player?.name ?: style.selectorName
+                            if (style == PlayerStyle.MODULE) moduleStyleAt(styles, focused)?.title ?: style.selectorName
                             else style.selectorName
                         }.orEmpty(),
                         transitionSpec = {
@@ -512,7 +564,8 @@ fun PlayerSelectorOverlay(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     // edit stays in its place, only dimmed where there's nothing to edit, so set never moves under the finger
-                    val editable = style?.editable == true
+                    val editable = style?.editable == true ||
+                        (style == PlayerStyle.MODULE && moduleStyleAt(styles, focused)?.player?.let { it.edit.isNotEmpty() || it.editor != null || it.customise != null } == true)
                     CardButton(stringResource(R.string.ps_studio_edit), enabled = active && editable, dimmed = !editable, onClick = { onEdit(focused) }, modifier = Modifier.weight(1f))
                     CardButton(stringResource(R.string.ps_studio_set), enabled = active, onClick = { currentOnSet(focused, 0f) }, modifier = Modifier.weight(1f))
                 }
@@ -539,4 +592,10 @@ private fun CardButton(
     ) {
         Text(text = label, color = Color.White.copy(alpha = if (dimmed) 0.35f else 1f), style = studioText(StudioType.Button))
     }
+}
+
+// the module style a card stands for: module cards follow mochy's own, one for each module style in order
+private fun moduleStyleAt(styles: List<PlayerStyle>, index: Int): co.oto.music.modules.skin.ModuleStyle? {
+    val first = styles.indexOf(PlayerStyle.MODULE).takeIf { it >= 0 } ?: return null
+    return co.oto.music.modules.skin.ActiveSkin.styles.getOrNull(index - first)
 }

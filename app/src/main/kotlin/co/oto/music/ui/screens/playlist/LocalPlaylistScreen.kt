@@ -49,8 +49,9 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,17 +90,27 @@ import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import co.oto.music.LocalDatabase
-import co.oto.music.LocalDownloadUtil
 import co.oto.music.LocalPlayerAwareWindowInsets
 import co.oto.music.LocalPlayerConnection
 import co.oto.music.R
 import co.oto.music.constants.AccountNameKey
+import co.oto.music.constants.CrossfadeDurationKey
+import co.oto.music.constants.CrossmixModeKey
+import co.oto.music.constants.DefaultTransitionMode
 import co.oto.music.constants.PlaylistEditLockKey
 import co.oto.music.constants.PlaylistSongSortDescendingKey
 import co.oto.music.constants.PlaylistSongSortType
 import co.oto.music.constants.PlaylistSongSortTypeKey
 import co.oto.music.constants.PlaylistSortType
 import co.oto.music.constants.ProfilePicUriKey
+import co.oto.music.mixit.MixItFallbackMode
+import co.oto.music.ui.mixit.MixItActiveBanner
+import co.oto.music.ui.mixit.MixItTransitionConnectorRow
+import co.oto.music.ui.mixit.fallbackDisplayLabel
+import co.oto.music.ui.mixit.showMixItPlaylistOptions
+import co.oto.music.ui.mixit.showMixItTransitionEditor
+import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 import co.oto.music.db.entities.PlaylistEvent
 import co.oto.music.db.entities.PlaylistSongMap
 import co.oto.music.extensions.move
@@ -119,9 +130,10 @@ import co.oto.music.ui.component.SongSwipeBox
 import co.oto.music.ui.component.TextFieldDialog
 import co.oto.music.ui.component.librarySwipeAction
 import co.oto.music.ui.component.queueSwipeAction
+import co.oto.music.ui.utils.resize
 import co.oto.music.ui.component.removeFromPlaylistSwipeAction
 import co.oto.music.ui.component.detail.CreatorUi
-import co.oto.music.ui.component.detail.featuredArtistsOf
+import co.oto.music.ui.component.detail.rememberFeaturedArtists
 import co.oto.music.ui.component.detail.FeaturedArtistsRow
 import co.oto.music.ui.component.detail.PlaylistDetailScaffold
 import co.oto.music.ui.component.detail.PlaylistEndOfLine
@@ -153,6 +165,8 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.time.LocalDateTime
 
+private val YouTubeChannelRegex = Regex("music\\.youtube\\.com/channel/([A-Za-z0-9_-]+)")
+
 @SuppressLint("RememberReturnType")
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -171,15 +185,46 @@ fun LocalPlaylistScreen(
     val queueTitle by playerConnection.queueTitle.collectAsState()
 
     val playlist by viewModel.playlist.collectAsState()
+    val imported by viewModel.imported.collectAsState()
     val songs by viewModel.playlistSongs.collectAsState()
+    val transitions by viewModel.transitions.collectAsState()
     val mutableSongs = remember { mutableStateListOf<co.oto.music.db.entities.PlaylistSong>() }
     val playlistLength = remember(songs) { songs.fastSumBy { it.song.song.duration } }
     val (sortType, onSortTypeChange) = rememberEnumPreference(PlaylistSongSortTypeKey, PlaylistSongSortType.CUSTOM)
     val (sortDescending, onSortDescendingChange) = rememberPreference(PlaylistSongSortDescendingKey, true)
+    // Date added should start newest-first; the direction control can still switch it to ascending.
+    val selectSortType: (PlaylistSongSortType) -> Unit = { selected ->
+        onSortTypeChange(selected)
+        if (selected == PlaylistSongSortType.CREATE_DATE) onSortDescendingChange(true)
+    }
     var locked by rememberPreference(PlaylistEditLockKey, defaultValue = true)
+    val (appTransitionMode) = rememberEnumPreference(CrossmixModeKey, defaultValue = DefaultTransitionMode)
+    val (manualCrossfadeDuration) = rememberPreference(CrossfadeDurationKey, defaultValue = 5f)
     var showSortDialog by remember { mutableStateOf(false) }
+    var isMixItMode by rememberSaveable { mutableStateOf(viewModel.startInMixIt) }
     val (accountName) = rememberPreference(AccountNameKey, "")
     val (profilePicUri) = rememberPreference(ProfilePicUriKey, "")
+
+    val mixItEnabled = playlist?.playlist?.mixItEnabled == true
+    val mixItFallback = remember(playlist?.playlist?.mixItFallback) {
+        MixItFallbackMode.fromName(playlist?.playlist?.mixItFallback)
+    }
+    val fallbackLabel = remember(mixItFallback, appTransitionMode, manualCrossfadeDuration) {
+        fallbackDisplayLabel(mixItFallback, appTransitionMode, manualCrossfadeDuration.roundToInt())
+    }
+    val activeCustomCount = remember(songs, transitions) {
+        if (songs.size < 2 || transitions.isEmpty()) 0
+        else (0 until songs.lastIndex).count { i ->
+            transitions.containsKey(songs[i].song.id to songs[i + 1].song.id)
+        }
+    }
+
+    LaunchedEffect(viewModel.startInMixIt) {
+        if (viewModel.startInMixIt) {
+            onSortTypeChange(PlaylistSongSortType.CUSTOM)
+            viewModel.setMixItEnabled(true)
+        }
+    }
 
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -216,12 +261,25 @@ fun LocalPlaylistScreen(
         selection.clear()
     }
 
-    val downloadUtil = LocalDownloadUtil.current
-    var downloadState by remember { mutableIntStateOf(Download.STATE_STOPPED) }
+    val downloadState = rememberSongsDownloadState(remember(songs) { songs.map { it.song.id } })
 
     val editable: Boolean = playlist?.playlist?.isEditable == true
     // unlocking from the menu turns the rows into drag handles; the bar's tick locks them again
-    val isEditingOrder = sortType == PlaylistSongSortType.CUSTOM && !locked && !isSearching && editable && !inSelectMode
+    val isEditingOrder = sortType == PlaylistSongSortType.CUSTOM && !locked && !isSearching && editable && !inSelectMode && !isMixItMode
+
+    fun enterMixItMode() {
+        isSearching = false
+        query = TextFieldValue()
+        inSelectMode = false
+        selection.clear()
+        locked = true
+        onSortTypeChange(PlaylistSongSortType.CUSTOM)
+        if (!mixItEnabled) {
+            viewModel.setMixItEnabled(true)
+            playerConnection.notifyMixItChanged(viewModel.playlistId)
+        }
+        isMixItMode = true
+    }
 
     if (isSearching) {
         BackHandler {
@@ -230,6 +288,8 @@ fun LocalPlaylistScreen(
         }
     } else if (inSelectMode) {
         BackHandler(onBack = onExitSelectionMode)
+    } else if (isMixItMode) {
+        BackHandler { isMixItMode = false }
     } else if (isEditingOrder) {
         BackHandler { locked = true }
     }
@@ -246,22 +306,6 @@ fun LocalPlaylistScreen(
         mutableSongs.apply {
             clear()
             addAll(songs)
-        }
-        if (songs.isEmpty()) return@LaunchedEffect
-        downloadUtil.downloads.collect { downloads ->
-            downloadState =
-                if (songs.all { downloads[it.song.id]?.state == Download.STATE_COMPLETED }) {
-                    Download.STATE_COMPLETED
-                } else if (songs.all {
-                        downloads[it.song.id]?.state == Download.STATE_QUEUED ||
-                                downloads[it.song.id]?.state == Download.STATE_DOWNLOADING ||
-                                downloads[it.song.id]?.state == Download.STATE_COMPLETED
-                    }
-                ) {
-                    Download.STATE_DOWNLOADING
-                } else {
-                    Download.STATE_STOPPED
-                }
         }
     }
 
@@ -389,18 +433,38 @@ fun LocalPlaylistScreen(
         playlist?.thumbnails?.firstOrNull()
             ?: songs.firstOrNull { !it.song.song.thumbnailUrl.isNullOrEmpty() }?.song?.song?.thumbnailUrl
     }
-    val featuredArtists = remember(songs) {
-        featuredArtistsOf(songs.flatMap { it.song.artists }, id = { it.id }, name = { it.name })
-    }
+    val featuredArtists = rememberFeaturedArtists(songs, { songs.flatMap { it.song.artists } }, id = { it.id }, name = { it.name })
     val creatorAvatar = profilePicUri.takeIf { it.isNotBlank() }?.let { if (it.contains("://")) it else "file://$it" }
+    val uriHandler = LocalUriHandler.current
+    // a playlist imported from a service credits whoever made it there, the rest are the user's own
+    val creators = remember(imported, accountName, creatorAvatar) {
+        val author = imported?.authorName
+        when {
+            author != null -> listOf(CreatorUi(name = author, avatarUrl = imported?.authorAvatarUrl))
+            accountName.isNotBlank() -> listOf(CreatorUi(name = accountName, avatarUrl = creatorAvatar))
+            else -> emptyList()
+        }
+    }
+    val onCreatorClick: ((CreatorUi) -> Unit)? = imported?.authorUrl?.let { url ->
+        { _: CreatorUi ->
+            // a youtube channel opens in the app, anything else on its own site
+            val channel = YouTubeChannelRegex.find(url)?.groupValues?.get(1)
+            if (channel != null) navController.navigate("artist/$channel") else runCatching { uriHandler.openUri(url) }
+        }
+    }
 
-    fun play(items: List<co.oto.music.db.entities.PlaylistSong>, startIndex: Int = 0) {
+    fun play(
+        items: List<co.oto.music.db.entities.PlaylistSong>,
+        startIndex: Int = 0,
+        shuffled: Boolean = false,
+    ) {
         val current = playlist ?: return
         playerConnection.playQueue(
             ListQueue(
                 title = current.playlist.name,
                 items = items.map { it.song.toMediaItem() },
                 startIndex = startIndex,
+                playlistId = if (shuffled) null else current.id,
             )
         )
         database.query { insert(PlaylistEvent(playlistId = current.id, timestamp = LocalDateTime.now())) }
@@ -460,7 +524,8 @@ fun LocalPlaylistScreen(
                                 }
                             }
                             else -> {
-                                songs.forEach { song ->
+                                // imported files are already on the phone, with nothing online to download
+                                songs.filterNot { it.song.song.isLocal }.forEach { song ->
                                     val downloadRequest = DownloadRequest
                                         .Builder(song.song.id, song.song.id.toUri())
                                         .setCustomCacheKey(song.song.id)
@@ -486,6 +551,10 @@ fun LocalPlaylistScreen(
                     onPlayNext = {
                         playerConnection.playNext(songs.map { it.song.toMediaItem() })
                     },
+                    mixItEnabled = mixItEnabled,
+                    mixItCustomCount = activeCustomCount,
+                    mixItFallbackLabel = fallbackLabel,
+                    onMixIt = { enterMixItMode() },
                     navController = navController,
                 )
             }
@@ -536,6 +605,29 @@ fun LocalPlaylistScreen(
                 },
                 onClose = onExitSelectionMode,
             )
+            isMixItMode -> PlaylistModeBar.MixIt(
+                customCount = activeCustomCount,
+                onOptions = {
+                    menuState.showMixItPlaylistOptions(
+                        mixItEnabled = mixItEnabled,
+                        currentFallback = mixItFallback,
+                        customCount = activeCustomCount,
+                        onToggleEnabled = { enabled ->
+                            viewModel.setMixItEnabled(enabled)
+                            playerConnection.notifyMixItChanged(viewModel.playlistId)
+                        },
+                        onSelectFallback = { fallback ->
+                            viewModel.setMixItFallback(fallback)
+                            playerConnection.notifyMixItChanged(viewModel.playlistId)
+                        },
+                        onClearAll = {
+                            viewModel.clearAllTransitions()
+                            playerConnection.notifyMixItChanged(viewModel.playlistId)
+                        },
+                    )
+                },
+                onDone = { isMixItMode = false },
+            )
             isEditingOrder -> PlaylistModeBar.EditOrder(
                 onMore = openPlaylistMenu,
                 onDone = { locked = true },
@@ -581,40 +673,51 @@ fun LocalPlaylistScreen(
             item(key = "playlist_header") {
                 val isThisQueue = queueTitle == currentPlaylist.playlist.name
                 val savedRemote = currentPlaylist.playlist.browseId != null && !currentPlaylist.playlist.isEditable
-                PlaylistHeader(
-                    onSearchClick = { isSearching = true },
-                    title = currentPlaylist.playlist.name,
-                    creators = if (accountName.isNotBlank()) listOf(CreatorUi(name = accountName, avatarUrl = creatorAvatar)) else emptyList(),
-                    stats = playlistStats(
-                        context.resources.getQuantityString(R.plurals.n_song, songs.size, songs.size),
-                        playlistLength,
-                    ),
-                    isPlaying = isThisQueue && isPlaying,
-                    onPlayClick = {
-                        if (isThisQueue) playerConnection.togglePlayPause() else play(songs)
-                    },
-                    onShuffleClick = { play(songs.shuffled()) },
-                    isSaved = if (savedRemote) currentPlaylist.playlist.bookmarkedAt != null else null,
-                    onSaveClick = {
-                        database.query { update(currentPlaylist.playlist.toggleLike()) }
-                    },
-                    sortControl = {
-                        PlaylistSortControl(
-                            current = sortType,
-                            descending = sortDescending,
-                            options = PlaylistSongSortType.entries,
-                            label = { stringResource(playlistSortLabel(it)) },
-                            onSelect = onSortTypeChange,
-                            onToggleDirection = { onSortDescendingChange(!sortDescending) },
-                            showDirection = { it != PlaylistSongSortType.CUSTOM },
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    PlaylistHeader(
+                        onSearchClick = { isSearching = true },
+                        title = currentPlaylist.playlist.name,
+                        creators = creators,
+                        onCreatorClick = onCreatorClick,
+                        stats = playlistStats(
+                            context.resources.getQuantityString(R.plurals.n_song, songs.size, songs.size),
+                            playlistLength,
+                        ),
+                        isPlaying = isThisQueue && isPlaying,
+                        onPlayClick = {
+                            if (isThisQueue) playerConnection.togglePlayPause() else play(songs)
+                        },
+                        onShuffleClick = { play(songs.shuffled(), shuffled = true) },
+                        isSaved = if (savedRemote) currentPlaylist.playlist.bookmarkedAt != null else null,
+                        onSaveClick = {
+                            database.query { update(currentPlaylist.playlist.toggleLike()) }
+                        },
+                        sortControl = {
+                            PlaylistSortControl(
+                                current = sortType,
+                                descending = sortDescending,
+                                options = PlaylistSongSortType.entries,
+                                label = { stringResource(playlistSortLabel(it)) },
+                                onSelect = selectSortType,
+                                onToggleDirection = { onSortDescendingChange(!sortDescending) },
+                                showDirection = { it != PlaylistSongSortType.CUSTOM },
+                            )
+                        },
+                    )
+                    if (mixItEnabled && !isMixItMode && !inSelectMode && songs.size >= 2) {
+                        MixItActiveBanner(
+                            customCount = activeCustomCount,
+                            fallbackLabel = fallbackLabel,
+                            onOpenMixIt = { enterMixItMode() },
                         )
-                    },
-                )
+                    }
+                }
             }
         }
 
+        val displayedSongs = if (isSearching) filteredSongs else mutableSongs
         itemsIndexed(
-            items = if (isSearching) filteredSongs else mutableSongs,
+            items = displayedSongs,
             key = { _, song -> song.map.id },
             contentType = { _, _ -> "track" },
         ) { index, song ->
@@ -623,6 +726,17 @@ fun LocalPlaylistScreen(
                 key = song.map.id,
             ) {
                 val currentItem by rememberUpdatedState(song)
+                val nextSong = if (isMixItMode && index < displayedSongs.lastIndex) displayedSongs[index + 1] else null
+                val cachedBpm by produceState<Int?>(initialValue = null, key1 = song.song.id, key2 = isMixItMode) {
+                    value = if (isMixItMode) {
+                        withContext(Dispatchers.IO) {
+                            playerConnection.cachedTrackAnalysis(song.song.id)
+                                ?.takeIf { it.isBeatReliable }
+                                ?.bpm
+                                ?.roundToInt()
+                        }
+                    } else null
+                }
 
                 fun deleteFromPlaylist() {
                     database.transaction {
@@ -672,11 +786,12 @@ fun LocalPlaylistScreen(
 
                 val content: @Composable () -> Unit = {
                     val active = song.song.id == mediaMetadata?.id
+                    val bpmSuffix = if (isMixItMode && cachedBpm != null) " • $cachedBpm BPM" else ""
                     PlaylistTrackRow(
                         thumbnailUrl = song.song.song.thumbnailUrl,
                         songId = song.song.id,
                         title = song.song.song.title,
-                        subtitle = "${song.song.artists.joinToString { it.name }} • ${makeTimeString(song.song.song.duration * 1000L)}",
+                        subtitle = "${song.song.artists.joinToString { it.name }} • ${makeTimeString(song.song.song.duration * 1000L)}$bpmSuffix",
                         isActive = active,
                         isPlaying = active && isPlaying,
                         modifier = Modifier.revealOnAppear(
@@ -687,6 +802,15 @@ fun LocalPlaylistScreen(
                         onClick = {
                             if (inSelectMode) {
                                 onCheckedChange(!selection.contains(song.map.id))
+                            } else if (isMixItMode && nextSong != null) {
+                                // Tapping a track in Mix It mode jumps straight into editing its outgoing transition
+                                val existing = transitions[song.song.id to nextSong.song.id]
+                                menuState.showMixItTransitionEditor(
+                                    playlistId = viewModel.playlistId,
+                                    outSong = song.song,
+                                    inSong = nextSong.song,
+                                    existing = existing,
+                                )
                             } else if (song.song.id == mediaMetadata?.id) {
                                 playerConnection.togglePlayPause()
                             } else {
@@ -694,7 +818,7 @@ fun LocalPlaylistScreen(
                             }
                         },
                         onLongClick = {
-                            if (!inSelectMode) {
+                            if (!inSelectMode && !isMixItMode) {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 inSelectMode = true
                                 onCheckedChange(true)
@@ -716,8 +840,8 @@ fun LocalPlaylistScreen(
                             inSelectMode -> {
                                 { PlaylistSelectTick(checked = selection.contains(song.map.id)) }
                             }
-                            // only the handle while reordering, so a tap can't open a menu mid-drag
-                            isEditingOrder -> {
+                            // only the handle while reordering or arranging your Mix It DJ order
+                            isEditingOrder || (isMixItMode && editable) -> {
                                 {
                                     IconButton(
                                         onClick = { },
@@ -736,21 +860,37 @@ fun LocalPlaylistScreen(
                     )
                 }
 
-                SongSwipeBox(
-                    modifier = Modifier.animateItem(),
-                    enabled = !inSelectMode,
-                    // in your own playlist the library action takes the song out; a saved one you
-                    // can't edit adds it to your library instead. Settings > Gesture sets the side.
-                    library = {
-                        if (editable) {
-                            removeFromPlaylistSwipeAction { removeWithUndo() }
-                        } else {
-                            librarySwipeAction(song.song.song)
-                        }
-                    },
-                    queue = { queueSwipeAction { song.song.toMediaItem() } },
-                ) {
-                    content()
+                Column(modifier = Modifier.animateItem()) {
+                    SongSwipeBox(
+                        enabled = !inSelectMode && !isMixItMode,
+                        // in your own playlist the library action takes the song out; a saved one you
+                        // can't edit adds it to your library instead. Settings > Gesture sets the side.
+                        library = {
+                            if (editable) {
+                                removeFromPlaylistSwipeAction { removeWithUndo() }
+                            } else {
+                                librarySwipeAction(song.song.song)
+                            }
+                        },
+                        queue = { queueSwipeAction { song.song.toMediaItem() } },
+                    ) {
+                        content()
+                    }
+                    if (isMixItMode && nextSong != null) {
+                        val existing = transitions[song.song.id to nextSong.song.id]
+                        MixItTransitionConnectorRow(
+                            transition = existing,
+                            fallbackLabel = fallbackLabel,
+                            onEditClick = {
+                                menuState.showMixItTransitionEditor(
+                                    playlistId = viewModel.playlistId,
+                                    outSong = song.song,
+                                    inSong = nextSong.song,
+                                    existing = existing,
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -850,7 +990,7 @@ fun LocalPlaylistScreen(
                                         val thumbUrl = related.playlist.thumbnailUrl ?: related.thumbnails.firstOrNull()
                                         if (thumbUrl != null) {
                                             AsyncImage(
-                                                model = thumbUrl,
+                                                model = thumbUrl.resize(320, 320),
                                                 contentDescription = null,
                                                 modifier = Modifier.fillMaxSize(),
                                                 contentScale = ContentScale.Crop
@@ -906,7 +1046,7 @@ fun LocalPlaylistScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    if (sortType == type) onSortDescendingChange(!sortDescending) else onSortTypeChange(type)
+                                    if (sortType != type) selectSortType(type)
                                     showSortDialog = false
                                 }
                                 .padding(vertical = 12.dp),
@@ -915,7 +1055,7 @@ fun LocalPlaylistScreen(
                             RadioButton(
                                 selected = sortType == type,
                                 onClick = {
-                                    if (sortType == type) onSortDescendingChange(!sortDescending) else onSortTypeChange(type)
+                                    if (sortType != type) selectSortType(type)
                                     showSortDialog = false
                                 }
                             )

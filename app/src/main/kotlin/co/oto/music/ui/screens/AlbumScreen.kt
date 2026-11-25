@@ -82,7 +82,7 @@ import co.oto.music.ui.component.detail.PlaylistModeBar
 import co.oto.music.ui.component.detail.PlaylistSearchBar
 import co.oto.music.ui.component.detail.PlaylistSelectTick
 import co.oto.music.ui.component.detail.PlaylistTrackRow
-import co.oto.music.ui.component.detail.featuredArtistsOf
+import co.oto.music.ui.component.detail.rememberFeaturedArtists
 import co.oto.music.ui.component.detail.playlistCoverHeight
 import co.oto.music.ui.component.librarySwipeAction
 import co.oto.music.ui.component.queueSwipeAction
@@ -184,9 +184,7 @@ fun AlbumScreen(
     val revealSeen = rememberRevealSeenState()
     val album = albumWithSongs
     val totalSeconds = remember(filteredSongs) { filteredSongs.sumOf { it.song.duration } }
-    val featuredArtists = remember(filteredSongs) {
-        featuredArtistsOf(filteredSongs.flatMap { it.artists }, id = { it.id }, name = { it.name })
-    }
+    val featuredArtists = rememberFeaturedArtists(filteredSongs, { filteredSongs.flatMap { it.artists } }, id = { it.id }, name = { it.name })
     val mainArtistName = album?.artists?.firstOrNull()?.name
     // the shelves are built outside composition, so their titles are read here first
     val moreByArtistTitle = if (mainArtistName != null) {

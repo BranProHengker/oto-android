@@ -38,6 +38,8 @@ object CoverSources {
 
     private val client by lazy {
         OkHttpClient.Builder()
+            .dispatcher(co.oto.music.utils.AppProxy.dispatcher)
+            .connectionPool(co.oto.music.utils.AppProxy.connectionPool)
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(8, TimeUnit.SECONDS)
             .build()

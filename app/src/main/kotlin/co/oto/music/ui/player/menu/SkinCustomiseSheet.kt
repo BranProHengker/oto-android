@@ -24,23 +24,26 @@ import co.oto.music.R
 import co.oto.music.modules.skin.ActiveSkin
 import co.oto.music.ui.screens.settings.modules.ModuleOptions
 import co.oto.music.viewmodels.ModulesViewModel
+import co.oto.music.ui.component.sheetHandleRoom
 
 @Composable
 fun SkinCustomiseSheet(onDismiss: () -> Unit) {
-    val skin = ActiveSkin.current
-    val customise = skin?.player?.customise
+    val style = ActiveSkin.style
+    val skin = style?.skin
+    val customise = style?.player?.customise
     val viewModel: ModulesViewModel = hiltViewModel()
     val entries by viewModel.entries.collectAsState()
     val entry = skin?.let { s -> entries.firstOrNull { it.id == s.moduleId } }
     // the settings in the order the player listed them, leaving out any key the module doesn't have
     val fields = customise?.keys.orEmpty().mapNotNull { key -> entry?.fields?.firstOrNull { it.id == key } }
-    val name = skin?.player?.name ?: skin?.moduleName.orEmpty()
+    val name = style?.title ?: skin?.moduleName.orEmpty()
 
     MenuSheetSurface(onDismiss = onDismiss, wrapHeight = true) { _ ->
         Column(
             modifier = Modifier
                 .weight(1f, fill = false)
                 .verticalScroll(rememberScrollState())
+                .padding(top = sheetHandleRoom())
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
                 .padding(top = 16.dp, bottom = 24.dp),

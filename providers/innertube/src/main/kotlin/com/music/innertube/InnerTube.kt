@@ -35,7 +35,30 @@ import kotlin.io.encoding.Base64
 
 @OptIn(ExperimentalEncodingApi::class)
 class InnerTube {
-    private var httpClient = createClient()
+    private var sharedConnectionPool: okhttp3.ConnectionPool? = null
+    private var sharedDispatcher: okhttp3.Dispatcher? = null
+    private var _httpClient: HttpClient? = null
+    private val httpClient: HttpClient
+        get() = _httpClient ?: synchronized(this) {
+            _httpClient ?: createClient().also { _httpClient = it }
+        }
+
+    // lets the host app share one okhttp pool and dispatcher instead of spinning up a second set of threads
+    fun configureSharedPool(connectionPool: okhttp3.ConnectionPool, dispatcher: okhttp3.Dispatcher) {
+        synchronized(this) {
+            sharedConnectionPool = connectionPool
+            sharedDispatcher = dispatcher
+            _httpClient?.close()
+            _httpClient = null
+        }
+    }
+
+    private fun resetClient() {
+        synchronized(this) {
+            _httpClient?.close()
+            _httpClient = null
+        }
+    }
 
     var locale = YouTubeLocale(
         gl = Locale.getDefault().country,
@@ -45,25 +68,26 @@ class InnerTube {
     var dataSyncId: String? = null
     var cookie: String? = null
         set(value) {
-            field = value
-            cookieMap = if (value == null) emptyMap() else parseCookieString(value)
+            val normalized = value?.takeIf { it.isNotBlank() }
+            field = normalized
+            cookieMap = if (normalized == null) emptyMap() else parseCookieString(normalized)
         }
     private var cookieMap = emptyMap<String, String>()
 
     var proxy: Proxy? = null
         set(value) {
+            if (field == value) return
             field = value
-            httpClient.close()
-            httpClient = createClient()
+            resetClient()
         }
 
     var proxyAuth: String? = null
 
     var ipVersion: IpVersion = IpVersion.AUTO
         set(value) {
+            if (field == value) return
             field = value
-            httpClient.close()
-            httpClient = createClient()
+            resetClient()
         }
 
     var useLoginForBrowse: Boolean = false
@@ -91,14 +115,14 @@ class InnerTube {
 
         engine {
             config {
-
-                connectionPool(
+                sharedConnectionPool?.let { connectionPool(it) } ?: connectionPool(
                     okhttp3.ConnectionPool(
                         10,
                         5,
                         java.util.concurrent.TimeUnit.MINUTES
                     )
                 )
+                sharedDispatcher?.let { dispatcher(it) }
 
                 connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
@@ -106,14 +130,8 @@ class InnerTube {
 
                 protocols(listOf(okhttp3.Protocol.HTTP_2, okhttp3.Protocol.HTTP_1_1))
 
+                followSslRedirects(false)
                 retryOnConnectionFailure(true)
-
-                cache(
-                    okhttp3.Cache(
-                        directory = java.io.File(System.getProperty("java.io.tmpdir"), "http_cache"),
-                        maxSize = 50L * 1024L * 1024L
-                    )
-                )
 
                 dns(object : Dns {
                     override fun lookup(hostname: String): List<InetAddress> {
@@ -132,9 +150,13 @@ class InnerTube {
 
                 this@InnerTube.proxyAuth?.let { auth ->
                     proxyAuthenticator { _, response ->
-                        response.request.newBuilder()
-                            .header("Proxy-Authorization", auth)
-                            .build()
+                        if (response.request.header("Proxy-Authorization") != null) {
+                            null
+                        } else {
+                            response.request.newBuilder()
+                                .header("Proxy-Authorization", auth)
+                                .build()
+                        }
                     }
                 }
             }
@@ -155,8 +177,13 @@ class InnerTube {
         }
     }
 
-    private fun HttpRequestBuilder.ytClient(client: YouTubeClient, setLogin: Boolean = false, visitor: String? = visitorData) {
-        contentType(ContentType.Application.Json)
+    private fun HttpRequestBuilder.ytClient(
+        client: YouTubeClient,
+        setLogin: Boolean = false,
+        visitor: String? = visitorData,
+        jsonContentType: Boolean = true,
+    ) {
+        if (jsonContentType) contentType(ContentType.Application.Json)
         headers {
             append("X-Goog-Api-Format-Version", client.apiFormatVersion)
             append("X-YouTube-Client-Name", client.clientId )
@@ -169,16 +196,16 @@ class InnerTube {
             if (setLogin && client.loginSupported) {
                 cookie?.let { cookie ->
                     append("cookie", cookie)
-                    if ("SAPISID" !in cookieMap) return@let
+                    val sapisid = cookieMap["SAPISID"] ?: cookieMap["__Secure-3PAPISID"] ?: return@let
                     val currentTime = System.currentTimeMillis() / 1000
                     // the hash is tied to the origin it goes to, one made for music.youtube.com is a 401 on www.youtube.com
-                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} ${client.apiOrigin}")
+                    val sapisidHash = sha1("$currentTime $sapisid ${client.apiOrigin}")
                     append("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
                 }
             }
         }
         userAgent(client.userAgent)
-        parameter("prettyPrint", false)
+        if (jsonContentType) parameter("prettyPrint", false)
     }
 
     // visitor ids minted by the clients that bring their own, by client name
@@ -291,19 +318,32 @@ class InnerTube {
         client: YouTubeClient = YouTubeClient.WEB_REMIX,
         extraParams: Map<String, String> = emptyMap(),
     ) = withRetry {
+        val parsedUrl = Url(url)
+        require(isTrustedYouTubeUrl(parsedUrl)) { "Refused to send YouTube credentials to untrusted URL" }
+        val existingParams = parsedUrl.parameters.names()
         httpClient.get(url) {
-            ytClient(client, true)
-            parameter("ver", "2")
-            parameter("c", client.clientName)
-            parameter("cver", client.clientVersion)
-            parameter("cpn", cpn)
-            extraParams.forEach { (name, value) -> parameter(name, value) }
+            ytClient(client, setLogin = true, jsonContentType = false)
+            if ("ver" !in existingParams) parameter("ver", "2")
+            if ("c" !in existingParams) parameter("c", client.clientName)
+            if ("cver" !in existingParams) parameter("cver", client.clientVersion)
+            if ("cpn" !in existingParams) parameter("cpn", cpn)
+            extraParams.forEach { (name, value) ->
+                if (name !in existingParams) parameter(name, value)
+            }
 
             if (playlistId != null) {
-                parameter("list", playlistId)
-                parameter("referrer", "https://music.youtube.com/playlist?list=$playlistId")
+                if ("list" !in existingParams) parameter("list", playlistId)
+                if ("referrer" !in existingParams) parameter("referrer", "https://music.youtube.com/playlist?list=$playlistId")
             }
         }
+    }
+
+    private fun isTrustedYouTubeUrl(parsed: Url): Boolean {
+        if (parsed.protocol != URLProtocol.HTTPS) return false
+        val host = parsed.host.lowercase().trimEnd('.')
+        return host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "google.com" || host.endsWith(".google.com") ||
+            host == "googlevideo.com" || host.endsWith(".googlevideo.com")
     }
 
     suspend fun browse(
@@ -619,7 +659,7 @@ class InnerTube {
             setBody(
                 EditPlaylistBody(
                     context = client.toContext(locale, visitorData, dataSyncId),
-                    playlistId = playlistId,
+                    playlistId = playlistId.removePrefix("VL"),
                     actions = listOf(
                         Action.MoveVideoAction(
                             movedSetVideoIdSuccessor = successorSetVideoId,
@@ -656,7 +696,7 @@ class InnerTube {
             setBody(
                 EditPlaylistBody(
                     context = client.toContext(locale, visitorData, dataSyncId),
-                    playlistId = playlistId,
+                    playlistId = playlistId.removePrefix("VL"),
                     actions = listOf(
                         Action.RenamePlaylistAction(
                             playlistName = name
@@ -708,7 +748,7 @@ class InnerTube {
             setBody(
                 EditPlaylistBody(
                     context = client.toContext(locale, visitorData, dataSyncId),
-                    playlistId = playlistId,
+                    playlistId = playlistId.removePrefix("VL"),
                     actions = listOf(
                         Action.SetCustomThumbnailAction(
                             addedCustomThumbnail = Action.SetCustomThumbnailAction.AddedCustomThumbnail(
@@ -730,7 +770,7 @@ class InnerTube {
             setBody(
                 EditPlaylistBody(
                     context = client.toContext(locale, visitorData, dataSyncId),
-                    playlistId = playlistId,
+                    playlistId = playlistId.removePrefix("VL"),
                     actions = listOf(
                         Action.RemoveCustomThumbnailAction()
                     )
@@ -749,7 +789,7 @@ class InnerTube {
             setBody(
                 PlaylistDeleteBody(
                     context = client.toContext(locale, visitorData, dataSyncId),
-                    playlistId = playlistId
+                    playlistId = playlistId.removePrefix("VL")
                 )
             )
         }

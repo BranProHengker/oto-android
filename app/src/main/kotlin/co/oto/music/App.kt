@@ -27,12 +27,14 @@ import co.oto.music.constants.*
 import co.oto.music.di.ApplicationScope
 import co.oto.music.i18n.AppLanguage
 import co.oto.music.extensions.toEnum
+import co.oto.music.ui.theme.AppFonts
 import co.oto.music.utils.CrashHandler
 import co.oto.music.utils.PreferencesCache
 import co.oto.music.utils.cipher.CipherDeobfuscator
 import co.oto.music.utils.dataStore
 import co.oto.music.utils.AppProxy
 import co.oto.music.utils.BotDetectionMitigator
+import co.oto.music.utils.isMainProcess
 import co.oto.music.utils.reportException
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -47,9 +49,6 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 import co.oto.music.link.isTelevision
-
-// how long after the launch intro the PoToken WebView may boot (Home's reveal runs ~1s)
-private const val PoTokenAfterIntroMillis = 2_500L
 
 // one character from each system fallback font titles commonly reach for: japanese, chinese, korean, emoji
 private const val FallbackFontWarmup = "あ漢한😀"
@@ -69,7 +68,8 @@ class App : Application(), SingletonImageLoader.Factory {
     lateinit var phoneLink: dagger.Lazy<co.oto.music.link.phone.PhoneLinkHost>
 
     override fun onCreate() {
-        // before super, because that's where hilt builds the database and the player caches
+        // init random-key vault first so transfer restore and settings can use it right away
+        co.oto.music.utils.SecretVault.init(this)
         co.oto.music.importer.transfer.TransferRestore.applyPending(this)
         // the folders a move to another drive left behind, cleared once nothing has them open
         co.oto.music.playback.StoragePlaces.cleanUpLeftovers(this)
@@ -78,6 +78,8 @@ class App : Application(), SingletonImageLoader.Factory {
         AppLanguage.initialize(this)
         CrashHandler.install(this)
 
+        // share one okhttp connection pool and dispatcher between innertube, coil, and the rest of the app
+        YouTube.configureSharedPool(AppProxy.connectionPool, AppProxy.dispatcher)
         CipherDeobfuscator.initialize(this)
 
         if (BuildConfig.DEBUG || BuildConfig.BUILD_TYPE == "fast") {
@@ -85,6 +87,7 @@ class App : Application(), SingletonImageLoader.Factory {
         }
 
         PreferencesCache.start(this, applicationScope)
+        if (!isTelevision() && isMainProcess(this)) AppFonts.start(this, applicationScope)
         // tokens saved before the vault existed are sealed on the first start after the update
         applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) { (dataStore as? co.oto.music.utils.SecretPreferences)?.sealLeftovers() }
         co.oto.music.utils.NotRecommended.init(this)
@@ -135,30 +138,12 @@ class App : Application(), SingletonImageLoader.Factory {
             observeSettingsChanges()
         }
 
-        applicationScope.launch(Dispatchers.IO) {
-            // Boot BotGuard once a session id exists. Without a PoToken YouTube serves only a
-            // ~32 second preview window, and paying the engine's cold start inside the playback
-            // resolver stalls the first track instead.
-            val ready = kotlinx.coroutines.withTimeoutOrNull(60_000) {
-                while (YouTube.visitorData == null && YouTube.dataSyncId == null) {
-                    kotlinx.coroutines.delay(500)
-                }
-                true
-            }
-            if (ready == true) {
-                // its WebView boots on the main thread; let the launch intro and Home's reveal
-                // play out first. VISIONOS streams need no token, so nothing waits on this
-                co.oto.music.ui.launch.LaunchGate.awaitIntro()
-                kotlinx.coroutines.delay(PoTokenAfterIntroMillis)
-                co.oto.music.utils.YTPlayerUtils.preWarmPoToken()
-                // the player script compiles now, so the first song doesn't wait for it
-                co.oto.music.utils.YTPlayerUtils.preWarmInnerTubeX()
-            }
-        }
+        // potoken webview and innertubex both boot on demand when a song actually needs them, keeping ~80 mb of chromium and quackjs out of startup and background ram
 
         applicationScope.launch(Dispatchers.IO) {
-            // a paired device can reach this phone again as soon as oto is up, after the intro has had the main thread
-            if (isTelevision() || !co.oto.music.link.phone.PhoneLinkHost.hasPairedDevices(this@App)) return@launch
+            // only boot the background link service at process start when the user opted in and a paired tv needs it;
+            // otherwise MainActivity.onStart brings the link up while on screen and tears it down when closed
+            if (isTelevision() || !co.oto.music.link.phone.PhoneLinkHost.shouldStartInBackground(this@App)) return@launch
             co.oto.music.ui.launch.LaunchGate.awaitIntro()
             phoneLink.get().refresh()
             co.oto.music.link.phone.PhoneLinkService.start(this@App)
@@ -171,6 +156,9 @@ class App : Application(), SingletonImageLoader.Factory {
             kotlinx.coroutines.delay(6_000L)
             runCatching { co.oto.music.importer.LocalArtwork.repair(this@App, musicDatabase) }
                 .onFailure { Timber.w(it, "Repairing local covers failed") }
+            // once: the cover every song of an album saved for itself becomes one shared file, and huge ones shrink
+            runCatching { co.oto.music.importer.LocalArtwork.compact(this@App) }
+                .onFailure { Timber.w(it, "Sharing out local covers failed") }
         }
 
         applicationScope.launch(Dispatchers.Default) {
@@ -213,6 +201,12 @@ class App : Application(), SingletonImageLoader.Factory {
         YouTube.ipVersion = settings[IpVersionKey]?.toEnum(defaultValue = IpVersion.AUTO) ?: IpVersion.AUTO
         co.oto.music.utils.YTPlayerUtils.backend =
             settings[StreamBackendKey]?.toEnum(defaultValue = StreamBackend.INNERTUBEX) ?: StreamBackend.INNERTUBEX
+        co.oto.music.utils.YTPlayerUtils.accountIsPremium = settings[YtAccountIsPremiumKey]
+        co.oto.music.utils.YTPlayerUtils.onPremiumDetected = { isPremium ->
+            applicationScope.launch(Dispatchers.IO) {
+                runCatching { dataStore.edit { it[YtAccountIsPremiumKey] = isPremium } }
+            }
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -268,11 +262,20 @@ class App : Application(), SingletonImageLoader.Factory {
                 .distinctUntilChanged()
                 .collect { cookie ->
                     try {
-                        YouTube.cookie = cookie
+                        YouTube.cookie = cookie?.takeIf { it.isNotBlank() }
                     } catch (e: Exception) {
                         Timber.e(e, "Could not parse cookie. Clearing existing cookie.")
                         forgetAccount(this@App)
                     }
+                }
+        }
+
+        applicationScope.launch(Dispatchers.IO) {
+            dataStore.data
+                .map { it[YtAccountIsPremiumKey] }
+                .distinctUntilChanged()
+                .collect { isPremium ->
+                    co.oto.music.utils.YTPlayerUtils.accountIsPremium = isPremium
                 }
         }
 
@@ -318,28 +321,25 @@ class App : Application(), SingletonImageLoader.Factory {
             dataStore.data
                 .map { it[StreamBackendKey]?.toEnum(defaultValue = StreamBackend.INNERTUBEX) ?: StreamBackend.INNERTUBEX }
                 .distinctUntilChanged()
-                .collectIndexed { index, backend ->
+                .collectIndexed { _, backend ->
                     co.oto.music.utils.YTPlayerUtils.backend = backend
-                    // a switch mid-session warms it straight away; at launch that waits for the intro, further up
-                    if (index > 0) co.oto.music.utils.YTPlayerUtils.preWarmInnerTubeX()
                 }
         }
     }
 
-    // the screen went to the background: covers decoded for it were the most the app held while music played on, so most of them go; the latest stay for coming back
+    // frees ui-only caches, webviews, kuromoji and sqlite pages when hidden or short on ram while leaving playback and dac untouched
+    @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
-            SingletonImageLoader.get(this).memoryCache?.let { cache -> cache.trimToSize(cache.size / 4) }
-        }
+        co.oto.music.utils.AppMemory.onTrimMemory(this, level, applicationScope)
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {
-        val cacheSize = runBlocking {
-            dataStore.data.map { it[MaxImageCacheSizeKey] ?: 512 }.first()
-        }
+        // read from the already-warmed preferences cache so the first image never blocks the main thread
+        val cacheSize = co.oto.music.utils.PreferencesCache.current(dataStore)[MaxImageCacheSizeKey] ?: 512
         return ImageLoader.Builder(this).apply {
             components {
+                add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = { AppProxy.sharedClient }))
                 add(SvgDecoder.Factory())
                 add(co.oto.music.utils.ImageRetry)
             }
@@ -349,7 +349,7 @@ class App : Application(), SingletonImageLoader.Factory {
 
             memoryCache {
                 MemoryCache.Builder()
-                    .maxSizePercent(context, 0.30)
+                    .maxSizePercent(context, 0.15)
                     .build()
             }
             if (cacheSize == 0) {
@@ -377,23 +377,39 @@ class App : Application(), SingletonImageLoader.Factory {
                 settings.remove(AccountNameKey)
                 settings.remove(AccountEmailKey)
                 settings.remove(AccountChannelHandleKey)
+                settings.remove(YtAccountIsPremiumKey)
+                settings.remove(LastFullSyncKey)
+                settings.remove(YtSyncHoldKey)
+                settings.remove(SelectedYtmPlaylistsKey)
+                settings.remove(YtSyncSourcesTaggedKey)
             }
             Timber.d("forgetAccount: DataStore preferences cleared")
 
             Timber.d("forgetAccount: Clearing YouTube object auth state")
-            Timber.d("forgetAccount: Before - cookie=${YouTube.cookie?.take(50)}, visitorData=${YouTube.visitorData?.take(20)}, dataSyncId=${YouTube.dataSyncId?.take(20)}")
             YouTube.cookie = null
             YouTube.visitorData = null
             YouTube.dataSyncId = null
-            Timber.d("forgetAccount: After - cookie=${YouTube.cookie}, visitorData=${YouTube.visitorData}, dataSyncId=${YouTube.dataSyncId}")
+            co.oto.music.utils.YTPlayerUtils.accountIsPremium = null
+            co.oto.music.importer.YouTubeLikesMemory.clear(context)
+            co.oto.music.importer.PendingYouTubeLikes.clear(context)
+            co.oto.music.importer.PlaylistAddedHere.clearAll(context)
 
-            Timber.d("forgetAccount: Clearing WebView CookieManager")
+            Timber.d("forgetAccount: Clearing WebView CookieManager & WebStorage")
             withContext(Dispatchers.Main) {
                 android.webkit.CookieManager.getInstance().apply {
                     removeAllCookies { removed ->
                         Timber.d("forgetAccount: CookieManager.removeAllCookies callback: removed=$removed")
                     }
                     flush()
+                }
+                android.webkit.WebStorage.getInstance().apply {
+                    listOf(
+                        "https://music.youtube.com",
+                        "https://www.youtube.com",
+                        "https://youtube.com",
+                        "https://accounts.google.com",
+                        "https://google.com",
+                    ).forEach { origin -> runCatching { deleteOrigin(origin) } }
                 }
             }
             Timber.d("forgetAccount: Logout process complete")

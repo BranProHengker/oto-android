@@ -63,11 +63,19 @@ import co.oto.music.LocalDatabase
 import co.oto.music.LocalDownloadUtil
 import co.oto.music.LocalPlayerConnection
 import co.oto.music.R
+import co.oto.music.constants.CanvasBestQualityKey
 import co.oto.music.constants.KeepScreenOn
 import co.oto.music.constants.PlayVideoBackgroundKey
+import co.oto.music.constants.VideoQuality
+import co.oto.music.constants.VideoQualityKey
 import co.oto.music.ui.menu.songedit.SongEditSheet
 import co.oto.music.ui.menu.songedit.VideoPickerSheet
+import co.oto.music.ui.player.PlayerCanvasPlayback
 import co.oto.music.ui.player.hasFoundVideo
+import co.oto.music.ui.player.video.TrailingValue
+import co.oto.music.ui.player.video.VideoQualitySheet
+import co.oto.music.ui.player.video.YouTubeVideoSessions
+import co.oto.music.ui.player.video.qualityLabel
 import co.oto.music.playback.ExoDownloadService
 import co.oto.music.ui.component.AppSwitch
 import co.oto.music.ui.component.SheetActionCard
@@ -77,9 +85,11 @@ import co.oto.music.ui.component.SheetHeaderGap
 import co.oto.music.ui.component.SheetIcon
 import co.oto.music.ui.menu.AddToPlaylistDialog
 import co.oto.music.ui.utils.resize
+import co.oto.music.utils.rememberEnumPreference
 import co.oto.music.utils.rememberPreference
 import kotlinx.coroutines.flow.flowOf
 import co.oto.music.ui.component.RemoteFocus
+import co.oto.music.ui.component.sheetHandleRoom
 
 /**
  * @param fromLyrics true when the menu was opened from the lyrics page. The lyrics tools are only
@@ -129,6 +139,8 @@ fun PlayerActionMenu(
     var showLyricsTranslation by remember { mutableStateOf(false) }
     var showLyricsOffset by remember { mutableStateOf(false) }
     var showSkinCustomise by remember { mutableStateOf(false) }
+    var showVideoQuality by remember { mutableStateOf(false) }
+    var showCanvasQuality by remember { mutableStateOf(false) }
     // the song as it was when the row was tapped, so a skip doesn't swap the sheet's song under you
     var songToEdit by remember { mutableStateOf<co.oto.music.models.MediaMetadata?>(null) }
     var songForVideo by remember { mutableStateOf<co.oto.music.models.MediaMetadata?>(null) }
@@ -154,6 +166,7 @@ fun PlayerActionMenu(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
+                    .padding(top = sheetHandleRoom())
                     .navigationBarsPadding()
                     .padding(horizontal = 20.dp)
                     .padding(top = 16.dp, bottom = 24.dp)
@@ -277,7 +290,8 @@ fun PlayerActionMenu(
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 SheetActionCardRow {
-                    SheetDownloadCard(
+                    // a song imported from the phone is already a file here; downloading it only looked it up online by name
+                    if (currentMetadata?.id?.startsWith("LOCAL_") != true) SheetDownloadCard(
                         downloadState = download?.state,
                         onDownload = {
                             currentMetadata?.let { metadata ->
@@ -330,15 +344,40 @@ fun PlayerActionMenu(
                     )
                 }
 
+                var videoRowsShown = onFullVideo != null
                 // with videos on, the song's video can be put right: "wrong video?" once one was found, "find video" when none was
                 val videoSong = currentMetadata
                 if (videoSong != null && (videoBackgroundOn || videoSong.isVideoSong)) {
                     val found = remember(videoSong.id) { hasFoundVideo(videoSong.id, videoSong.isVideoSong) }
-                    Spacer(modifier = Modifier.height(if (onFullVideo != null) 8.dp else SectionGap))
+                    Spacer(modifier = Modifier.height(if (videoRowsShown) 8.dp else SectionGap))
                     MenuRow(
                         icon = R.drawable.slow_motion_video,
                         title = androidx.compose.ui.res.stringResource(if (found) R.string.video_wrong else R.string.video_find),
                         onClick = { songForVideo = videoSong },
+                    )
+                    videoRowsShown = true
+                }
+
+                // how sharp the cover plays, only while it really plays something: the youtube video over it, or else its animated cover
+                val coverVideo = YouTubeVideoSessions.showing?.takeIf { it.hasFrame }
+                val canvasSide = PlayerCanvasPlayback.playingSide
+                if (coverVideo != null) {
+                    val (videoQuality) = rememberEnumPreference(VideoQualityKey, VideoQuality.AUTO)
+                    Spacer(modifier = Modifier.height(if (videoRowsShown) 8.dp else SectionGap))
+                    MenuRow(
+                        icon = R.drawable.tune,
+                        title = stringResource(R.string.video_quality),
+                        onClick = { showVideoQuality = true },
+                        trailing = { TrailingValue(qualityLabel(videoQuality, coverVideo)) },
+                    )
+                } else if (canvasSide > 0) {
+                    val (canvasBest) = rememberPreference(CanvasBestQualityKey, defaultValue = true)
+                    Spacer(modifier = Modifier.height(if (videoRowsShown) 8.dp else SectionGap))
+                    MenuRow(
+                        icon = R.drawable.tune,
+                        title = stringResource(R.string.canvas_quality),
+                        onClick = { showCanvasQuality = true },
+                        trailing = { TrailingValue(canvasQualityLabel(canvasBest, canvasSide)) },
                     )
                 }
 
@@ -459,6 +498,12 @@ fun PlayerActionMenu(
     if (showSkinCustomise) {
         SkinCustomiseSheet(onDismiss = { showSkinCustomise = false })
     }
+    if (showVideoQuality) {
+        VideoQualitySheet(session = YouTubeVideoSessions.showing, onDismiss = { showVideoQuality = false })
+    }
+    if (showCanvasQuality) {
+        CanvasQualitySheet(onDismiss = { showCanvasQuality = false })
+    }
     if (showLyricsOffset) {
         LyricsOffsetSheet(onDismiss = { showLyricsOffset = false })
     }
@@ -492,12 +537,14 @@ internal fun MenuRow(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val contentAlpha = if (enabled) 1f else 0.35f
+    val rowBg = resolvedSheetRowSurface()
+    val rowCorner = resolvedSheetRowCorner()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MenuRowSurface)
+            .clip(RoundedCornerShape(rowCorner))
+            .background(rowBg)
             .clickable(
                 enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },

@@ -126,6 +126,10 @@ class ModulesViewModel @Inject constructor(
 
     fun setEnabled(id: String, on: Boolean) = modules.setEnabled(id, on)
 
+    fun hasAcknowledgedScriptWarning(id: String): Boolean = registry.hasAcknowledgedScriptWarning(id)
+
+    fun acknowledgeScriptWarning(id: String) = registry.acknowledgeScriptWarning(id)
+
     /** puts a look above the others that are on, so what it brings wins where they meet */
     fun raise(id: String) {
         registry.raise(id)
@@ -213,30 +217,63 @@ class ModulesViewModel @Inject constructor(
 
     // ---- what people added to a module ----
 
-    /** what adding to a module's list came to, for the sheet to say */
     sealed interface ItemsOutcome {
         data class Added(val names: List<String>) : ItemsOutcome
-        /** it was a web module and nothing the module could use, so it went in on its own like "find more sources" would add it */
         data class AddedAsModule(val name: String) : ItemsOutcome
         data class Problem(val problem: ItemProblem) : ItemsOutcome
+        data class Blocked(val name: String, val scan: co.oto.music.modules.security.ScriptScanResult) : ItemsOutcome
     }
+
+    internal data class PreparedItemsZip(
+        val fileName: String,
+        val bytes: ByteArray,
+        val uri: android.net.Uri,
+        val scan: co.oto.music.modules.security.ScriptScanResult,
+    )
 
     fun loadItems(id: String) {
         _items.value = (registry.module(id) as? ItemListModule)?.items.orEmpty()
     }
 
-    suspend fun addItemsZip(id: String, uri: android.net.Uri): ItemsOutcome {
-        val module = registry.module(id) as? ItemListModule ?: return ItemsOutcome.Problem(ItemProblem.NothingFound)
-        val (name, bytes) = withContext(Dispatchers.IO) { registry.readFile(uri, MaxItemsZipBytes) } ?: return ItemsOutcome.Problem(ItemProblem.NotAZip)
-        if (bytes.size > MaxItemsZipBytes) return ItemsOutcome.Problem(ItemProblem.TooBig)
-        val added = withContext(Dispatchers.IO) { runCatching { module.addZip(name, bytes) }.getOrDefault(ItemsAdded.Problem(ItemProblem.Broken)) }
-        return settleItems(id, added, fallBackOn = setOf(ItemProblem.NothingFound)) { registry.checkZip(uri) }
+    internal suspend fun prepareItemsZip(uri: android.net.Uri): Result<PreparedItemsZip> = withContext(Dispatchers.IO) {
+        val (name, bytes) = registry.readFile(uri, MaxItemsZipBytes)
+            ?: return@withContext Result.failure(IllegalArgumentException(ItemProblem.NotAZip.name))
+        if (bytes.size > MaxItemsZipBytes) {
+            return@withContext Result.failure(IllegalArgumentException(ItemProblem.TooBig.name))
+        }
+        val scan = co.oto.music.modules.security.ScriptSecurityScanner.scanBytes(name, bytes)
+        Result.success(PreparedItemsZip(name, bytes, uri, scan))
     }
 
+    internal suspend fun commitItemsZip(id: String, prepared: PreparedItemsZip): ItemsOutcome {
+        if (prepared.scan.verdict == co.oto.music.modules.security.ScriptVerdict.Blocked) {
+            return ItemsOutcome.Blocked(prepared.fileName, prepared.scan)
+        }
+        val module = registry.module(id) as? ItemListModule ?: return ItemsOutcome.Problem(ItemProblem.NothingFound)
+        val added = withContext(Dispatchers.IO) {
+            runCatching { module.addZip(prepared.fileName, prepared.bytes) }.getOrDefault(ItemsAdded.Problem(ItemProblem.Broken))
+        }
+        return settleItems(id, added, fallBackOn = setOf(ItemProblem.NothingFound)) { registry.checkZip(prepared.uri) }
+    }
+
+    suspend fun addItemsZip(id: String, uri: android.net.Uri): ItemsOutcome {
+        val prepared = prepareItemsZip(uri).getOrElse { e ->
+            val p = runCatching { ItemProblem.valueOf(e.message.orEmpty()) }.getOrDefault(ItemProblem.NotAZip)
+            return ItemsOutcome.Problem(p)
+        }
+        return commitItemsZip(id, prepared)
+    }
+
+    internal fun scanItemsLink(link: String): co.oto.music.modules.security.ScriptScanResult =
+        co.oto.music.modules.security.ScriptSecurityScanner.scanLink(link)
+
     suspend fun addItemsLink(id: String, link: String): ItemsOutcome {
+        val scan = scanItemsLink(link)
+        if (scan.verdict == co.oto.music.modules.security.ScriptVerdict.Blocked) {
+            return ItemsOutcome.Blocked(link.trim(), scan)
+        }
         val module = registry.module(id) as? ItemListModule ?: return ItemsOutcome.Problem(ItemProblem.NothingFound)
         val added = withContext(Dispatchers.IO) { runCatching { module.addLink(link) }.getOrDefault(ItemsAdded.Problem(ItemProblem.Unreachable)) }
-        // a web module's own link often answers nothing at its root, only at its manifest.json
         return settleItems(id, added, fallBackOn = setOf(ItemProblem.NothingFound, ItemProblem.Unreachable)) { registry.check(link) }
     }
 
@@ -433,10 +470,14 @@ class ModulesViewModel @Inject constructor(
      */
     @androidx.annotation.OptIn(UnstableApi::class)
     private suspend fun checkPlayback(stream: co.oto.music.module.SourceStream): String {
-        val drm = stream.drm as? StreamDrm.Widevine
-        val factory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
-            androidx.media3.datasource.DefaultDataSource.Factory(context)
-        )
+        val safe = co.oto.music.modules.security.ModuleUrlGuard.sanitizeStream(stream)
+            ?: throw java.io.IOException("Blocked unsafe stream URL")
+        val drm = safe.drm as? StreamDrm.Widevine
+        // http-only datasource so a module can't trick exoplayer into opening file:// or content://
+        val httpFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(false)
+            .setDefaultRequestProperties(safe.headers)
+        val factory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory)
         if (drm != null) factory.setDrmSessionManagerProvider { WidevineDrm.sessionManager(drm.license) }
         val player = androidx.media3.exoplayer.ExoPlayer.Builder(context).setMediaSourceFactory(factory).build()
         var error: androidx.media3.common.PlaybackException? = null
@@ -448,9 +489,9 @@ class ModulesViewModel @Inject constructor(
                 }
             })
             val item = androidx.media3.common.MediaItem.Builder()
-                .setUri(stream.url)
+                .setUri(safe.url)
                 .apply {
-                    if (stream.format == co.oto.music.module.StreamFormat.Hls) setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                    if (safe.format == co.oto.music.module.StreamFormat.Hls) setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
                     if (drm != null) setDrmConfiguration(
                         androidx.media3.common.MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID).setMultiSession(true).build()
                     )
@@ -465,7 +506,7 @@ class ModulesViewModel @Inject constructor(
                     android.util.Log.w("ModuleTest", "Test playback failed", e)
                     throw java.io.IOException(generateSequence<Throwable>(e) { it.cause }.last().message ?: e.errorCodeName)
                 }
-                if (player.currentPosition >= 2_000) return "Decoded ${player.currentPosition / 1000} s here (${stream.qualityLabel})"
+                if (player.currentPosition >= 2_000) return "Decoded ${player.currentPosition / 1000} s here (${safe.qualityLabel})"
                 kotlinx.coroutines.delay(200)
             }
             throw java.io.IOException("Didn't start playing within 20 s")

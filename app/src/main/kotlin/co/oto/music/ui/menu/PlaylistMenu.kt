@@ -284,7 +284,8 @@ fun PlaylistMenu(
                                     playerConnection.playQueue(
                                         ListQueue(
                                             title = playlist.playlist.name,
-                                            items = songs.map(Song::toMediaItem)
+                                            items = songs.map(Song::toMediaItem),
+                                            playlistId = if (autoPlaylist == false) playlist.id else null,
                                         )
                                     )
                                 }
@@ -396,6 +397,25 @@ fun PlaylistMenu(
         item {
             Material3MenuGroup(
                 items = buildList {
+                    if (autoPlaylist != true && navController != null) {
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.mixit_title)) },
+                                description = { Text(text = stringResource(R.string.mixit_menu_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_mix_it),
+                                        contentDescription = null,
+                                        tint = Color(0xFFF5D64B),
+                                    )
+                                },
+                                onClick = {
+                                    onDismiss()
+                                    navController.navigate("local_playlist/${playlist.id}?mixIt=true")
+                                }
+                            )
+                        )
+                    }
                     if (editable && autoPlaylist != true) {
                         add(
                             Material3MenuItemData(
@@ -500,7 +520,8 @@ fun PlaylistMenu(
                                             )
                                         },
                                         onClick = {
-                                            songs.forEach { song ->
+                                            // imported files are already on the phone, with nothing online to download
+                                            songs.filterNot { it.song.isLocal }.forEach { song ->
                                                 val downloadRequest =
                                                     DownloadRequest
                                                         .Builder(song.id, song.id.toUri())

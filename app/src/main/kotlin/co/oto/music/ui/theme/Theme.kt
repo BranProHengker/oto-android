@@ -94,8 +94,8 @@ fun OtoTheme(
         }
     }
 
-    val font = InterFontFamily
-    val typography = remember(font) { appTypography(font) }
+    val resolvedFonts = AppFonts.resolvedFonts()
+    val typography = remember(resolvedFonts) { appTypography(resolvedFonts) }
     MaterialTheme(
         colorScheme = colorScheme,
         typography = typography,

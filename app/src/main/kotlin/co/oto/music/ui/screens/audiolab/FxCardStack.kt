@@ -37,10 +37,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import co.oto.music.R
 import co.oto.music.eq.LoudnessSettings
+import co.oto.music.eq.EightDSettings
 import co.oto.music.eq.PlaybackSettings
 import co.oto.music.eq.ReverbSettings
 import co.oto.music.eq.SpatialSettings
 import co.oto.music.eq.VolumeSettings
+import co.oto.music.eq.stage.StageSettings
 import co.oto.music.ui.component.damageBoundary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -53,12 +55,16 @@ internal fun activeEffects(
     reverb: ReverbSettings,
     loudness: LoudnessSettings,
     spatial: SpatialSettings,
+    eightD: EightDSettings,
     playback: PlaybackSettings,
     volume: VolumeSettings,
+    stage: StageSettings,
 ): List<ActiveEffect> = buildList {
+    if (stage.enabled) add(ActiveEffect("stage", "3D Sims"))
     if (reverb.enabled) add(ActiveEffect("reverb", "Reverb"))
     if (loudness.enabled) add(ActiveEffect("loudness", "Loudness"))
     if (spatial.enabled) add(ActiveEffect("spatial", "Spatial"))
+    if (eightD.enabled) add(ActiveEffect("eight_d", "8D Audio"))
     if (spatial.surround) add(ActiveEffect("surround", "Surround"))
     if (spatial.mono) add(ActiveEffect("mono", "Mono"))
     if (!playback.isNormal) add(ActiveEffect("playback", "Playback"))
@@ -74,6 +80,7 @@ internal fun effectLabelRes(key: String): Int = when (key) {
     "surround" -> R.string.lab_effect_surround
     "mono" -> R.string.lab_effect_mono
     "playback" -> R.string.lab_effect_playback
+    "stage" -> R.string.lab_effect_stage
     else -> R.string.lab_effect_volume
 }
 

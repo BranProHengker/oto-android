@@ -45,6 +45,7 @@ import co.oto.music.db.entities.PlaylistEntity
 import co.oto.music.db.entities.Song
 import co.oto.music.extensions.toMediaItem
 import co.oto.music.extensions.toggleRepeatMode
+import co.oto.music.importer.LocalArtwork
 import co.oto.music.models.toMediaMetadata
 import co.oto.music.playback.voice.VoicePicker
 import co.oto.music.playback.voice.VoiceRequest
@@ -57,6 +58,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -76,6 +78,10 @@ constructor(
 ) : MediaLibrarySession.Callback {
     private val scope = CoroutineScope(Dispatchers.Main) + Job()
     lateinit var service: MusicService
+
+    fun release() {
+        scope.cancel()
+    }
     private val voice by lazy { VoicePicker(context, database) }
     var toggleLike: () -> Unit = {}
     var setLiked: (Boolean) -> Unit = {}
@@ -255,7 +261,7 @@ constructor(
                                 album.artists.joinToString {
                                     it.name
                                 },
-                                album.album.thumbnailUrl?.toUri(),
+                                LocalArtwork.shareableUri(album.album.thumbnailUrl),
                                 MediaMetadata.MEDIA_TYPE_ALBUM,
                                 singleItemStyle = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM,
                             )
@@ -843,7 +849,7 @@ constructor(
                             "${MusicService.ALBUM}/${album.id}",
                             album.album.title,
                             album.artists.joinToString { it.name },
-                            album.album.thumbnailUrl?.toUri(),
+                            LocalArtwork.shareableUri(album.album.thumbnailUrl),
                             MediaMetadata.MEDIA_TYPE_ALBUM,
                             singleItemStyle = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM,
                         )
@@ -1030,7 +1036,8 @@ constructor(
                     .setTitle(song.title)
                     .setSubtitle(artists.joinToString { it.name })
                     .setArtist(artists.joinToString { it.name })
-                    .setArtworkUri(song.thumbnailUrl?.toUri())
+                    // a local cover goes out through the cover provider: the car can't open a file inside mochy's own folder
+                    .setArtworkUri(LocalArtwork.shareableUri(song.thumbnailUrl))
                     .setIsPlayable(isPlayable)
                     .setIsBrowsable(isBrowsable)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)

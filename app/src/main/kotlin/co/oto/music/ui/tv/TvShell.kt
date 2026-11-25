@@ -134,7 +134,6 @@ internal fun TvShell(
         val railFocus = remember { FocusRequester() }
         var railHasFocus by remember { mutableStateOf(false) }
         val onTabRoot = currentRoute in TvTab.entries.map { it.route } ||
-            currentRoute == "${TvRoutes.Grid}/{kind}" ||
             currentRoute?.startsWith("${TvRoutes.Search}?") == true
 
         var playerWasOpen by remember { mutableStateOf(false) }
@@ -221,7 +220,7 @@ internal fun TvShell(
                                 navController.navigate(tab.route) {
                                     popUpTo(navController.graph.findStartDestination().id) { saveState = !sameTab }
                                     launchSingleTop = true
-                                    restoreState = !sameTab && tab != TvTab.Playlists
+                                    restoreState = !sameTab
                                 }
                             },
                         )

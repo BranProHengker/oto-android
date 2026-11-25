@@ -31,9 +31,13 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import co.oto.music.R
 import co.oto.music.models.MediaMetadata
+import co.oto.music.modules.security.ModuleActionGuard
+import co.oto.music.modules.security.SafeModuleRoutes
 import co.oto.music.modules.skin.ActionTarget
 import co.oto.music.modules.skin.ActiveSkin
+import co.oto.music.modules.skin.ButtonKind
 import co.oto.music.modules.skin.ModuleMenu
+import co.oto.music.modules.skin.SheetKind
 import co.oto.music.ui.component.RemoteFocus
 import co.oto.music.ui.component.SheetIcon
 import co.oto.music.ui.screens.search.searchRoute
@@ -45,12 +49,12 @@ import java.net.URLEncoder
 internal fun ModuleMenuRows(song: MediaMetadata?, onDismiss: () -> Unit, onOpenRoute: ((String) -> Unit)?, onCustomise: (() -> Unit)? = null) {
     val actions = ModuleMenu.actions
     // the look's player offers its customise sheet here too, next to the module's own rows
-    val customise = ActiveSkin.current?.takeIf { it.player?.customise != null && onCustomise != null }
+    val customise = ActiveSkin.style?.takeIf { it.player.customise != null && onCustomise != null }
     if (actions.isEmpty() && customise == null) return
     val context = LocalContext.current
     Spacer(Modifier.height(16.dp))
     if (customise != null && onCustomise != null) {
-        val name = customise.player?.name ?: customise.moduleName
+        val name = customise.title
         ModuleMenuRow(stringResource(R.string.skin_customise_row, name), picture = null, enabled = true, onClick = onCustomise)
     }
     actions.forEachIndexed { index, item ->
@@ -60,17 +64,35 @@ internal fun ModuleMenuRows(song: MediaMetadata?, onDismiss: () -> Unit, onOpenR
         ModuleMenuRow(item.action.title, item.skin.resolve(item.action.icon), enabled) {
             val now = song ?: return@ModuleMenuRow
             onDismiss()
-            openModuleTarget(context, item.action.target, now, item.moduleId) { route -> onOpenRoute?.invoke(route) }
+            openModuleTarget(context, item.action.target, now, item.moduleId, openRoute = { route -> onOpenRoute?.invoke(route) })
         }
     }
 }
 
-/** runs a module's link, page or search with the song filled in; pages and searches go through [openRoute] */
-internal fun openModuleTarget(context: Context, target: ActionTarget, song: MediaMetadata?, moduleId: String, openRoute: (String) -> Unit) {
+/** runs a module's link, page, search, sheet, safe route, control or setting action with sandbox & secret guards */
+internal fun openModuleTarget(
+    context: Context,
+    target: ActionTarget,
+    song: MediaMetadata?,
+    moduleId: String,
+    openRoute: (String) -> Unit,
+    onOpenSheet: ((SheetKind, String?) -> Unit)? = null,
+    onControl: ((ButtonKind) -> Unit)? = null,
+    onSetField: ((key: String, value: String?) -> Unit)? = null,
+    onSetAppSetting: ((key: String, value: String?) -> Unit)? = null,
+) {
     when (target) {
-        is ActionTarget.Link -> context.openDevUrl(fill(target.template, song, encode = true))
+        is ActionTarget.Link -> {
+            val url = fill(target.template, song, encode = true)
+            if (ModuleActionGuard.isSafeFinalUrl(url)) context.openDevUrl(url)
+        }
         is ActionTarget.Page -> openRoute(modulePageRoute(moduleId, target.id))
         is ActionTarget.Search -> openRoute(searchRoute(fill(target.template, song, encode = false)))
+        is ActionTarget.Sheet -> onOpenSheet?.invoke(target.kind, target.pageId)
+        is ActionTarget.Route -> SafeModuleRoutes.sanitize(target.route)?.let(openRoute)
+        is ActionTarget.Control -> onControl?.invoke(target.kind)
+        is ActionTarget.SetField -> onSetField?.invoke(target.key, target.value)
+        is ActionTarget.SetAppSetting -> onSetAppSetting?.invoke(target.key, target.value)
     }
 }
 
@@ -78,12 +100,14 @@ internal fun openModuleTarget(context: Context, target: ActionTarget, song: Medi
 @Composable
 private fun ModuleMenuRow(title: String, picture: Any?, enabled: Boolean, onClick: () -> Unit) {
     val alpha = if (enabled) 1f else 0.35f
+    val rowBg = resolvedSheetRowSurface()
+    val rowCorner = resolvedSheetRowCorner()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MenuRowSurface)
+            .clip(RoundedCornerShape(rowCorner))
+            .background(rowBg)
             .clickable(enabled = enabled, interactionSource = remember { MutableInteractionSource() }, indication = RemoteFocus, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {

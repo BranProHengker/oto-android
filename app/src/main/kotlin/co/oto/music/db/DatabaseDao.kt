@@ -41,10 +41,12 @@ import co.oto.music.db.entities.ImportedPlaylist
 import co.oto.music.db.entities.ImportedPlaylistTrack
 import co.oto.music.db.entities.ImportedSong
 import co.oto.music.db.entities.ImportedAlbumRow
+import co.oto.music.db.entities.ImportedLike
 import co.oto.music.db.entities.ImportedSourceCount
 import co.oto.music.db.entities.PlaylistEvent
 import co.oto.music.db.entities.PlaylistSong
 import co.oto.music.db.entities.PlaylistSongMap
+import co.oto.music.db.entities.PlaylistTransition
 import co.oto.music.db.entities.RecognitionHistory
 import co.oto.music.db.entities.RelatedSongMap
 import co.oto.music.db.entities.SearchHistory
@@ -702,6 +704,10 @@ interface DatabaseDao {
     @Query("SELECT * FROM song WHERE id IN (:songIds)")
     suspend fun getSongsByIds(songIds: List<String>): List<Song>
 
+    // just the rows, no artists or album, for checking thousands of likes at once
+    @Query("SELECT * FROM song WHERE id IN (:songIds) AND NOT liked")
+    fun unlikedSongEntities(songIds: List<String>): List<SongEntity>
+
     /** [getSongsByIds] that keeps up: a like or a new artist picture shows without asking again. */
     @Transaction
     @Query("SELECT * FROM song WHERE id IN (:songIds)")
@@ -1138,6 +1144,21 @@ interface DatabaseDao {
     @Query("SELECT * FROM song WHERE isLocal AND albumId IS NULL AND albumName IS NOT NULL AND albumName != ''")
     suspend fun localSongsWithoutAlbum(): List<Song>
 
+    // local files whose genre tag hasn't been read yet
+    @Query("SELECT * FROM song WHERE isLocal AND genre IS NULL AND localUri IS NOT NULL")
+    suspend fun localSongsWithoutGenre(): List<SongEntity>
+
+    @Query("UPDATE song SET genre = :genre WHERE id = :songId")
+    fun setSongGenre(songId: String, genre: String)
+
+    // songs the genres tab can sort: tagged files, plus anything saved, liked or played for a minute, which goes by its artist's genre
+    @Transaction
+    @Query(
+        "SELECT * FROM song WHERE (isLocal AND genre IS NOT NULL AND genre != '') OR inLibrary IS NOT NULL OR liked OR totalPlayTime >= 60000 " +
+            "ORDER BY title COLLATE NOCASE",
+    )
+    fun songsForGenres(): Flow<List<Song>>
+
     @Transaction
     @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL ORDER BY rowId")
     fun playlistsByCreateDateAsc(): Flow<List<Playlist>>
@@ -1393,9 +1414,21 @@ interface DatabaseDao {
     @Query("SELECT COUNT(*) FROM event")
     fun eventCount(): Flow<Int>
 
+    // lightweight distinct song ids for discovery filtering without loading every joined event row
+    @Query("SELECT DISTINCT songId FROM event")
+    suspend fun allPlayedSongIds(): List<String>
+
     /** Every play in [fromTimeStamp, toTimeStamp), bare - the monthly recap and Stats aggregate these themselves. */
     @Query("SELECT songId, timestamp, playTime FROM event WHERE timestamp >= :fromTimeStamp AND timestamp < :toTimeStamp")
     suspend fun recapEvents(fromTimeStamp: Long, toTimeStamp: Long): List<RecapEventRow>
+
+    // which of these songs were already played before a period started, so stats can tell new finds from old favourites
+    @Query("SELECT DISTINCT songId FROM event WHERE timestamp < :beforeTimeStamp AND songId IN (:songIds)")
+    suspend fun songsPlayedBefore(songIds: List<String>, beforeTimeStamp: Long): List<String>
+
+    // all the listening in a period added up, for stats' "more than last month"
+    @Query("SELECT COALESCE(SUM(playTime), 0) FROM event WHERE timestamp >= :fromTimeStamp AND timestamp < :toTimeStamp")
+    suspend fun listeningTotal(fromTimeStamp: Long, toTimeStamp: Long): Long
 
     @Query("SELECT MIN(timestamp) FROM event")
     suspend fun firstEventTimestamp(): Long?
@@ -1723,6 +1756,32 @@ interface DatabaseDao {
     @Upsert
     fun upsert(edit: SongEdit)
 
+    // ---- Mix It custom playlist transitions ----
+
+    @Query("SELECT * FROM playlist_transition WHERE playlistId = :playlistId")
+    fun playlistTransitions(playlistId: String): Flow<List<PlaylistTransition>>
+
+    @Query("SELECT * FROM playlist_transition WHERE playlistId = :playlistId AND fromSongId = :fromSongId AND toSongId = :toSongId")
+    fun playlistTransitionBlocking(playlistId: String, fromSongId: String, toSongId: String): PlaylistTransition?
+
+    @Query("SELECT * FROM playlist WHERE id = :playlistId")
+    fun playlistEntityBlocking(playlistId: String): PlaylistEntity?
+
+    @Upsert
+    fun upsert(transition: PlaylistTransition)
+
+    @Query("DELETE FROM playlist_transition WHERE playlistId = :playlistId AND fromSongId = :fromSongId AND toSongId = :toSongId")
+    fun deletePlaylistTransition(playlistId: String, fromSongId: String, toSongId: String)
+
+    @Query("DELETE FROM playlist_transition WHERE playlistId = :playlistId")
+    fun clearPlaylistTransitions(playlistId: String)
+
+    @Query("UPDATE playlist SET mixItEnabled = :enabled WHERE id = :playlistId")
+    fun setPlaylistMixItEnabled(playlistId: String, enabled: Boolean)
+
+    @Query("UPDATE playlist SET mixItFallback = :fallback WHERE id = :playlistId")
+    fun setPlaylistMixItFallback(playlistId: String, fallback: String?)
+
     // ---- imported music ----
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -1798,6 +1857,13 @@ interface DatabaseDao {
     @Query("UPDATE import_session_song SET liked = 1 WHERE sessionId = :sessionId AND songId = :songId")
     fun markLikedByImport(sessionId: Long, songId: String)
 
+    @Query(
+        "SELECT import_session_song.songId AS songId, MAX(import_session.startedAt) AS importedAt FROM import_session_song " +
+            "JOIN import_session ON import_session.id = import_session_song.sessionId " +
+            "WHERE import_session_song.liked GROUP BY import_session_song.songId"
+    )
+    fun likesFromImports(): List<ImportedLike>
+
     @Query("SELECT * FROM import_session WHERE source = :source ORDER BY id DESC")
     fun importSessions(source: String): List<ImportSession>
 
@@ -1869,12 +1935,22 @@ interface DatabaseDao {
     @Query("SELECT * FROM imported_playlist WHERE source = :source AND remoteId = :remoteId ORDER BY importedAt DESC LIMIT 1")
     fun importedPlaylistByRemoteId(source: String, remoteId: String): ImportedPlaylist?
 
-    /** Remembers where the playlist lives (an unknown id or link keeps the one already saved). */
+    /** remembers where the playlist lives and who made it, anything unknown keeps what's already saved */
     @Query(
         "UPDATE imported_playlist SET remoteId = COALESCE(:remoteId, remoteId), " +
-            "remoteUrl = COALESCE(:remoteUrl, remoteUrl), lastSyncedAt = :syncedAt WHERE playlistId = :playlistId"
+            "remoteUrl = COALESCE(:remoteUrl, remoteUrl), lastSyncedAt = :syncedAt, " +
+            "authorName = COALESCE(:authorName, authorName), authorAvatarUrl = COALESCE(:authorAvatarUrl, authorAvatarUrl), " +
+            "authorUrl = COALESCE(:authorUrl, authorUrl) WHERE playlistId = :playlistId"
     )
-    fun updateImportedPlaylistOrigin(playlistId: String, remoteId: String?, remoteUrl: String?, syncedAt: LocalDateTime)
+    fun updateImportedPlaylistOrigin(
+        playlistId: String,
+        remoteId: String?,
+        remoteUrl: String?,
+        syncedAt: LocalDateTime,
+        authorName: String?,
+        authorAvatarUrl: String?,
+        authorUrl: String?,
+    )
 
     @Query("SELECT trackKey FROM imported_playlist_track WHERE playlistId = :playlistId")
     fun importedPlaylistTrackKeys(playlistId: String): List<String>
@@ -1906,6 +1982,33 @@ interface DatabaseDao {
     /** Every file already in the library, so a storage scan only offers the new ones. */
     @Query("SELECT localUri FROM song WHERE localUri IS NOT NULL")
     fun localUris(): List<String>
+
+    // how many songs, albums, playlists and artists show this picture: local songs share cover files, so one only goes with its last user
+    @Query(
+        "SELECT (SELECT COUNT(*) FROM song WHERE thumbnailUrl = :url) + (SELECT COUNT(*) FROM album WHERE thumbnailUrl = :url) + " +
+            "(SELECT COUNT(*) FROM playlist WHERE thumbnailUrl = :url) + (SELECT COUNT(*) FROM artist WHERE thumbnailUrl = :url)"
+    )
+    fun thumbnailUsers(url: String): Int
+
+    // lets go of every cover link that starts with prefix, for clearing the saved local covers in one go
+    @Query("UPDATE song SET thumbnailUrl = NULL WHERE thumbnailUrl LIKE :prefix || '%'")
+    fun forgetSongCovers(prefix: String)
+
+    @Query("UPDATE album SET thumbnailUrl = NULL WHERE thumbnailUrl LIKE :prefix || '%'")
+    fun forgetAlbumCovers(prefix: String)
+
+    @Query("UPDATE playlist SET thumbnailUrl = NULL WHERE thumbnailUrl LIKE :prefix || '%'")
+    fun forgetPlaylistCovers(prefix: String)
+
+    @Query("UPDATE artist SET thumbnailUrl = NULL WHERE thumbnailUrl LIKE :prefix || '%'")
+    fun forgetArtistCovers(prefix: String)
+
+    // the songs and albums that still name an artist, so a name that got split into its artists only goes once nothing uses it
+    @Query(
+        "SELECT (SELECT COUNT(*) FROM song_artist_map WHERE artistId = :artistId) + " +
+            "(SELECT COUNT(*) FROM album_artist_map WHERE artistId = :artistId)"
+    )
+    fun artistUses(artistId: String): Int
 
     @Query("DELETE FROM format WHERE id = :songId")
     fun deleteFormat(songId: String)
@@ -2013,19 +2116,19 @@ interface DatabaseDao {
     fun update(playlistEntity: PlaylistEntity, playlistItem: PlaylistItem) {
         // read fresh: the sync walks every playlist slowly, and a copy from its start wrote over edits made meanwhile
         val current = playlistEntity(playlistEntity.id) ?: playlistEntity
-        update(
-            current.copy(
-                name = playlistItem.title,
-                browseId = playlistItem.id,
-                // a cover made or picked in oto stays, youtube's own picture went over it on every sync
-                thumbnailUrl = current.thumbnailUrl.takeIf(PlaylistCoverStore::isManaged) ?: playlistItem.thumbnail,
-                isEditable = playlistItem.isEditable,
-                remoteSongCount = playlistItem.songCountText?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() },
-                playEndpointParams = playlistItem.playEndpoint?.params,
-                shuffleEndpointParams = playlistItem.shuffleEndpoint?.params,
-                radioEndpointParams = playlistItem.radioEndpoint?.params
-            )
+        val updated = current.copy(
+            name = playlistItem.title,
+            browseId = playlistItem.id,
+            // a cover made or picked in oto stays, youtube's own picture went over it on every sync
+            thumbnailUrl = current.thumbnailUrl.takeIf(PlaylistCoverStore::isManaged) ?: playlistItem.thumbnail,
+            isEditable = playlistItem.isEditable,
+            remoteSongCount = playlistItem.songCountText?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() },
+            playEndpointParams = playlistItem.playEndpoint?.params,
+            shuffleEndpointParams = playlistItem.shuffleEndpoint?.params,
+            radioEndpointParams = playlistItem.radioEndpoint?.params
         )
+        // skip writing when nothing changed so room doesn't invalidate every playlist observer during sync
+        if (updated != current) update(updated)
     }
 
     @Upsert
@@ -2084,6 +2187,19 @@ interface DatabaseDao {
         from: Int,
     ): List<PlaylistSongMap>
 
+    // bare snapshots for sync undo so auto-sync never runs multi-table joins just to record ids and dates
+    @Query("SELECT id, likedDate FROM song WHERE liked")
+    suspend fun likedSongSnapshots(): List<LikedSongSnapshot>
+
+    @Query("SELECT id, inLibrary FROM song WHERE inLibrary IS NOT NULL")
+    suspend fun librarySongSnapshots(): List<LibrarySongSnapshot>
+
+    @Query("SELECT id FROM playlist WHERE browseId IS NOT NULL")
+    suspend fun syncedPlaylistIds(): List<String>
+
+    @Query("SELECT playlistId, songId, setVideoId FROM playlist_song_map WHERE playlistId IN (SELECT id FROM playlist WHERE browseId IS NOT NULL) ORDER BY playlistId, position")
+    suspend fun syncedPlaylistEntries(): List<SyncedPlaylistEntrySnapshot>
+
     @RawQuery
     fun raw(supportSQLiteQuery: SupportSQLiteQuery): Int
 
@@ -2091,6 +2207,22 @@ interface DatabaseDao {
         raw("PRAGMA wal_checkpoint(FULL)".toSQLiteQuery())
     }
 }
+
+data class LikedSongSnapshot(
+    val id: String,
+    val likedDate: LocalDateTime?,
+)
+
+data class LibrarySongSnapshot(
+    val id: String,
+    val inLibrary: LocalDateTime,
+)
+
+data class SyncedPlaylistEntrySnapshot(
+    val playlistId: String,
+    val songId: String,
+    val setVideoId: String?,
+)
 
 private val TIMESTAMP_NAME_REGEX = Regex("""^\d{1,2}:\d{2}(:\d{2})?$""")
 

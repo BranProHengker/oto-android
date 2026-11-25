@@ -257,6 +257,8 @@
     <string name="ps_cover_disc_name">Disc name</string>
     <string name="ps_cover_disc_name_desc">Printed on the platter</string>
     <string name="ps_cover_disc_name_placeholder">Leave empty to hide</string>
+    <string name="ps_cover_zoom">Cover zoom</string>
+    <string name="ps_cover_zoom_desc">Slide left to see the whole cover</string>
     <string name="ps_ipod_title">The iPod</string>
     <string name="ps_ipod_body">Body</string>
     <string name="ps_ipod_click_wheel">Click wheel</string>
@@ -293,6 +295,8 @@
     <string name="ps_studio_edit_menu">Edit Menu</string>
     <string name="ps_studio_edit_player">Edit Player</string>
     <string name="ps_studio_hold_to_adjust">Hold to adjust position, tap to edit</string>
+    <string name="ps_module_edit_hint">Tap a part to change it</string>
+    <string name="ps_module_edit_hint_hold">Tap a part to change it, hold to resize it</string>
     <string name="ps_studio_background_n">BACKGROUND - %1$03d</string>
     <string name="ps_studio_style_n">STYLE - %1$03d</string>
     <string name="ps_studio_more_options">Show more option for this cover</string>

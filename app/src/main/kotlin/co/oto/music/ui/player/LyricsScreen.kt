@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -103,6 +104,7 @@ import co.oto.music.constants.AiProviderKey
 import co.oto.music.constants.DeeplApiKey
 import co.oto.music.constants.DeeplFormalityKey
 import co.oto.music.constants.LyricsHighBloomKey
+import co.oto.music.constants.LyricsSoftLightKey
 import co.oto.music.constants.OpenRouterApiKey
 import co.oto.music.constants.OpenRouterBaseUrlKey
 import co.oto.music.constants.OpenRouterModelKey
@@ -234,6 +236,9 @@ fun LyricsScreen(
     // off where the lyrics sit in a panel beside the cover, with no header of their own (the landscape flagship)
     showHeader: Boolean = true,
 
+    // the page sits right on a cover-coloured background, so resting lines can soft-light onto it
+    onCoverBackdrop: Boolean = false,
+
     modifier: Modifier = Modifier,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
@@ -242,12 +247,13 @@ fun LyricsScreen(
 
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val lyricsEntity by playerConnection.currentLyrics.collectAsState(initial = null)
-    val progress by playerConnection.progressState.collectAsState()
-    val lyricsOffsetMs by playerConnection.lyricsOffsetMs.collectAsState()
+    // kept as state rather than read here, so 15 hz position ticks only recalculate the derived line indices
+    val progress = playerConnection.progressState.collectAsState()
+    val lyricsOffsetMs = playerConnection.lyricsOffsetMs.collectAsState()
 
     // frame-accurate, so the sweep, the gap dots and backing vocals glide at the display's rate instead of stepping with the 66ms poller
     val positionProvider = remember(playerConnection) {
-        PlaybackClock({ playerConnection.player }, { playerConnection.lyricsOffsetMs.value.toLong() })
+        PlaybackClock(playerConnection) { playerConnection.lyricsOffsetMs.value.toLong() }
     }
     val sheetDragging by rememberUpdatedState(isSheetDragging)
 
@@ -268,6 +274,7 @@ fun LyricsScreen(
                     .data(thumbnailUrl)
                     .size(100, 100)
                     .allowHardware(false)
+                    .memoryCachePolicy(coil3.request.CachePolicy.DISABLED)
                     .build()
                 val bitmap = context.imageLoader.execute(request).image?.toBitmap()
                 if (bitmap != null) {
@@ -311,11 +318,20 @@ fun LyricsScreen(
     LyricsReadings(lines, mediaMetadata?.id, viewModel.database, lyricsEntity)
 
     val currentIndex by remember(lines, unsynced) {
-        derivedStateOf { if (unsynced) -1 else LyricsUtils.findCurrentLineIndex(lines, progress.position + lyricsOffsetMs) }
+        derivedStateOf { if (unsynced) -1 else LyricsUtils.findCurrentLineIndex(lines, progress.value.position + lyricsOffsetMs.value) }
     }
 
     val anchorIndex by remember(lines, unsynced) {
-        derivedStateOf { if (unsynced) -1 else lyricAnchorIndex(lines, progress.position + lyricsOffsetMs) }
+        derivedStateOf { if (unsynced) -1 else lyricAnchorIndex(lines, progress.value.position + lyricsOffsetMs.value) }
+    }
+
+    // pre-warm line wraps off the main thread once the list has measured, so scrolling past the first
+    // screenful of lines hits the cache instead of running TextMeasurer synchronously on the UI thread
+    LaunchedEffect(lines) {
+        if (lines.isNotEmpty()) {
+            delay(120)
+            withContext(Dispatchers.Default) { SteadyWraps.warmLines(lines) }
+        }
     }
 
     // Every instrumental gap in the song, as its own list row. Building these up front — rather
@@ -347,7 +363,7 @@ fun LyricsScreen(
     var followPlayback by remember { mutableStateOf(true) }
 
     // What the card is showing: the page's copy of it (a line, or the dots of a gap) is what the card grows into.
-    val cardSlot by remember(lines) { derivedStateOf { tickerSlot(lines, progress.position + lyricsOffsetMs) } }
+    val cardSlot by remember(lines) { derivedStateOf { tickerSlot(lines, progress.value.position + lyricsOffsetMs.value) } }
     val cardLine by remember { derivedStateOf { if (cardSlot.kind == TickerSlot.LINE) cardSlot.index else -1 } }
     val cardGap by remember { derivedStateOf { if (cardSlot.kind == TickerSlot.GAP) cardSlot.index else NoCardGap } }
     // its row, read only inside layers so the card moving on doesn't recompose every row
@@ -364,31 +380,43 @@ fun LyricsScreen(
     val stagger = remember(rows) { LyricsStagger(rows.size + 1) }
     LaunchedEffect(stagger) { stagger.run() }
 
-    var isAutoScrolling by remember { mutableStateOf(false) }
-
-    val userScrolling by remember {
-        derivedStateOf { listState.isScrollInProgress && !isAutoScrolling }
+    // reference-counted rather than a single boolean, so collectLatest canceling an older auto-scroll
+    // never clears the flag for the newer auto-scroll that already started
+    var autoScrollCount by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val isDraggedState = listState.interactionSource.collectIsDraggedAsState()
+    val userScrollingState = remember {
+        derivedStateOf { isDraggedState.value || (listState.isScrollInProgress && autoScrollCount == 0) }
+    }
+    val currentMorphing by rememberUpdatedState(isMorphing)
+    val suppressEffectsProvider = remember {
+        { userScrollingState.value || sheetDragging || currentMorphing }
     }
 
-    val suppressEffects = userScrolling || isSheetDragging || isMorphing
-
-    LaunchedEffect(userScrolling) {
-        if (userScrolling) followPlayback = false
+    LaunchedEffect(listState) {
+        snapshotFlow { userScrollingState.value }.collect { scrolling ->
+            if (scrolling) followPlayback = false
+        }
     }
 
-    LaunchedEffect(userScrolling, followPlayback) {
-        if (!followPlayback && !userScrolling) {
-            delay(IdleRecenterDelayMs)
-            followPlayback = true
+    LaunchedEffect(followPlayback, listState) {
+        if (followPlayback) return@LaunchedEffect
+        snapshotFlow { userScrollingState.value }.collectLatest { scrolling ->
+            if (!scrolling) {
+                delay(IdleRecenterDelayMs)
+                followPlayback = true
+            }
         }
     }
 
     var immersive by remember { mutableStateOf(false) }
 
-    LaunchedEffect(userScrolling, immersive) {
-        if (!userScrolling && !immersive) {
-            delay(ImmersiveDelayMs)
-            immersive = true
+    LaunchedEffect(immersive, listState) {
+        if (immersive) return@LaunchedEffect
+        snapshotFlow { userScrollingState.value }.collectLatest { scrolling ->
+            if (!scrolling) {
+                delay(ImmersiveDelayMs)
+                immersive = true
+            }
         }
     }
 
@@ -400,7 +428,7 @@ fun LyricsScreen(
         }.collect { now ->
             val last = previous
             previous = now
-            if (last < 0L || isAutoScrolling) return@collect
+            if (last < 0L || autoScrollCount > 0) return@collect
             val delta = now - last
             if (delta > ScrollDirectionThresholdPx) immersive = true
             else if (delta < -ScrollDirectionThresholdPx) immersive = false
@@ -410,7 +438,8 @@ fun LyricsScreen(
     DisposableEffect(Unit) { onDispose { onImmersiveChange(false) } }
     LaunchedEffect(immersive) { onImmersiveChange(immersive) }
 
-    val immersion by animateFloatAsState(
+    // kept as State so the 420ms hide/show only relayouts the list inset instead of recomposing LyricsScreen every frame
+    val immersion = animateFloatAsState(
         targetValue = if (immersive) 1f else 0f,
         animationSpec = tween(durationMillis = 420, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)),
         label = "lyricsImmersion",
@@ -429,8 +458,8 @@ fun LyricsScreen(
         val minOffsetPx = with(density) { MinPastLineVisibleHeight.toPx() }
         val restingOffset = maxOf(viewportHeight * ActiveLineViewportFraction, minOffsetPx).roundToInt()
 
+        autoScrollCount++
         try {
-        isAutoScrolling = true
 
         // The sheet itself on the move - the page reopening with the player, the list just built
         // and still at its top: put the line straight where it rests. Animating it there stacked
@@ -475,18 +504,25 @@ fun LyricsScreen(
                 }
             }
         } else {
-
+            // Avoid composing dozens of heavy lyric rows along a long animated recenter jump:
+            // jump near the target first, then glide smoothly over the last few rows.
+            val firstVisible = listState.firstVisibleItemIndex
+            if (kotlin.math.abs(targetRow - firstVisible) > 8) {
+                val stagingRow = (targetRow + if (targetRow > firstVisible) -4 else 4)
+                    .coerceIn(0, (rows.size - 1).coerceAtLeast(0))
+                listState.scrollToItem(stagingRow, 0)
+            }
             listState.animateScrollToItem(targetRow, 0)
         }
         } finally {
-            isAutoScrolling = false
+            autoScrollCount = (autoScrollCount - 1).coerceAtLeast(0)
         }
         }
     }
 
     /** Which gap, if any, is happening right now. [NoInterlude] when a line is being sung. */
     val activeInterlude by remember(lines, rows) {
-        derivedStateOf { activeInterludeOf(rows, progress.position + lyricsOffsetMs) }
+        derivedStateOf { activeInterludeOf(rows, progress.value.position + lyricsOffsetMs.value) }
     }
 
     // Only honour {agent:v1}/{agent:v2} when the song actually has more than one voice. A solo
@@ -505,6 +541,19 @@ fun LyricsScreen(
     // the lines' blur by their distance from the sung one is an element blur, the glass blur switch doesn't touch it
     val (lineBlurAllowed) = rememberPreference(co.oto.music.constants.ElementBlurKey, defaultValue = true)
     val (lyricsHighBloom) = rememberPreference(LyricsHighBloomKey, defaultValue = true)
+    val (softLightLyrics) = rememberPreference(LyricsSoftLightKey, defaultValue = true)
+    val currentEnterProgress by rememberUpdatedState(enterProgressProvider)
+    val blend = remember(onCoverBackdrop, softLightLyrics, listState, stagger) {
+        if (onCoverBackdrop && softLightLyrics && SoftLightSupported) {
+            LyricsBackdropBlend(TopFadeFraction, BottomFadeStart) {
+                listState.layoutInfo
+                stagger.observe()
+                currentEnterProgress()
+            }
+        } else {
+            null
+        }
+    }
 
     // Drives the per-line loading dots and lifts the readings out of the way. The button that
     // starts a translation lives in the translation sheet, not here.
@@ -585,9 +634,11 @@ fun LyricsScreen(
                 // its bottom, so lines scrolled behind the bar and the timestamps.
                 // Read in layout, so the immersive toggle doesn't recompose the whole page.
                 .layout { measurable, constraints ->
-                    val inset = (contentBottomInset * (1f - immersion)).coerceAtLeast(0.dp).roundToPx()
+                    val inset = (contentBottomInset * (1f - immersion.value)).coerceAtLeast(0.dp).roundToPx()
                     val inner = constraints.offset(vertical = -inset)
-                    listPadding.heightPx = inner.maxHeight
+                    // keep listPadding derived from the stable container height instead of mutating
+                    // LazyColumn's contentPadding on every frame of the immersion animation
+                    listPadding.heightPx = constraints.maxHeight
                     listPadding.density = this.density
                     val placeable = measurable.measure(inner)
                     layout(
@@ -619,21 +670,27 @@ fun LyricsScreen(
                     userScrollEnabled = true,
                     modifier = Modifier
                         .fillMaxSize()
-
-                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-
-                        .drawWithCache {
-                            val fade = Brush.verticalGradient(
-                                0f to Color.Transparent,
-                                TopFadeFraction to Color.Black,
-                                BottomFadeStart to Color.Black,
-                                1f to Color.Transparent,
-                            )
-                            onDrawWithContent {
-                                drawContent()
-                                drawRect(brush = fade, blendMode = BlendMode.DstIn)
+                        .then(
+                            if (blend != null) {
+                                // no buffer of its own here, it would cut the soft-lit lines off from the background; the rows fade themselves
+                                Modifier.onPlaced { blend.list = it }
+                            } else {
+                                Modifier
+                                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                                    .drawWithCache {
+                                        val fade = Brush.verticalGradient(
+                                            0f to Color.Transparent,
+                                            TopFadeFraction to Color.Black,
+                                            BottomFadeStart to Color.Black,
+                                            1f to Color.Transparent,
+                                        )
+                                        onDrawWithContent {
+                                            drawContent()
+                                            drawRect(brush = fade, blendMode = BlendMode.DstIn)
+                                        }
+                                    }
                             }
-                        },
+                        ),
                 ) {
                     itemsIndexed(
                         items = rows,
@@ -676,7 +733,8 @@ fun LyricsScreen(
                                                 cardToPage = CardToPageLyricScale,
                                             )
                                             if (!flew) applyPageRowEnter(e, listIndex - cardLineRow.coerceAtLeast(0))
-                                        },
+                                        }
+                                        .lyricsEdgeFade(blend),
                                     onDotsStart = if (growsFromCard) {
                                         { at -> dotsStart[0] = at.x; dotsStart[1] = at.y }
                                     } else {
@@ -710,7 +768,7 @@ fun LyricsScreen(
                                     }
                                 }
                                 val state = look.state
-                                val blurStage = if (suppressEffects || !lineBlurAllowed) 0 else look.blurStage
+                                val blurStage = if (!lineBlurAllowed) 0 else look.blurStage
 
                                 val shown = rememberShownLyric(entry)
                                 val rowIndex = rowOfLine[index]
@@ -762,12 +820,14 @@ fun LyricsScreen(
                                             if (!flew) applyPageRowEnter(e, rowIndex - cardLineRow.coerceAtLeast(0))
                                             // the line held for sharing is out flying; no copy stays behind
                                             shareSession?.let { alpha *= it.lyricsLineAlpha(index) }
+                                            // a buffer here would cut the soft light off from the background while the row fades in
+                                            if (blend != null) compositingStrategy = CompositingStrategy.ModulateAlpha
                                         }
                                         .onPlaced { lineCoords[index] = it },
                                     entry = shown.entry,
                                     state = state,
                                     blurStage = blurStage,
-                                    suppressEffects = suppressEffects,
+                                    suppressEffectsProvider = suppressEffectsProvider,
                                     positionProvider = positionProvider,
                                     accentColor = accent,
                                     subLine = shown.subLine,
@@ -787,9 +847,10 @@ fun LyricsScreen(
                                     translationLoading = isTranslating && shown.translation == null,
                                     translation = shown.translation,
                                     alignment = lineAlignment,
-                                    waveEnabled = lyricsWaveAnimation && !suppressEffects,
+                                    waveEnabled = lyricsWaveAnimation,
                                     motionStyle = motionStyle,
                                     highBloom = lyricsHighBloom,
+                                    blend = blend,
                                     onClick = {
                                         // Untimed lines have nowhere to seek to.
                                         if (!unsynced) {
@@ -813,11 +874,13 @@ fun LyricsScreen(
                             LyricsSourceFooter(
                                 provider = provider,
                                 onSwitchSource = onSwitchSource,
+                                rawLyrics = lyricsEntity?.lyrics,
                                 modifier = Modifier
                                     .graphicsLayer {
                                         translationY = stagger.lagOf(rows.size)
                                         applyPageRowEnter(enterProgressProvider(), rows.size - cardLineRow.coerceAtLeast(0))
                                     }
+                                    .lyricsEdgeFade(blend)
                                     .padding(horizontal = LyricsHeaderArtX)
                                     .padding(top = 36.dp),
                             )

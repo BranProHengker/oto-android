@@ -9,6 +9,7 @@ import androidx.compose.runtime.DisposableEffect
 import co.oto.music.ui.utils.rememberSettled
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -36,7 +37,10 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
+import co.oto.music.constants.CanvasBestQualityKey
 import co.oto.music.utils.followAppProxy
+import co.oto.music.utils.rememberDataSaverActive
+import co.oto.music.utils.rememberPreference
 import com.music.innertube.models.YouTubeClient
 import okhttp3.OkHttpClient
 import java.util.Locale
@@ -70,11 +74,10 @@ private const val CanvasSettleMs = 700L
 private const val CanvasSamplePx = 32
 private const val CanvasSampleMs = 1_500L
 
-// one shared client for every animated cover so song changes don't pile up connection pools
+// one shared client for every animated cover riding the app's shared dispatcher and connection pool
 private val CanvasHttpClient: OkHttpClient by lazy {
-    OkHttpClient
-        .Builder()
-        .followAppProxy()
+    co.oto.music.utils.AppProxy.sharedClient
+        .newBuilder()
         .addInterceptor { chain ->
             val request = chain.request()
             val host = request.url.host
@@ -129,6 +132,10 @@ fun CanvasArtworkPlayer(
     onReadyChange: ((Boolean) -> Unit)? = null,
     // the flagship's moving backdrop, fed four tones from a tiny copy of the playing frame
     onFrameColors: ((List<androidx.compose.ui.graphics.Color>) -> Unit)? = null,
+    // told the short side of the picture playing, and 0 once it's gone, so the player's menu can say what it shows
+    onPlayingSize: ((Int) -> Unit)? = null,
+    // shows the whole picture with room round it instead of zooming past the box, for a module's cover that isn't the video's shape
+    fit: Boolean = false,
 ) {
     val context = LocalContext.current
     val primary = primaryUrl?.takeIf { it.isNotBlank() }
@@ -137,12 +144,23 @@ fun CanvasArtworkPlayer(
     val initial = rememberSettled(primary ?: fallback ?: return, CanvasSettleMs) ?: return
     var currentUrl by remember(initial) { mutableStateOf(initial) }
     var isVideoReady by remember(initial) { mutableStateOf(false) }
+    var playingSide by remember(initial) { mutableIntStateOf(0) }
     val currentOnReadyChange by rememberUpdatedState(onReadyChange)
-    // nothing to show with the app in the background, and a looping canvas kept decoding there for nobody
+    val currentOnPlayingSize by rememberUpdatedState(onPlayingSize)
+    // data saver keeps covers on the light version even with the sharpest one picked
+    val bestQuality = rememberPreference(CanvasBestQualityKey, defaultValue = true).value && !rememberDataSaverActive()
+    // release the canvas decoder and texture surface while the app is backgrounded so media codecs and gl buffers drop to zero
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    val shouldPlay = isPlaying && lifecycle.isAtLeast(Lifecycle.State.STARTED)
+    if (!lifecycle.isAtLeast(Lifecycle.State.STARTED)) return
+    val shouldPlay = isPlaying
     LaunchedEffect(isVideoReady) { currentOnReadyChange?.invoke(isVideoReady) }
-    DisposableEffect(Unit) { onDispose { currentOnReadyChange?.invoke(false) } }
+    LaunchedEffect(isVideoReady, playingSide) { currentOnPlayingSize?.invoke(if (isVideoReady) playingSide else 0) }
+    DisposableEffect(Unit) {
+        onDispose {
+            currentOnReadyChange?.invoke(false)
+            currentOnPlayingSize?.invoke(0)
+        }
+    }
 
     val okHttpClient = CanvasHttpClient
     val mediaSourceFactory =
@@ -177,12 +195,13 @@ fun CanvasArtworkPlayer(
     // the texture outlives a session, so a new url's player draws into the same view
     val texture = remember { CanvasTexture() }
     val session = remember(initial) {
-        CanvasVideoSession(context, mediaSourceFactory, shouldPlay).also { texture.session = it }
+        CanvasVideoSession(context, mediaSourceFactory, shouldPlay, bestQuality).also { texture.session = it }
     }
 
     LaunchedEffect(shouldPlay) {
         session.setPlaying(shouldPlay)
     }
+    LaunchedEffect(session, bestQuality) { session.setBestQuality(bestQuality) }
 
     DisposableEffect(session, primary, fallback) {
         val listener =
@@ -208,6 +227,7 @@ fun CanvasArtworkPlayer(
                         // callbacks land on the canvas thread, but the view only takes changes on the main one
                         aspectRatioFrameLayout.post {
                             aspectRatioFrameLayout.setAspectRatio(videoSize.width.toFloat() / videoSize.height)
+                            playingSide = minOf(videoSize.width, videoSize.height)
                         }
                     }
                 }
@@ -274,6 +294,7 @@ fun CanvasArtworkPlayer(
             frame.apply { if (childCount == 0) addView(aspectRatioFrameLayout) }
         },
         update = { view ->
+            aspectRatioFrameLayout.resizeMode = if (fit) AspectRatioFrameLayout.RESIZE_MODE_FIT else AspectRatioFrameLayout.RESIZE_MODE_ZOOM
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 view.setRenderEffect(
@@ -294,6 +315,8 @@ internal fun canvasMimeType(url: String, isFallback: Boolean = false): String {
     return when {
         lower.contains(".m3u8") || lower.split('?').first().endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
         lower.contains(".mp4") -> MimeTypes.VIDEO_MP4
+        // a module's own loop can be webm, which isn't a playlist either
+        lower.contains(".webm") -> MimeTypes.VIDEO_WEBM
         isFallback -> MimeTypes.VIDEO_MP4
         else -> MimeTypes.APPLICATION_M3U8
     }
@@ -309,6 +332,8 @@ internal class CanvasVideoSession(
     context: Context,
     mediaSourceFactory: MediaSource.Factory,
     playing: Boolean,
+    // the sharpest version the phone's decoder can take, instead of a small one that starts fast
+    private var bestQuality: Boolean = false,
 ) {
     private val handler = CanvasVideoThread.handler
     private var player: ExoPlayer? = null
@@ -319,17 +344,18 @@ internal class CanvasVideoSession(
 
     init {
         handler.post {
+            // looping canvas clips are a few seconds long, so cap buffers instead of claiming media3's default 131 mb video budget
+            val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(2_000, 6_000, 500, 1_000)
+                .setTargetBufferBytes(4 * 1024 * 1024)
+                .build()
             player = ExoPlayer.Builder(context)
                 .setLooper(handler.looper)
+                .setLoadControl(loadControl)
                 .setMediaSourceFactory(mediaSourceFactory)
                 .build()
                 .apply {
-                    trackSelectionParameters = trackSelectionParameters
-                        .buildUpon()
-                        .setMaxVideoSize(1280, 1280)
-                        .setMaxVideoBitrate(2_500_000)
-                        .setForceHighestSupportedBitrate(false)
-                        .build()
+                    applyQuality(bestQuality)
                     setAudioAttributes(
                         AudioAttributes
                             .Builder()
@@ -349,6 +375,31 @@ internal class CanvasVideoSession(
 
     fun setPlaying(playing: Boolean) = handler.post {
         player?.let { if (it.playWhenReady != playing) it.playWhenReady = playing }
+    }
+
+    // a change switches the picture where it plays, no reload
+    fun setBestQuality(best: Boolean) = handler.post {
+        if (best == bestQuality) return@post
+        bestQuality = best
+        player?.applyQuality(best)
+    }
+
+    // apple sends sizes up to 4k, and exoplayer drops anything bigger than the screen unless told not to
+    private fun ExoPlayer.applyQuality(best: Boolean) {
+        trackSelectionParameters = trackSelectionParameters.buildUpon().apply {
+            if (best) {
+                clearVideoSizeConstraints()
+                setMaxVideoBitrate(Int.MAX_VALUE)
+                clearViewportSizeConstraints()
+                // the biggest picture the decoder can play, at the best bitrate for that size; a size it can't play is skipped
+                setForceHighestSupportedBitrate(true)
+            } else {
+                setMaxVideoSize(1280, 1280)
+                setMaxVideoBitrate(2_500_000)
+                setViewportSizeToPhysicalDisplaySize(true)
+                setForceHighestSupportedBitrate(false)
+            }
+        }.build()
     }
 
     fun addListener(listener: Player.Listener) = handler.post { player?.addListener(listener) }

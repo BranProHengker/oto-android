@@ -1,6 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.android.build.api.dsl.ApplicationExtension
 import java.util.Properties
+import java.security.KeyStore
 import java.security.MessageDigest
 import java.net.URL
 
@@ -27,8 +28,8 @@ extensions.configure<ApplicationExtension> {
         applicationId = "co.oto.music"
         minSdk = 24
         targetSdk = 37
-        versionCode = 20
-        versionName = "1.2.5"
+        versionCode = 21
+        versionName = "1.2.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -39,6 +40,77 @@ extensions.configure<ApplicationExtension> {
 
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastFmKey\"")
         buildConfigField("String", "LASTFM_SECRET", "\"$lastFmSecret\"")
+
+        // the module store key stays out of BuildConfig/DEX and goes straight into a generated native C++ header with a per-build mask
+        val storeKey = localProperties.getProperty("MODULE_STORE_KEY") ?: System.getenv("MODULE_STORE_KEY") ?: ""
+        val hasReleaseKeystore = System.getenv("STORE_PASSWORD") != null &&
+            System.getenv("KEY_ALIAS") != null &&
+            System.getenv("KEY_PASSWORD") != null &&
+            file("keystore/release.keystore").exists()
+        val expectedCertBytes: ByteArray = when {
+            hasReleaseKeystore -> runCatching {
+                val ks = KeyStore.getInstance(KeyStore.getDefaultType())
+                file("keystore/release.keystore").inputStream().use { ks.load(it, System.getenv("STORE_PASSWORD").toCharArray()) }
+                val cert = ks.getCertificate(System.getenv("KEY_ALIAS"))
+                MessageDigest.getInstance("SHA-256").digest(cert.encoded)
+            }.getOrDefault(ByteArray(0))
+            else -> (localProperties.getProperty("OFFICIAL_SIGNING_CERT_SHA256") ?: System.getenv("OFFICIAL_SIGNING_CERT_SHA256") ?: "")
+                .trim().replace(":", "").lowercase()
+                .takeIf { it.length == 64 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }
+                ?.chunked(2)?.map { it.toInt(16).toByte() }?.toByteArray() ?: ByteArray(0)
+        }
+        val storeKeyBytes = storeKey.toByteArray(Charsets.UTF_8)
+        val storeGuardDir = layout.buildDirectory.dir("generated/store_guard").get().asFile
+        storeGuardDir.mkdirs()
+        fun deriveMask(seed: String, length: Int): ByteArray {
+            if (length <= 0) return ByteArray(0)
+            val out = ByteArray(length)
+            val sha = MessageDigest.getInstance("SHA-256")
+            var offset = 0
+            var block = 0
+            while (offset < length) {
+                val digest = sha.digest("$seed#$block".toByteArray(Charsets.UTF_8))
+                val take = minOf(digest.size, length - offset)
+                System.arraycopy(digest, 0, out, offset, take)
+                offset += take
+                block++
+            }
+            return out
+        }
+        fun toCArray(bytes: ByteArray): String =
+            if (bytes.isEmpty()) "0" else bytes.joinToString(", ") { "0x%02xu".format(it.toInt() and 0xff) }
+        val keyMask = deriveMask("store-key:${storeKey.length}:${storeKey.hashCode()}", storeKeyBytes.size)
+        val maskedKey = ByteArray(storeKeyBytes.size) { i ->
+            ((storeKeyBytes[i].toInt() xor keyMask[i].toInt() xor (i * 0x5A + 0xA5)) and 0xff).toByte()
+        }
+        val certMask = deriveMask("store-cert:${expectedCertBytes.contentHashCode()}", 32)
+        val maskedCert = ByteArray(32) { i ->
+            val raw = if (i < expectedCertBytes.size) expectedCertBytes[i].toInt() else 0
+            ((raw xor certMask[i].toInt() xor (i * 0x3D + 0x71)) and 0xff).toByte()
+        }
+        val headerContent = buildString {
+            appendLine("#pragma once")
+            appendLine("#include <cstddef>")
+            appendLine("#include <cstdint>")
+            appendLine("namespace {")
+            appendLine("constexpr size_t kStoreKeyLen = ${storeKeyBytes.size}u;")
+            appendLine("constexpr uint8_t kStoreMask[${maxOf(1, keyMask.size)}] = { ${toCArray(keyMask)} };")
+            appendLine("constexpr uint8_t kStoreData[${maxOf(1, maskedKey.size)}] = { ${toCArray(maskedKey)} };")
+            appendLine("constexpr int kRequireReleasePackage = ${if (hasReleaseKeystore) 1 else 0};")
+            appendLine("constexpr int kHasExpectedCert = ${if (expectedCertBytes.size == 32) 1 else 0};")
+            appendLine("constexpr uint8_t kExpectedCertMask[32] = { ${toCArray(certMask)} };")
+            appendLine("constexpr uint8_t kExpectedCertData[32] = { ${toCArray(maskedCert)} };")
+            appendLine("}")
+        }
+        val headerFile = File(storeGuardDir, "store_guard_data.h")
+        if (!headerFile.exists() || headerFile.readText() != headerContent) {
+            headerFile.writeText(headerContent)
+        }
+        externalNativeBuild {
+            cmake {
+                arguments += "-DSTORE_GUARD_DIR=${storeGuardDir.absolutePath}"
+            }
+        }
 
         // Libre.fm the same way. It takes any 32-character key and never checks the secret, so a
         // build without its own (a fork, a CI run with no secrets) gets one made from the app id
@@ -60,6 +132,12 @@ extensions.configure<ApplicationExtension> {
         buildConfigField("String", "DISCORD_CLIENT_ID", "\"$discordClientId\"")
         manifestPlaceholders["discordRedirectScheme"] =
             if (discordClientId.isNotBlank()) "discord-$discordClientId" else "oto-discord-unset"
+
+        // the dropbox and microsoft apps cloud backups sign in through (setup in docs/notes/backup.md), a blank one shows "not set up"
+        val dropboxAppKey = localProperties.getProperty("DROPBOX_APP_KEY") ?: System.getenv("DROPBOX_APP_KEY") ?: ""
+        val oneDriveClientId = localProperties.getProperty("ONEDRIVE_CLIENT_ID") ?: System.getenv("ONEDRIVE_CLIENT_ID") ?: ""
+        buildConfigField("String", "DROPBOX_APP_KEY", "\"$dropboxAppKey\"")
+        buildConfigField("String", "ONEDRIVE_CLIENT_ID", "\"$oneDriveClientId\"")
 
 //add nightly build label support
         val isNightly = project.hasProperty("nightly") && project.property("nightly") == "true"
@@ -154,7 +232,7 @@ extensions.configure<ApplicationExtension> {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            isCrunchPngs = false
+            isCrunchPngs = true
             isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -265,6 +343,16 @@ extensions.configure<ApplicationExtension> {
             excludes += "META-INF/LICENSE.md"
             excludes += "META-INF/INDEX.LIST"
             excludes += "META-INF/io.netty.versions.properties"
+            excludes += "META-INF/*.version"
+            excludes += "META-INF/CHANGES"
+            excludes += "META-INF/README.md"
+            excludes += "META-INF/proguard/**"
+            excludes += "META-INF/maven/**"
+            excludes += "META-INF/com.android.tools/**"
+            excludes += "DebugProbesKt.bin"
+            excludes += "google/protobuf/**"
+            excludes += "src/google/protobuf/**"
+            excludes += "**/*.proto"
         }
     }
 }
@@ -369,9 +457,6 @@ dependencies {
     implementation(libs.lifecycle.process)
 
     implementation(libs.material3)
-    implementation(libs.androidx.adaptive)
-    implementation(libs.androidx.adaptive.layout)
-    implementation(libs.androidx.adaptive.navigation)
     implementation(libs.palette)
     implementation(libs.materialKolor)
 
@@ -380,8 +465,6 @@ dependencies {
     implementation(libs.coil)
     implementation(libs.coil.svg)
     implementation(libs.coil.network.okhttp)
-
-    implementation(libs.ucrop)
 
     implementation(libs.shimmer)
 
@@ -410,8 +493,6 @@ dependencies {
     implementation(libs.tinypinyin)
     ksp(libs.room.compiler)
     implementation(libs.room.ktx)
-
-    implementation(libs.apache.lang3)
 
     implementation(libs.hilt)
     implementation(libs.jsoup)
@@ -453,7 +534,6 @@ dependencies {
     coreLibraryDesugaring(libs.desugaring)
     implementation(libs.timber)
     implementation(libs.smoothCorner)
-    implementation(libs.lottie.compose)
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation(libs.work.runtime.ktx)
     implementation(libs.androidx.core.splashscreen)

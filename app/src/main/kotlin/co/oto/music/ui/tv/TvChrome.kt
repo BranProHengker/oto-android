@@ -166,7 +166,7 @@ internal fun TvNowPlayingPill(
     }
 }
 
-// the places down the right edge, playlists gets its own stop so you can reach it straight from the rail
+// the places down the right edge; playlists live in the library
 internal enum class TvTab(val route: String, val icon: Any, val label: Int) {
     Home(TvRoutes.Home, R.drawable.nav_oto_outline, R.string.home),
     Search(TvRoutes.Search, R.raw.search, R.string.search),

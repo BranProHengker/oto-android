@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import co.oto.music.R
 import co.oto.music.lyrics.EmbeddedLyrics
 import co.oto.music.lyrics.LyricsProviderRegistry
+import co.oto.music.lyrics.UnisonLyricsProvider
 import co.oto.music.ui.theme.InterFontFamily
 import co.oto.music.ui.utils.safeOpenUri
 import co.oto.music.viewmodels.LyricsMenuViewModel
@@ -57,18 +58,15 @@ private val LabelColor = Color.White.copy(alpha = 0.55f)
 private val ValueColor = Color.White.copy(alpha = 0.38f)
 private val StarColor = Color(0xFFFFD60A)
 
-private val FooterTextStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontSize = 17.sp,
-    letterSpacing = (-0.01).em,
-    color = ValueColor,
+private val FooterTextStyleCache = co.oto.music.ui.theme.globalTextStyle(
+    TextStyle(fontSize = 17.sp, letterSpacing = (-0.01).em, color = ValueColor),
 )
+private val FooterTextStyle: TextStyle get() = FooterTextStyleCache.current()
 
-private val ButtonTextStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
-    fontSize = 13.sp,
+private val ButtonTextStyleCache = co.oto.music.ui.theme.globalTextStyle(
+    TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp),
 )
+private val ButtonTextStyle: TextStyle get() = ButtonTextStyleCache.current()
 
 /**
  * The end of the lyrics page: where these lyrics came from, a button to pick another source and,
@@ -79,23 +77,37 @@ internal fun LyricsSourceFooter(
     provider: String,
     onSwitchSource: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    rawLyrics: String? = null,
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val project = remember(provider) { LyricsProviderRegistry.getProject(provider) }
     val website = remember(provider) { LyricsProviderRegistry.getWebsite(provider) }
+    // unison's license asks for both the song page and the submitter's profile to be linked here
+    val unisonCredit = remember(provider, rawLyrics) {
+        if (provider == UnisonLyricsProvider.name) UnisonLyricsProvider.parseCredit(rawLyrics) else null
+    }
+    val sourceUrl = unisonCredit?.songUrl ?: website
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             LabeledText(
                 label = stringResource(R.string.pc_lyrics_source),
                 value = sourceName(provider),
-                onValueClick = website?.let { url -> { uriHandler.safeOpenUri(context, url) } },
+                onValueClick = sourceUrl?.let { url -> { uriHandler.safeOpenUri(context, url) } },
             )
             if (onSwitchSource != null) {
                 Spacer(modifier = Modifier.width(10.dp))
                 SwitchSourceButton(onClick = onSwitchSource)
             }
+        }
+        val submitterName = unisonCredit?.submitterName
+        if (submitterName != null) {
+            LabeledText(
+                label = stringResource(R.string.pc_lyrics_submitted_by),
+                value = submitterName,
+                onValueClick = unisonCredit.submitterUrl?.let { url -> { uriHandler.safeOpenUri(context, url) } },
+            )
         }
         if (project != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {

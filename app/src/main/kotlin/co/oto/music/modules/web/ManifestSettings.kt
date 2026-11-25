@@ -3,6 +3,7 @@
 package co.oto.music.modules.web
 
 import co.oto.music.module.ModuleField
+import co.oto.music.modules.security.ModuleUrlGuard
 import co.oto.music.modules.skin.SkinGlass
 import java.io.File
 
@@ -11,6 +12,9 @@ internal class ManifestSettings(manifest: WebModuleManifest, skip: Set<String> =
     private val settings = manifest.settings.filter { it.key.isNotBlank() && it.key.lowercase() !in skip }
 
     val fields: List<ModuleField> = settings.map { it.toField() }
+
+    /** the settings drawn as sliders, by key */
+    val ranges: Map<String, FieldRange> = settings.mapNotNull { setting -> setting.range?.let { setting.key to it } }.toMap()
 
     @Volatile
     var values: Map<String, String> = emptyMap()
@@ -32,14 +36,28 @@ internal class ManifestSettings(manifest: WebModuleManifest, skip: Set<String> =
     }
 }
 
-/** a picture or font a module names: a link as it is, a path from the module's zip, or a path next to a link module's manifest */
+/** a slider's ends and its notch, [step] null for a smooth one */
+data class FieldRange(val start: Float, val end: Float, val step: Float?)
+
+/** a module whose settings include sliders, which mochy draws from its manifest; the module api itself only knows text, lists and switches */
+internal interface FieldRanges {
+    val ranges: Map<String, FieldRange>
+}
+
 internal fun resolveModulePath(path: String?, files: File?, base: String?): Any? {
     val name = path?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    if (name.startsWith("https://") || name.startsWith("http://")) return name
-    // plain string work, no disk: this runs while things draw, and a path can't climb out of the module's folder
-    val inside = name.trimStart('/').takeIf { ".." !in it.split('/') } ?: return null
-    if (files != null) return File(files, inside)
-    return base?.let { "$it/$inside" }
+    if (name.startsWith("https://") || name.startsWith("http://")) {
+        return name.takeIf { ModuleUrlGuard.isSafeRemoteUrl(it) }
+    }
+    if ('\\' in name || '\u0000' in name) return null
+    val inside = name.trimStart('/').takeIf { p -> p.isNotEmpty() && p.split('/').none { it == ".." || it == "." || it.isEmpty() } } ?: return null
+    if (files != null) {
+        val candidate = File(files, inside)
+        val rootPath = runCatching { files.canonicalPath }.getOrNull() ?: return null
+        val targetPath = runCatching { candidate.canonicalPath }.getOrNull() ?: return null
+        return candidate.takeIf { targetPath.startsWith(rootPath.trimEnd(File.separatorChar) + File.separatorChar) }
+    }
+    return base?.let { "$it/$inside" }?.takeIf { ModuleUrlGuard.isSafeRemoteUrl(it) }
 }
 
 /** the same as text, the way the module api carries a picture: a link, or a file's own path */

@@ -313,6 +313,29 @@ interface LookModule : OtoModule {
     val look: Map<String, String>
 }
 
+/** a module that renders live 32-bit argb frames into a player block (games, emulators, visualizers) */
+interface SurfaceModule : OtoModule {
+    /** starts the engine for [assetPath] with saves in [dataDir] and optional [extraPaths]; 0 ready, 1 another asset loaded, -1 error */
+    fun surfaceStart(assetPath: String, dataDir: String, extraPaths: List<String> = emptyList()): Int
+
+    /** framebuffer width and height in pixels as a two-element array */
+    fun surfaceSize(): IntArray
+
+    /** advances one engine tick; false once the engine hits a fatal error */
+    fun surfaceTick(): Boolean
+
+    /** fills [pixels] with the latest 0xAARRGGBB frame when newer than [lastSeq], returning the new sequence number */
+    fun surfaceCopyFrame(pixels: IntArray, lastSeq: Long): Long
+
+    fun surfaceSetPaused(paused: Boolean)
+
+    fun surfaceKey(keyCode: Int, pressed: Boolean)
+
+    fun surfaceTurn(delta: Int)
+
+    fun surfaceLastError(): String
+}
+
 /** the only settings a look may change, so a module can restyle oto but never touch accounts, network or playback */
 object LookSetting {
     /** a player style's name: FLAGSHIP, CLASSIC, TURNTABLE, VIDEO, IPOD, POSTER, TIMELINE, LYRICS */
@@ -325,6 +348,8 @@ object LookSetting {
     const val COVER_ROUNDING = "thumbnailCornerRadius"
     /** MOTION, LEGACY, BORING or PLAIN */
     const val LYRICS_MOTION = "lyricsMotionStyle"
+    /** true or false: whether blur is enabled across mochy */
+    const val BLUR = "blur"
     /** LOW or HIGH */
     const val BLUR_QUALITY = "blurQuality"
     /** glass blur radius in px, 10 to 50 */

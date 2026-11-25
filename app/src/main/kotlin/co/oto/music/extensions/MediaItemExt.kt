@@ -3,11 +3,11 @@
 package co.oto.music.extensions
 
 import android.os.Bundle
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata.MEDIA_TYPE_MUSIC
 import com.music.innertube.models.SongItem
 import co.oto.music.db.entities.Song
+import co.oto.music.importer.LocalArtwork
 import co.oto.music.models.MediaMetadata
 import co.oto.music.models.toMediaMetadata
 import co.oto.music.songedit.SongEdits
@@ -25,7 +25,8 @@ fun Song.toMediaItem() = MediaItem.Builder()
             .setTitle(song.title)
             .setSubtitle(artists.joinToString { it.name })
             .setArtist(artists.joinToString { it.name })
-            .setArtworkUri(song.thumbnailUrl?.toUri())
+            // a local cover goes out as a link android auto and widgets can open, not a file inside mochy's own folder
+            .setArtworkUri(LocalArtwork.shareableUri(song.thumbnailUrl))
             .setAlbumTitle(song.albumName)
             .setAlbumArtist(artists.firstOrNull()?.name)
             .setDisplayTitle(song.title)
@@ -55,7 +56,7 @@ private fun MediaMetadata.buildMediaItem() = MediaItem.Builder()
             .setTitle(title)
             .setSubtitle(artists.joinToString { it.name })
             .setArtist(artists.joinToString { it.name })
-            .setArtworkUri(thumbnailUrl?.toUri())
+            .setArtworkUri(LocalArtwork.shareableUri(thumbnailUrl))
             .setAlbumTitle(album?.title)
             .setAlbumArtist(artists.firstOrNull()?.name)
             .setDisplayTitle(title)

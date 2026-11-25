@@ -1021,6 +1021,13 @@
                 android:resource="@xml/provider_paths" />
         </provider>
 
+        <!-- local songs' covers for Android Auto, widgets and the lock screen, which can't open files in Mochy's own folder; read only, covers folder only -->
+        <provider
+            android:name="co.oto.music.importer.LocalArtworkProvider"
+            android:authorities="${applicationId}.localartwork"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
         <provider
             android:name="com.dpi.DensityScaler"
             android:authorities="${applicationId}.com.dpi.DensityScaler"
@@ -1046,6 +1053,25 @@
             </intent-filter>
         </activity>
 
+        <!-- dropbox's and onedrive's sign-in pages send the browser back here for cloud backups -->
+        <activity
+            android:name=".backup.CloudLoginActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="mochy-backup" />
+            </intent-filter>
+        </activity>
+
         <!-- the module feed's discord sign-in sends the browser back here with a session -->
         <activity
             android:name=".modules.browser.ModuleBrowserLoginActivity"
@@ -1064,11 +1090,6 @@
                 <data android:scheme="oto-modules" android:host="signed-in" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name="com.yalantis.ucrop.UCropActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <service
             android:name=".playback.MusicService"
@@ -1186,6 +1207,46 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/turntable_widget_info" />
+        </receiver>
+
+        <!-- Now playing widgets: 2x2 card, 4x1 pill, 4x2 card -->
+        <receiver
+            android:name=".widget.NowPlaying2x2WidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_np_2x2">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/np_2x2_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.NowPlaying4x1WidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_np_4x1">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/np_4x1_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.NowPlaying4x2WidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_np_4x2">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/np_4x2_widget_info" />
         </receiver>
 
         <!-- Google Cast Options Provider -->

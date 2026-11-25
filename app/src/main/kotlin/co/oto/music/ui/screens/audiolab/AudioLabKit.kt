@@ -60,6 +60,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,10 +70,12 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -87,6 +90,7 @@ import co.oto.music.ui.component.AppSwitch
 import co.oto.music.ui.component.DefaultPlayerSeekBarSlider
 import co.oto.music.ui.component.LocalNavAnimatedContentScope
 import co.oto.music.ui.component.damageBoundary
+import co.oto.music.ui.component.reveal
 import co.oto.music.ui.theme.InterFontFamily
 import kotlinx.coroutines.flow.first
 import co.oto.music.ui.component.RemoteFocus
@@ -158,26 +162,62 @@ fun LabToggleRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     leadingDot: Boolean = false,
+    highlightKey: String? = null,
 ) {
     val (hideDescriptions) = co.oto.music.utils.rememberPreference(
         co.oto.music.constants.HideSettingsDescriptionsKey,
         defaultValue = true,
     )
+    val requester = remember { BringIntoViewRequester() }
+    val settingsScroll = co.oto.music.ui.component.LocalSettingsScroll.current
+    val density = LocalDensity.current
+    val placement = remember { co.oto.music.ui.component.SettingsPlacement() }
+    LaunchedEffect(highlightKey) {
+        if (highlightKey == null) return@LaunchedEffect
+        snapshotFlow { co.oto.music.ui.component.SettingsHighlight.pending }.collect { pending ->
+            if (pending != highlightKey) return@collect
+            co.oto.music.ui.component.SettingsHighlight.pending = null
+            co.oto.music.ui.component.SettingsHighlight.active = highlightKey
+            kotlinx.coroutines.delay(320)
+            val target = placement.coords
+            if (settingsScroll != null && target != null) {
+                settingsScroll.reveal(target, density)
+            } else {
+                requester.bringIntoView()
+            }
+            kotlinx.coroutines.delay(2400)
+            if (co.oto.music.ui.component.SettingsHighlight.active == highlightKey) {
+                co.oto.music.ui.component.SettingsHighlight.active = null
+            }
+        }
+    }
+    val isFlashing = highlightKey != null && co.oto.music.ui.component.SettingsHighlight.active == highlightKey
+    val highlightAlpha by animateFloatAsState(
+        targetValue = if (isFlashing) 1f else 0f,
+        animationSpec = tween(durationMillis = 450),
+        label = "labHighlight",
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(if (highlightKey != null) Modifier.bringIntoViewRequester(requester).onPlaced { placement.coords = it } else Modifier)
             .clip(RoundedCornerShape(16.dp))
+            .drawBehind {
+                if (highlightAlpha > 0.01f) {
+                    drawRect(color = Color.White.copy(alpha = 0.16f * highlightAlpha))
+                }
+            }
             .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .padding(horizontal = 6.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leadingDot) {
-            val dot by animateColorAsState(if (checked) Color.White else Color(0xFFD9D9DE), tween(200), label = "dot")
+            val dot = animateColorAsState(if (checked) Color.White else Color(0xFFD9D9DE), tween(200), label = "dot")
             Box(
                 Modifier
                     .size(20.dp)
                     .clip(CircleShape)
-                    .background(dot)
+                    .drawBehind { drawRect(dot.value) }
             )
             Spacer(Modifier.width(12.dp))
         }
@@ -321,6 +361,7 @@ fun LabChips(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     onLongPress: ((String) -> Unit)? = null,
+    leading: @Composable RowScope.() -> Unit = {},
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
@@ -328,32 +369,38 @@ fun LabChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        leading()
         chips.forEach { chip ->
-            val selected = chip.key == selectedKey
-            val bg by animateColorAsState(if (selected) Color.White else LabColors.Chip, tween(180), label = "chipBg")
-            val fg by animateColorAsState(if (selected) Color.Black else Color.White, tween(180), label = "chipFg")
-            val interaction = remember { MutableInteractionSource() }
-            Row(
-                modifier = Modifier
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(19.dp))
-                    .background(bg)
-                    .then(
-                        if (onLongPress != null) Modifier.combinedClickableCompat(
-                            interaction, onClick = { onSelect(chip.key) }, onLongClick = { onLongPress(chip.key) },
-                        ) else Modifier.clickable(interaction, null) { onSelect(chip.key) }
-                    )
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (chip.dot != null) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(chip.dot))
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(chip.label, fontFamily = InterFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = fg, maxLines = 1)
-            }
+            // keyed, so taking a chip out of the middle doesn't hand its colour to the one after it
+            key(chip.key) { LabChipPill(chip, chip.key == selectedKey, onSelect, onLongPress) }
         }
         trailing()
+    }
+}
+
+@Composable
+private fun LabChipPill(chip: LabChip, selected: Boolean, onSelect: (String) -> Unit, onLongPress: ((String) -> Unit)?) {
+    val bg by animateColorAsState(if (selected) Color.White else LabColors.Chip, tween(180), label = "chipBg")
+    val fg by animateColorAsState(if (selected) Color.Black else Color.White, tween(180), label = "chipFg")
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(19.dp))
+            .background(bg)
+            .then(
+                if (onLongPress != null) Modifier.combinedClickableCompat(
+                    interaction, onClick = { onSelect(chip.key) }, onLongClick = { onLongPress(chip.key) },
+                ) else Modifier.clickable(interaction, null) { onSelect(chip.key) }
+            )
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (chip.dot != null) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(chip.dot))
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(chip.label, fontFamily = InterFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = fg, maxLines = 1)
     }
 }
 

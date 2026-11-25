@@ -120,14 +120,9 @@ fun YouTubeSongMenu(
 
     AddToPlaylistDialog(
         isVisible = showChoosePlaylistDialog,
-        onGetSong = { playlist ->
+        onGetSong = {
             database.withTransaction {
                 insert(song.toMediaMetadata())
-            }
-            coroutineScope.launch(Dispatchers.IO) {
-                playlist.playlist.browseId?.let { browseId ->
-                    YouTube.addToPlaylist(browseId, song.id)
-                }
             }
             listOf(song.id)
         },
@@ -355,7 +350,11 @@ fun YouTubeSongMenu(
                                 )
                             },
                             onClick = {
-                                playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+                                if (song.id == playerConnection.mediaMetadata.value?.id) {
+                                    playerConnection.startRadioSeamlessly()
+                                } else {
+                                    playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+                                }
                                 onDismiss()
                             }
                         )

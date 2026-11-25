@@ -11,6 +11,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import co.oto.music.constants.AudioPassMode
+import co.oto.music.playback.audio.AudioDecoderPolicy
 import co.oto.music.playback.audio.AudioOutputs
 import co.oto.music.playback.audio.UsbDacReader
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,7 +67,7 @@ class AudioPass(context: Context, private val outputs: AudioOutputs) {
     private val failed = HashSet<String>()
     @Volatile private var directReleasedAt = 0L
     private val remembered = HashMap<String, Double>()
-    private val volumeWork = Executors.newSingleThreadExecutor { Thread(it, "AudioPassVolume") }
+    private val volumeWork = Executors.newSingleThreadExecutor { Thread(it, "AudioPassVolume").apply { isDaemon = true } }
     private val pendingVolume = AtomicReference<Double?>(null)
     private val volumeListeners = mutableListOf<WeakReference<() -> Unit>>()
 
@@ -76,7 +77,10 @@ class AudioPass(context: Context, private val outputs: AudioOutputs) {
 
     fun start() = usb.start()
 
-    fun release() = usb.stop()
+    fun release() {
+        usb.stop()
+        volumeWork.shutdown()
+    }
 
     /** the switch, the mode and whether anything shapes the sound, from the service whenever one changes */
     @Synchronized
@@ -108,7 +112,7 @@ class AudioPass(context: Context, private val outputs: AudioOutputs) {
 
     /** lets the decoder hand a hi-res song over as float, which carries 24 bits whole, while it could go exclusive */
     fun wantsFloat(source: Format?): Boolean =
-        engaged && (takesLossy || isLossless(source)) && (source?.pcmEncoding?.let { PassPcm.sourceBits(it, it) > 16 } ?: true)
+        engaged && (takesLossy || isLossless(source)) && AudioDecoderPolicy.shouldRequestFloat(source)
 
     @Synchronized
     internal fun canTake(format: Format, source: Format?, requester: Any): Boolean {

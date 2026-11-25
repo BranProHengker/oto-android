@@ -84,6 +84,7 @@ import kotlinx.coroutines.withContext
 import java.io.FileNotFoundException
 import java.io.IOException
 import co.oto.music.ui.component.RemoteFocus
+import co.oto.music.ui.component.sheetHandleRoom
 
 // "Share to": the finished picture, the three apps, and export and share for everything else
 internal fun PopupSheetState.showSendPage(session: SongShareSession) {
@@ -193,7 +194,7 @@ private fun SendContent(send: SendState, live: Boolean) {
     }
     val previewHeight = (LocalConfiguration.current.screenHeightDp * 0.4f).dp
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = sheetHandleRoom())) {
         Text(
             stringResource(R.string.song_share_send_title),
             fontFamily = InterFontFamily,
@@ -224,7 +225,7 @@ private fun SendContent(send: SendState, live: Boolean) {
             ShareAsVideoRow(session, enabled = !send.working)
         }
         Divider()
-        val stickers = ShareApp.entries.any { it.takesSticker(context) }
+        val stickers = !session.isCardOnly && ShareApp.entries.any { it.takesSticker(context) }
         Caption(stringResource(if (stickers) R.string.song_share_send_apps_sticker else R.string.song_share_send_apps))
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {

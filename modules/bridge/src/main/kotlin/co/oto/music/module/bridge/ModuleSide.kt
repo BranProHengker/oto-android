@@ -15,11 +15,13 @@ import co.oto.music.module.ModuleHost
 import co.oto.music.module.ModuleStorage
 import co.oto.music.module.ServerListModule
 import co.oto.music.module.SourceModule
+import co.oto.music.module.SurfaceModule
 import co.oto.music.module.bridge.Wire.obj
 import co.oto.music.module.bridge.Wire.text
 import co.oto.music.module.bridge.shared.BridgeReply
 import co.oto.music.module.bridge.shared.HostBridge
 import co.oto.music.module.bridge.shared.ModuleBridge
+import co.oto.music.module.bridge.shared.SurfaceBridge
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -37,7 +39,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.encoding.Base64
 
-class ModuleSide : ModuleBridge {
+class ModuleSide : ModuleBridge, SurfaceBridge {
 
     private lateinit var module: OtoModule
 
@@ -123,6 +125,32 @@ class ModuleSide : ModuleBridge {
         (module as? AutoCloseable)?.close()
         synchronized(licenses) { licenses.clear() }
     }
+
+    override fun hasSurface(): Boolean = module is SurfaceModule
+
+    override fun surfaceStart(assetPath: String, dataDir: String, extraPaths: Array<String>?): Int =
+        (module as? SurfaceModule)?.surfaceStart(assetPath, dataDir, extraPaths?.toList().orEmpty()) ?: -1
+
+    override fun surfaceSize(): IntArray = (module as? SurfaceModule)?.surfaceSize() ?: intArrayOf(320, 200)
+
+    override fun surfaceTick(): Boolean = (module as? SurfaceModule)?.surfaceTick() ?: false
+
+    override fun surfaceCopyFrame(pixels: IntArray, lastSeq: Long): Long =
+        (module as? SurfaceModule)?.surfaceCopyFrame(pixels, lastSeq) ?: lastSeq
+
+    override fun surfaceSetPaused(paused: Boolean) {
+        (module as? SurfaceModule)?.surfaceSetPaused(paused)
+    }
+
+    override fun surfaceKey(keyCode: Int, pressed: Boolean) {
+        (module as? SurfaceModule)?.surfaceKey(keyCode, pressed)
+    }
+
+    override fun surfaceTurn(delta: Int) {
+        (module as? SurfaceModule)?.surfaceTurn(delta)
+    }
+
+    override fun surfaceLastError(): String = (module as? SurfaceModule)?.surfaceLastError().orEmpty()
 
     private fun source(): SourceModule = module as SourceModule
 

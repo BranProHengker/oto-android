@@ -218,7 +218,7 @@ fun rememberLivePosition(animated: Boolean = true): LivePosition {
     }
     return remember(connection) {
         // the player's own position only moves every 10 ms or so, which judders at 120 hz; this one moves on the frame's time
-        val clock = co.oto.music.ui.player.PlaybackClock({ connection?.player })
+        val clock = co.oto.music.ui.player.PlaybackClock(connection)
         LivePosition(read = clock, tick = { tick.longValue })
     }
 }
@@ -229,10 +229,14 @@ val LocalStyleCovered = androidx.compose.runtime.compositionLocalOf<() -> Boolea
 /** whether the style can be seen: it stays composed in the mini player and under its lyrics page, with its clocks held still. read it in effects and gestures, not composition */
 @Composable
 internal fun rememberStyleShowing(): () -> Boolean {
+    LocalStyleShowing.current?.let { return it }
     val sheet = LocalPlayerBottomSheetState.current
     val covered = LocalStyleCovered.current
     return remember(sheet, covered) { { (sheet == null || sheet.progress > 0f) && !covered() } }
 }
+
+/** when a layout can be seen, for one that isn't the open player (a module's mini player shows while the player is closed) */
+val LocalStyleShowing = androidx.compose.runtime.staticCompositionLocalOf<(() -> Boolean)?> { null }
 
 /** the song's length in ms, never 0 */
 @Composable
@@ -368,6 +372,7 @@ class StyleMenuExtra(
     val active: Boolean = false,
     /** stays open after the tap, so a toggle's change shows */
     val keepsOpen: Boolean = false,
+    val accent: Color? = null,
     val onClick: () -> Unit,
 )
 
@@ -448,6 +453,12 @@ class StyleActions(
     val onQueue: (() -> Unit)? = null,
     // the rotate item; none in the selector's cards or on a tv
     val turn: StyleTurn? = null,
+    // opens any native player sheet directly (sleep timer, output, speed, details, stream info, add to playlist, lyrics tools, share, etc.)
+    val onOpenSheet: ((co.oto.music.modules.skin.SheetKind) -> Unit)? = null,
+    // switches to full video mode directly
+    val onFullVideo: (() -> Unit)? = null,
+    // opens the equalizer directly
+    val onEqualizer: (() -> Unit)? = null,
 )
 
 // whether the style on now is turned sideways and the switch for it, read as lambdas since the actions are built once
@@ -559,7 +570,8 @@ fun BoxScope.StyleMenu(
     LaunchedEffect(open) {
         reveal.animateTo(if (open) 1f else 0f, spring(dampingRatio = 0.72f, stiffness = 420f))
     }
-    if (reveal.value > 0.001f) {
+    val menuVisible = remember(reveal) { derivedStateOf { reveal.value > 0.001f } }
+    if (menuVisible.value) {
         Box(
             modifier = Modifier
                 .fillMaxSize()

@@ -122,16 +122,7 @@ fun SelectionSongMenu(
 
     AddToPlaylistDialog(
         isVisible = showChoosePlaylistDialog,
-        onGetSong = { playlist ->
-            coroutineScope.launch(Dispatchers.IO) {
-                songSelection.forEach { song ->
-                    playlist.playlist.browseId?.let { browseId ->
-                        YouTube.addToPlaylist(browseId, song.id)
-                    }
-                }
-            }
-            songSelection.map { it.id }
-        },
+        onGetSong = { songSelection.map { it.id } },
         onDismiss = {
             showChoosePlaylistDialog = false
         },
@@ -394,7 +385,8 @@ fun SelectionSongMenu(
                                         )
                                     },
                                     onClick = {
-                                        songSelection.forEach { song ->
+                                        // imported files are already on the phone, with nothing online to download
+                                        songSelection.filterNot { it.song.isLocal }.forEach { song ->
                                             val downloadRequest =
                                                 DownloadRequest
                                                     .Builder(song.id, song.id.toUri())

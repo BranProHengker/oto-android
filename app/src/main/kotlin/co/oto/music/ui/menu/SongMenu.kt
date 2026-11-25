@@ -170,14 +170,7 @@ fun SongMenu(
 
     AddToPlaylistDialog(
         isVisible = showChoosePlaylistDialog,
-        onGetSong = { playlist ->
-            coroutineScope.launch(Dispatchers.IO) {
-                playlist.playlist.browseId?.let { browseId ->
-                    YouTube.addToPlaylist(browseId, song.id)
-                }
-            }
-            listOf(song.id)
-        },
+        onGetSong = { listOf(song.id) },
         onDismiss = {
             showChoosePlaylistDialog = false
         },
@@ -301,7 +294,8 @@ fun SongMenu(
             // big cards. Then the song-menu mock's four rows - add to playlist, share, album,
             // artist - and the rest.
             SheetActionCardRow {
-                SheetDownloadCard(
+                // a song imported from the phone is already a file here; downloading it only looked it up online by name
+                if (!song.song.isLocal) SheetDownloadCard(
                     downloadState = download?.state,
                     onDownload = {
                         val downloadRequest = DownloadRequest
@@ -427,12 +421,16 @@ fun SongMenu(
                         },
                         onClick = {
                             onDismiss()
-                            playerConnection.playQueue(
-                                ListQueue(
-                                    title = song.song.title,
-                                    items = listOf(song.toMediaItem()),
+                            if (song.song.isLocal) {
+                                playerConnection.playQueue(
+                                    ListQueue(
+                                        title = song.song.title,
+                                        items = listOf(song.toMediaItem()),
+                                    )
                                 )
-                            )
+                            } else {
+                                playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+                            }
                         }
                     ),
                 )
@@ -457,7 +455,11 @@ fun SongMenu(
                             },
                             onClick = {
                                 onDismiss()
-                                playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+                                if (song.id == playerConnection.mediaMetadata.value?.id) {
+                                    playerConnection.startRadioSeamlessly()
+                                } else {
+                                    playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+                                }
                             }
                         )
                     } else null,
@@ -588,24 +590,24 @@ fun SongMenu(
                                     )
                                 },
                                 onClick = {
+                                    val appContext = context.applicationContext
                                     database.transaction {
-                                        coroutineScope.launch {
-                                            playlistBrowseId?.let { playlistId ->
-                                                if (playlistSong.map.setVideoId != null) {
-                                                    YouTube.removeFromPlaylist(
-                                                        playlistId,
-                                                        playlistSong.map.songId,
-                                                        playlistSong.map.setVideoId
-                                                    )
-                                                }
-                                            }
-                                        }
                                         move(
                                             playlistSong.map.playlistId,
                                             playlistSong.map.position,
                                             Int.MAX_VALUE
                                         )
                                         delete(playlistSong.map.copy(position = Int.MAX_VALUE))
+                                    }
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        removeFromPlaylistKeepingSync(
+                                            context = appContext,
+                                            database = database,
+                                            playlistId = playlistSong.map.playlistId,
+                                            browseId = playlistBrowseId,
+                                            songId = playlistSong.map.songId,
+                                            setVideoId = playlistSong.map.setVideoId,
+                                        )
                                     }
                                     onDismiss()
                                 }

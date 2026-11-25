@@ -76,5 +76,6 @@ class MusicWidgetReceiver : AppWidgetProvider() {
         const val ACTION_NEXT = "co.oto.music.widget.NEXT"
         const val ACTION_PREVIOUS = "co.oto.music.widget.PREVIOUS"
         const val ACTION_UPDATE_WIDGET = "co.oto.music.widget.UPDATE_WIDGET"
+        const val ACTION_REPEAT = "co.oto.music.widget.REPEAT"
     }
 }

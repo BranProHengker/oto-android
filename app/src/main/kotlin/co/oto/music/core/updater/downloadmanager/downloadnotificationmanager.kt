@@ -21,8 +21,10 @@ object DownloadNotificationManager {
     private const val NOTIFICATION_ID = 5678
 
     fun initialize(context: Context) {
-        appContext = context
-        notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // store application context so the singleton never pins an activity after update screen closes
+        val app = context.applicationContext
+        appContext = app
+        notificationManager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -57,6 +59,12 @@ object DownloadNotificationManager {
     }
 
     fun showDownloadComplete(version: String, filePath: String) {
+        val file = java.io.File(filePath)
+        if (!co.oto.music.core.updater.ApkVerifier.verifyUpdateApk(appContext, file)) {
+            runCatching { file.delete() }
+            showDownloadFailed(version, "Update APK signature verification failed")
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
             showDownloadCompleteModern(version, filePath)
         } else {

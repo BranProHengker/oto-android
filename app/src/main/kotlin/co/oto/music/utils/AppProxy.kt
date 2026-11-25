@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.Credentials
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -40,8 +41,22 @@ object AppProxy {
     var current: ProxyConfig? = null
         private set
 
-    // one pool for every client that follows the proxy, so a new proxy can drop the idle connections that went the old way
+    // one pool and dispatcher for every client in the app, so dozens of helpers don't each spin up their own thread pools
     internal val connectionPool = ConnectionPool()
+    internal val dispatcher = Dispatcher().apply {
+        maxRequests = 64
+        maxRequestsPerHost = 10
+    }
+
+    // shared base client so callers can use newBuilder() instead of allocating fresh pools and executors
+    val sharedClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .dispatcher(dispatcher)
+            .connectionPool(connectionPool)
+            .followSslRedirects(false)
+            .followAppProxy()
+            .build()
+    }
 
     // with no proxy of ours the phone's own proxy setting still counts, as it did before
     internal val selector = object : ProxySelector() {
@@ -100,7 +115,7 @@ object AppProxy {
     suspend fun check(config: ProxyConfig): Result<Long> = withContext(Dispatchers.IO) {
         runCatching {
             useSocksLogin(config)
-            val client = OkHttpClient.Builder()
+            val client = sharedClient.newBuilder()
                 .proxy(Proxy(config.type, config.address))
                 .proxyAuthenticator { _, response ->
                     if (config.type != Proxy.Type.HTTP || !config.hasLogin || response.request.header(ProxyAuthHeader) != null) {
@@ -120,13 +135,23 @@ object AppProxy {
         }
     }
 
-    // socks has no header for a login, java asks this one global authenticator instead
+    // socks has no header for a login, java asks this one global authenticator instead; strictly scope
+    // to PROXY challenges matching the configured SOCKS host/port so credentials never leak to HTTP 401 servers
     private fun useSocksLogin(config: ProxyConfig?) {
         val login = config?.takeIf { it.type == Proxy.Type.SOCKS && it.hasLogin }
         Authenticator.setDefault(
-            login?.let {
+            login?.let { cfg ->
+                val expectedHost = cfg.address.hostString
+                val expectedPort = cfg.address.port
                 object : Authenticator() {
-                    override fun getPasswordAuthentication() = PasswordAuthentication(it.username, it.password.toCharArray())
+                    override fun getPasswordAuthentication(): PasswordAuthentication? {
+                        if (requestorType != RequestorType.PROXY) return null
+                        if (requestingPort != expectedPort) return null
+                        val hostMatches = requestingHost?.equals(expectedHost, ignoreCase = true) == true ||
+                            requestingSite?.hostAddress?.equals(expectedHost, ignoreCase = true) == true
+                        if (!hostMatches) return null
+                        return PasswordAuthentication(cfg.username, cfg.password.toCharArray())
+                    }
                 }
             },
         )
@@ -150,4 +175,5 @@ fun OkHttpClient.Builder.followAppProxy(): OkHttpClient.Builder =
                 response.request.newBuilder().header(ProxyAuthHeader, auth).build()
             }
         }
+        .dispatcher(AppProxy.dispatcher)
         .connectionPool(AppProxy.connectionPool)
