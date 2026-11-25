@@ -2032,7 +2032,9 @@ class MusicService :
     private var localFileProblem: LocalFileProblem? = null
 
     private fun isLocalTrack(item: androidx.media3.common.MediaItem?): Boolean =
-        item?.metadata?.isLocal == true || item?.mediaId?.startsWith("local:") == true
+        item?.metadata?.localUri != null ||
+            item?.mediaId?.startsWith("LOCAL_") == true ||
+            item?.mediaId?.startsWith("local:") == true
 
     /** The top toast for a stream that couldn't be played, with a plain reason. */
     private fun announceStreamFailure() {
