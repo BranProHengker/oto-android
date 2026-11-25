@@ -346,7 +346,7 @@ internal object SafeAppSettings {
         ),
         Choice(
             "homestyle", "customisation", "Home style", "Top layout of the Home tab", HomeStyleKey,
-            default = HomeStyle.MOCHYY.name,
+            default = HomeStyle.OTO.name,
             options = HomeStyle.entries.map { it.name to it.displayName },
         ),
         Choice(

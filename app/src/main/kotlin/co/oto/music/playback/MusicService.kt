@@ -2031,6 +2031,9 @@ class MusicService :
     // set when a song on the phone failed for a reason worth saying plainly (the file's gone, its access was lost), for the next failure toast
     private var localFileProblem: LocalFileProblem? = null
 
+    private fun isLocalTrack(item: androidx.media3.common.MediaItem?): Boolean =
+        item?.metadata?.isLocal == true || item?.mediaId?.startsWith("local:") == true
+
     /** The top toast for a stream that couldn't be played, with a plain reason. */
     private fun announceStreamFailure() {
         localFileProblem?.let { problem ->
@@ -4449,69 +4452,6 @@ class MusicService :
                     .withUri(streamUrl.toUri())
                     .subrange(dataSpec.uriPositionOffset, CHUNK_LENGTH)
                     .withRequestHeaders(dataSpec.httpRequestHeaders + nonNullPlayback.streamHeaders)
-            }
-        }
-        return DataSource.Factory {
-            object : DataSource {
-                private val listeners = ArrayList<androidx.media3.datasource.TransferListener>()
-                private var active: DataSource? = null
-
-                override fun addTransferListener(transferListener: androidx.media3.datasource.TransferListener) {
-                    listeners += transferListener
-                    active?.addTransferListener(transferListener)
-                }
-
-                override fun open(dataSpec: DataSpec): Long {
-                    val scheme = dataSpec.uri.scheme
-                    val source = if (scheme == "content" || scheme == "file") {
-                        localFactory.createDataSource()
-                    } else {
-                        cachedFactory.createDataSource()
-                    }
-                    listeners.forEach(source::addTransferListener)
-                    active = source
-                    return try {
-                        source.open(dataSpec)
-                    } catch (primaryError: Exception) {
-                        if (scheme == "content" || scheme == "file") {
-                            val fallback = LocalAudioResolver.resolvePlayableUri(this@MusicService, dataSpec.uri)
-                            if (fallback != dataSpec.uri) {
-                                scope.launch(Dispatchers.IO) {
-                                    runCatching {
-                                        database.openHelper.writableDatabase.execSQL(
-                                            "UPDATE song SET localUri = ? WHERE localUri = ?",
-                                            arrayOf(fallback.toString(), dataSpec.uri.toString()),
-                                        )
-                                        Timber.tag(TAG).i("Auto-healed localUri in database: ${dataSpec.uri} -> $fallback")
-                                    }
-                                }
-                                runCatching { source.close() }
-                                val retrySource = localFactory.createDataSource()
-                                listeners.forEach(retrySource::addTransferListener)
-                                active = retrySource
-                                return runCatching { retrySource.open(dataSpec.withUri(fallback)) }
-                                    .getOrElse { throw primaryError }
-                            }
-                        }
-                        throw primaryError
-                    }
-                }
-
-                override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
-                    active?.read(buffer, offset, length) ?: C.RESULT_END_OF_INPUT
-
-                override fun getUri(): android.net.Uri? = active?.uri
-
-                override fun getResponseHeaders(): Map<String, List<String>> =
-                    active?.responseHeaders ?: emptyMap()
-
-                override fun close() {
-                    try {
-                        active?.close()
-                    } finally {
-                        active = null
-                    }
-                }
             }
         }
     }

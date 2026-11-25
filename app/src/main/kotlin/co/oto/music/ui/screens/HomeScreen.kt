@@ -1196,7 +1196,7 @@ fun HomeScreen(
                 .mapIndexed { index, section -> index to section }
                 .filter { (index, section) ->
                     feedVideoKinds[index] != FeedVideoKind.Live && feedVideoKinds[index] != FeedVideoKind.MusicVideos &&
-                        !(section.isSpeedDial && homeStyle == HomeStyle.MOCHYY)
+                        !(section.isSpeedDial && homeStyle == HomeStyle.OTO)
                 }
             homePageSections.firstOrNull()?.let { (index, section) -> list.add(HomeSection.HomePageSection(index, section.title)) }
             if (allTimeHits?.isNotEmpty() == true) list.add(HomeSection.AllTimeHits)
